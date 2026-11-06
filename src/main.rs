@@ -55,7 +55,19 @@ fn handle_command(cmd: &str) -> String {
                 format!("ERR (exit {}) {}", code, err.trim())
             }
         }
-        _ => format!("ERR unknown command: {}", cmd),
+        _ => {
+            // Generic fallback: run the first token as a binary with the rest as
+            // args, so unported tools (clipboard, emoji, toggle, shot, ...) work
+            // through the daemon without individual ports.
+            let (code, out, err) = run_tool(parts[0], &parts[1..]);
+            if code == 127 {
+                format!("ERR unknown command: {}", cmd)
+            } else if code == 0 {
+                if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
+            } else {
+                format!("ERR (exit {}) {}", code, err.trim())
+            }
+        }
     }
 }
 
