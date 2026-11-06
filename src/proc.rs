@@ -1,13 +1,53 @@
 use std::process::Command;
 
+/// Find an executable by name in a PATH-style string, without
+/// spawning a shell. Pure, so it can be tested without mutating
+/// the process PATH (which races other tests mutating PATH).
+pub fn find_in_path(name: &str, path_str: &str) -> Option<std::path::PathBuf> {
+    // Names containing a path separator are used as-is: if the file
+    // exists, that is the binary; otherwise Command::new will fail.
+    if name.contains('/') {
+        let p = std::path::PathBuf::from(name);
+        return if is_executable(&p) { Some(p) } else { None };
+    }
+    for dir in path_str.split(':') {
+        if dir.is_empty() {
+            continue;
+        }
+        let p = std::path::Path::new(dir).join(name);
+        if is_executable(&p) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+fn is_executable(p: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(p)
+            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        p.is_file()
+    }
+}
+
 pub fn resolve_tool(name: &str) -> String {
+    // Prefer `name-legacy` so delegation never recurses through an
+    // alexie shim, falling back to `name` itself. The old version
+    // spawned `sh -c "command -v …"` twice on *every* external call
+    // (hyprctl, date, jq, …), which dominates the cost of short
+    // commands like status queries.
+    let path = std::env::var("PATH").unwrap_or_default();
     let legacy = format!("{}-legacy", name);
-    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
-    if Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
+    if find_in_path(&legacy, &path).is_some() {
         return legacy;
     }
-    let check = format!("command -v {} >/dev/null 2>&1", name);
-    if Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
+    if find_in_path(name, &path).is_some() {
         return name.to_string();
     }
     name.to_string()
@@ -132,5 +172,41 @@ mod tests {
         assert_ne!(a, b);
         assert!(a.to_string_lossy().ends_with(".png"));
         assert!(a.to_string_lossy().contains("anixie-test-"));
+    }
+
+    #[test]
+    fn find_in_path_prefers_executable() {
+        let dir = std::env::temp_dir().join(format!(
+            "alexie-find-in-path-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("mytool");
+        std::fs::write(&bin, "#!/bin/sh\nexit 0\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let path = dir.to_string_lossy().to_string();
+        assert!(find_in_path("mytool", &path).is_some());
+        assert!(find_in_path("no-such-tool-xyz", &path).is_none());
+        // A non-executable file does not count.
+        let plain = dir.join("plain");
+        std::fs::write(&plain, "hi").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        assert!(find_in_path("plain", &path).is_none());
+        // Absolute paths are used as-is.
+        assert!(find_in_path(&bin.to_string_lossy(), "/nonexistent").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
