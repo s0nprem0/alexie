@@ -194,9 +194,19 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
         let picker_mode = if mode == "windows" { "windows" } else if mode == "smart" { "smart" } else { "region" };
         let sp = shot_pick();
         let (code, g, err) = run(&sp, &[picker_mode, "--keep-freeze"]);
-        if code != 0 { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", &format!("Could not pick region: {}", err.trim())]); return format!("ERR pick: {}", err.trim()); }
+        if code != 0 {
+            // Picker failed/cancelled: the freeze is still up.
+            // Legacy shot.sh traps this before the picker runs.
+            release_freeze();
+            let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", &format!("Could not pick region: {}", err.trim())]);
+            return format!("ERR pick: {}", err.trim());
+        }
         let g = g.trim().to_string();
-        if g.is_empty() { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No region selected."]); return "ERR no region".to_string(); }
+        if g.is_empty() {
+            release_freeze();
+            let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No region selected."]);
+            return "ERR no region".to_string();
+        }
         g
     };
 

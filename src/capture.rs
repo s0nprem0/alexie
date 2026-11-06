@@ -67,9 +67,9 @@ fn capture_text() -> String {
     let freeze_file = runtime_dir().join("anixie-pick-freeze.pid");
     // get geometry
     let (code, geom, err) = run(&sp, &["region", "--keep-freeze"]);
-    if code != 0 { return format!("ERR pick: {}", err.trim()); }
+    if code != 0 { release_freeze(&freeze_file); return format!("ERR pick: {}", err.trim()); }
     let geom = geom.trim().to_string();
-    if geom.is_empty() { return "ERR no region".to_string(); }
+    if geom.is_empty() { release_freeze(&freeze_file); return "ERR no region".to_string(); }
 
     // grim -g geom - | tesseract
     let grim_bin = grim();
