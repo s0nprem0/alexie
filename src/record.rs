@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{resolve_tool, run};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -26,11 +26,8 @@ fn out_dir() -> PathBuf {
 
 fn gsr() -> String { env::var("GSR").unwrap_or_else(|_| "gpu-screen-recorder".to_string()) }
 fn ffmpeg() -> String { env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".to_string()) }
-fn ffprobe() -> String { env::var("FFPROBE").unwrap_or_else(|_| "ffprobe".to_string()) }
 fn notify() -> String { env::var("NOTIFY_SEND").unwrap_or_else(|_| "notify-send".to_string()) }
 fn notify_raw() -> String { env::var("NOTIFY_SEND_RAW").unwrap_or_else(|_| "notify-send".to_string()) }
-fn setsid() -> String { env::var("SETSID").unwrap_or_else(|_| "setsid".to_string()) }
-fn mpv() -> String { env::var("MPV").unwrap_or_else(|_| "mpv".to_string()) }
 fn shot_pick() -> String { env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string()) }
 fn webcam_overlay() -> String { env::var("WEBCAM_OVERLAY").unwrap_or_else(|_| "webcam-overlay".to_string()) }
 fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
@@ -38,8 +35,6 @@ fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_st
 fn pid_file() -> PathBuf { runtime_dir().join("anixie-record.pid") }
 fn name_file() -> PathBuf { runtime_dir().join("anixie-record.file") }
 fn region_file() -> PathBuf { runtime_dir().join("anixie-record.region") }
-fn lock_file() -> PathBuf { runtime_dir().join("anixie-record.lock") }
-fn starting_file() -> PathBuf { runtime_dir().join("anixie-record.starting") }
 fn cancel_file() -> PathBuf { runtime_dir().join("anixie-record.cancel") }
 
 fn read_pid() -> Option<i32> {
@@ -111,7 +106,7 @@ fn stop_recording() -> String {
             if !name.is_empty() && std::path::Path::new(&name).exists() {
                 // finalize: trim first 0.1s
                 let processed = format!("{}-processed.mp4", name.trim_end_matches(".mp4"));
-                let _ = Command::new(&ffmpeg()).args(["-y", "-ss", "0.1", "-i", &name, "-c:v", "copy", "-movflags", "+faststart", &processed]).status();
+                let _ = Command::new(ffmpeg()).args(["-y", "-ss", "0.1", "-i", &name, "-c:v", "copy", "-movflags", "+faststart", &processed]).status();
                 if std::path::Path::new(&processed).exists() {
                     let _ = fs::rename(&processed, &name);
                 }
@@ -188,7 +183,7 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
         _ => vec![],
     };
 
-    let mut cmd = Command::new(&gsr());
+    let mut cmd = Command::new(gsr());
     cmd.args(&capture_args);
     cmd.args(["-k", "auto", "-f", "60", "-fm", "cfr", "-fallback-cpu-encoding", "yes", "-o", &name]);
     cmd.args(&audio_flags);
@@ -254,8 +249,8 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
     let _ = fs::write(pid_file(), pid.to_string());
     let _ = fs::write(name_file(), &name);
     // region
-    if tgt.starts_with("region:") {
-        let _ = fs::write(region_file(), &tgt[7..]);
+    if let Some(rest) = tgt.strip_prefix("region:") {
+        let _ = fs::write(region_file(), rest);
     }
     shell_recording("start");
     "OK".to_string()

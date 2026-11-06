@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{resolve_tool, run};
 
 pub fn handle(_args: &[String]) -> String {
     let tool = resolve_tool("emoji");

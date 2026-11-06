@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{run, shell_quote};
 use std::env;
 use std::fs;
 use std::process::Command;
@@ -19,16 +19,6 @@ fn grim() -> String { env::var("GRIM").unwrap_or_else(|_| "grim".to_string()) }
 fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
 fn notify() -> String { env::var("NOTIFY_SEND").unwrap_or_else(|_| "notify-send".to_string()) }
 fn hyprctl() -> String { "hyprctl".to_string() }
-fn jq() -> String { "jq".to_string() }
-
-fn state_dir() -> std::path::PathBuf {
-    let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-        let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        format!("{}/.local/state", home)
-    });
-    std::path::PathBuf::from(state).join("anixie")
-}
-
 fn runtime_dir() -> std::path::PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
         let st = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
@@ -59,10 +49,6 @@ pub fn handle(args: &[String]) -> String {
             "smart" | "region" | "windows" | "fullscreen" | "window" | "scroll"
             | "cancel" | "edit-last" | "copy-path" | "copy-uri" => { mode = a.to_string(); }
             "save" | "copy" | "annotate" | "preview" | "redact" | "text" => { dest = a.to_string(); }
-            "cancel" | "edit-last" | "copy-path" | "copy-uri" => {
-                // delegate whole command
-                return delegate(args);
-            }
             "--" => { after_dash = true; }
             _ => { rest.push(a.to_string()); }
         }

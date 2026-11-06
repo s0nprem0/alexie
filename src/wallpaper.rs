@@ -1,11 +1,9 @@
 use crate::proc::{resolve_tool, run, shell_quote};
-use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::SystemTime;
 
 fn state_dir() -> PathBuf {
     let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
@@ -161,9 +159,38 @@ fn search(dirs: &[PathBuf], query: &str) -> String {
         let s = fuzzy_score(query, &stem);
         if s >= 0 { Some((s, p)) } else { None }
     }).collect();
-    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    scored.sort_by_key(|a| std::cmp::Reverse(a.0));
     let paths: Vec<String> = scored.into_iter().map(|(_, p)| p.to_string_lossy().to_string()).collect();
     serde_json::to_string(&paths).unwrap_or_else(|_| "[]".to_string())
+}
+
+fn pause_toggle() -> String {
+    use std::io::Write;
+    let paused_flag = cache_dir().join("live_wallpaper_paused");
+    let osdctl = format!("{}/.config/quickshell/osd/bin/osdctl", home_dir().display());
+    let socket_path = "/tmp/mpvpaper-ipc";
+    let mut stream = match std::os::unix::net::UnixStream::connect(socket_path) {
+        Ok(s) => s,
+        Err(_) => {
+            let _ = Command::new(&osdctl).args(["show", "no live wallpaper", "info", "1200"]).status();
+            return "no live wallpaper".to_string();
+        }
+    };
+    if let Some(parent) = paused_flag.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let is_paused = fs::read_to_string(&paused_flag).map(|s| s.trim() == "true").unwrap_or(false);
+    if is_paused {
+        let _ = fs::write(&paused_flag, "false");
+        let _ = writeln!(stream, r#"{{"command": ["set_property", "pause", false]}}"#);
+        let _ = Command::new(&osdctl).args(["show", "live wallpaper resumed", "good", "1200"]).status();
+        "resumed".to_string()
+    } else {
+        let _ = fs::write(&paused_flag, "true");
+        let _ = writeln!(stream, r#"{{"command": ["set_property", "pause", true]}}"#);
+        let _ = Command::new(&osdctl).args(["show", "live wallpaper paused", "warn", "1200"]).status();
+        "paused".to_string()
+    }
 }
 
 pub fn handle(args: &[String]) -> String {
@@ -209,6 +236,7 @@ pub fn handle(args: &[String]) -> String {
             search(&dirs, query)
         }
         "status" => delegate(args),
+        "pause" | "toggle-pause" | "resume" => pause_toggle(),
         "list" | "library" => delegate(args),
         _ => delegate(args),
     }

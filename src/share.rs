@@ -27,7 +27,7 @@ fn notify(msg: &str) {
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "" | "menu" => {
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();

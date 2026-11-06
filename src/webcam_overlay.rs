@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{resolve_tool, run};
 use serde_json::Value;
 use std::env;
 use std::fs;
@@ -211,7 +211,7 @@ fn resize(action: &str) -> String {
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "list" => list_devices(),
         "start" => {

@@ -1,5 +1,4 @@
 use std::env;
-use std::fs;
 use std::process::Command;
 
 fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
@@ -24,12 +23,6 @@ fn update_db() -> String {
     env::var("UPDATE_DB").unwrap_or_else(|_| "update-desktop-database".to_string())
 }
 
-fn slug(name: &str) -> String {
-    name.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect::<String>()
-        .trim_matches('-').to_string()
-        // collapse multiple dashes
-}
-
 fn slug_clean(name: &str) -> String {
     let mut out = String::new();
     let mut prev_dash = false;
@@ -49,7 +42,7 @@ fn slug_clean(name: &str) -> String {
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "" | "-h" | "--help" | "help" => "webapp — a website, in the application menu\n\nUsage:\n  webapp add NAME URL\n  webapp list\n  webapp remove NAME".to_string(),
         "add" => {

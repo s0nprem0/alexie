@@ -1,13 +1,18 @@
 mod dbus;
+mod anixie;
 mod capture;
 mod clipboard;
+mod color;
 mod emoji;
 mod focus;
+mod fmt;
+mod format;
 mod pick;
 mod reminder;
 mod share;
 mod shortcuts;
 mod snapshot;
+mod table;
 mod webapp;
 mod menu;
 mod webcam_overlay;
@@ -126,18 +131,6 @@ pub fn handle_command(cmd: &str) -> String {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             shortcuts::handle(&args)
         }
-        Some("pick") => {
-            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
-            pick::handle(&args)
-        }
-        Some("reminder") => {
-            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
-            reminder::handle(&args)
-        }
-        Some("shortcuts") => {
-            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
-            shortcuts::handle(&args)
-        }
         Some("capture") | Some("capture-text") | Some("capture-qr") => {
             let mut args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             // normalize capture-text / capture-qr into capture text/qr
@@ -226,7 +219,7 @@ fn run_client(args: &[String]) {
             // Daemon not running: execute locally so timers and scripts still work.
             let cmd = args.join(" ");
             let resp = handle_command(&cmd);
-            println!("{}", resp);
+            if resp.starts_with("ERR") { println!("{}", color::red(&resp)); } else { println!("{}", resp); }
             std::process::exit(0);
         }
     };
@@ -241,12 +234,30 @@ fn run_client(args: &[String]) {
         if line == "__END__" {
             break;
         }
-        println!("{}", line);
+        if line.starts_with("ERR") {
+            println!("{}", color::red(&line));
+        } else {
+            println!("{}", line);
+        }
     }
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+
+    // anixie-style front door: meta commands and group resolution.
+    let groups = anixie::parse_groups();
+    if let Some(code) = anixie::try_meta(&args, &groups) {
+        std::process::exit(code);
+    }
+    // Resolve a group name (e.g. "display") to its underlying command
+    // (e.g. "monitors") so a single binary covers both `alexie` and `anixie`.
+    if args.len() >= 2 {
+        if let Some(cmd) = anixie::resolve(&groups, &args[1]) {
+            args[1] = cmd;
+        }
+    }
+
     // power watch: run the watcher (blocks).
     if args.len() >= 3 && (args[1] == "power" || args[1] == "powerprofile") && args[2] == "watch" {
         power_watch::run();

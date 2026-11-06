@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{run, shell_quote};
 use std::env;
 
 fn state_dir() -> std::path::PathBuf {
@@ -8,6 +8,8 @@ fn state_dir() -> std::path::PathBuf {
     });
     std::path::PathBuf::from(state).join("anixie")
 }
+
+type MonitorState = (String, String, String, String, String, String, String, String);
 
 fn state_file() -> std::path::PathBuf { state_dir().join("display.conf") }
 fn lid_file() -> std::path::PathBuf { state_dir().join("lid") }
@@ -23,7 +25,7 @@ fn hypr_monitors(all: bool) -> String {
     let mut args = vec!["monitors"];
     if all { args.push("all"); }
     args.push("-j");
-    let a: Vec<&str> = args.iter().map(|s| *s).collect();
+    let a: Vec<&str> = args.to_vec();
     let (_, out, _) = run("hyprctl", &a);
     out
 }
@@ -53,7 +55,7 @@ fn field_of(name: &str, key: &str) -> String {
     jq_filter(&json, &filter).trim().to_string()
 }
 
-fn read_state(name: &str) -> Option<(String,String,String,String,String,String,String,String)> {
+fn read_state(name: &str) -> Option<MonitorState> {
     let json = hypr_monitors(true);
     let filter = format!(
         r#". as $all | ($all | map({{ key: (.id | tostring), value: .name }}) | from_entries) as $names | $all[] | select(.name == "{}") | [.scale, .transform, .disabled, (if (.mirrorOf // "none") == "none" or (.mirrorOf // "") == "" then "none" else ($names[.mirrorOf] // .mirrorOf) end), "\(.x)x\(.y)"] | @tsv"#,
@@ -156,16 +158,6 @@ fn save_field(output: &str, key: &str, value: &str) -> Result<(), String> {
     std::fs::write(&path, lines.join("\n") + "\n").map_err(|e| e.to_string())
 }
 
-fn delegate(args: &[String]) -> String {
-    let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) = run("monitors", &a);
-    if code == 0 {
-        if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
-    } else {
-        format!("ERR (exit {}) {}", code, err.trim())
-    }
-}
-
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
         return "ERR monitors: missing subcommand".to_string();
@@ -173,8 +165,25 @@ pub fn handle(args: &[String]) -> String {
     match args[0].as_str() {
         "status" => {
             let json = hypr_monitors(true);
-            let filter = r#". as $all | ($all | map({ key: (.id | tostring), value: .name }) | from_entries) as $names | $all[] | "\(.name)\t\(.width)x\(.height)\tscale \(.scale)\t" + (if .disabled then "off" elif (.mirrorOf // "none") == "none" or (.mirrorOf // "") == "" then "extended" else "mirror of \($names[.mirrorOf] // .mirrorOf)" end) + (if .focused then "\tfocused" else "" end)"#;
-            jq_filter(&json, filter).trim_end().to_string()
+            let filter = r#". as $all | ($all | map({ key: (.id | tostring), value: .name }) | from_entries) as $names | $all[] | "\(.name)\t\(.width)x\(.height)\t\(.scale)\t" + (if .disabled then "off" elif (.mirrorOf // "none") == "none" or (.mirrorOf // "") == "" then "extended" else "mirror of \($names[.mirrorOf] // .mirrorOf)" end) + (if .focused then "\tfocused" else "" end)"#;
+            let raw = jq_filter(&json, filter);
+            let mut rows: Vec<Vec<String>> = Vec::new();
+            for line in raw.lines() {
+                let t: Vec<&str> = line.split('\t').collect();
+                if t.is_empty() || t[0].trim().is_empty() { continue; }
+                let name = t[0].trim().to_string();
+                let res = t.get(1).unwrap_or(&"").trim().to_string();
+                let scale = t.get(2).unwrap_or(&"").trim().to_string();
+                let scale = if scale.is_empty() { "1".to_string() } else { scale };
+                let mode = t.get(3).unwrap_or(&"").trim().to_string();
+                let focus = if t.get(4).map(|s| s.trim()) == Some("focused") { "yes" } else { "" }.to_string();
+                rows.push(vec![name, res, scale, mode, focus]);
+            }
+            if rows.is_empty() {
+                "No monitors.".to_string()
+            } else {
+                crate::table::render(&["Monitor", "Resolution", "Scale", "Mode", "Focus"], &rows)
+            }
         }
         "list" => hypr_monitors(true).trim().to_string(),
         "set" => {
@@ -211,7 +220,7 @@ pub fn handle(args: &[String]) -> String {
                     let cur = if cur.is_empty() { "1".to_string() } else { cur };
                     let mut idx = ladder.iter().position(|&s| s == cur).unwrap_or(0);
                     if action == "up" { if idx + 1 < ladder.len() { idx += 1; } }
-                    else { if idx > 0 { idx -= 1; } }
+                    else { idx = idx.saturating_sub(1); }
                     let newv = ladder[idx];
                     if let Err(e) = apply_change(&focused, "scale", newv) { return format!("ERR {}", e); }
                     if let Err(e) = save_field(&focused, "scale", newv) { return format!("ERR {}", e); }
@@ -516,7 +525,7 @@ fn try_action(args: &[String]) -> String {
                 "preferred" | "highres" | "highrr" | "maxwidth" => {}
                 _ => {
                     // check WxH[@R]
-                    if !v.chars().all(|c| c.is_digit(10) || c=='x' || c=='@' || c=='.') { return "ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string(); }
+                    if !v.chars().all(|c| c.is_ascii_digit() || c=='x' || c=='@' || c=='.') { return "ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string(); }
                 }
             }
             st.5.clone()
@@ -525,7 +534,7 @@ fn try_action(args: &[String]) -> String {
             match value.as_str() {
                 "auto" | "auto-left" | "auto-right" | "auto-up" | "auto-down" => {}
                 _ => {
-                    if !value.chars().all(|c| c.is_digit(10) || c=='x' || c=='-') { return "ERR position must be auto, auto-left/right/up/down, or XxY".to_string(); }
+                    if !value.chars().all(|c| c.is_ascii_digit() || c=='x' || c=='-') { return "ERR position must be auto, auto-left/right/up/down, or XxY".to_string(); }
                 }
             }
             st.4.clone()
@@ -614,13 +623,12 @@ fn revert_action() -> String {
 }
 
 fn workspace_file() -> std::path::PathBuf { state_dir().join("workspaces.json") }
-fn identities_file() -> std::path::PathBuf { state_dir().join("monitor_identities.json") }
 
 fn workspace_base(name: &str) -> String {
     if !workspace_file().exists() {
         return "1".to_string();
     }
-    let filter = format!(r#".["{}"] // empty"#, name);
+    let _filter = format!(r#".["{}"] // empty"#, name);
     // workspace_file is a JSON object; use jq on file
     let (code, out, _) = run("jq", &["-r", &format!(r#".["{}"] // empty"#, name), workspace_file().to_str().unwrap()]);
     if code == 0 && !out.trim().is_empty() { out.trim().to_string() } else { "1".to_string() }
@@ -649,18 +657,6 @@ fn workspaces_sync_action() -> String {
         if code != 0 { map = "{}".to_string(); }
     }
 
-    let mut identities = String::from("{}");
-    if identities_file().exists() {
-        if let Ok(c) = std::fs::read_to_string(identities_file()) {
-            let c = c.trim();
-            if !c.is_empty() { identities = c.to_string(); }
-        }
-    }
-    {
-        let script = format!("printf '%s' {} | jq -e 'type == \"object\"' >/dev/null 2>&1", shell_quote(&identities));
-        let (code, _, _) = run("sh", &["-c", &script]);
-        if code != 0 { identities = "{}".to_string(); }
-    }
 
     // names of active monitors
     let json = hypr_monitors(false);
@@ -723,7 +719,7 @@ fn workspaces_sync_action() -> String {
     // write map to workspace_file
     let _ = std::fs::create_dir_all(state_dir());
     let tmp = format!("/tmp/monitors.{}", std::process::id());
-    let (code, out, _) = run("jq", &["-S", ".", "-n", &format!("--argjson m {} '$m'", map)]);
+    let (_code, _out, _) = run("jq", &["-S", ".", "-n", &format!("--argjson m {} '$m'", map)]);
     // simpler: pipe map through jq -S .
     let script = format!("printf '%s' {} | jq -S .", shell_quote(&map));
     let (_, sorted, _) = run("sh", &["-c", &script]);
@@ -774,7 +770,7 @@ fn workspaces_action(action: &str) -> String {
             workspaces_sync_action();
             "OK".to_string()
         }
-        _ => format!("ERR workspaces takes sync, show or reset"),
+        _ => "ERR workspaces takes sync, show or reset".to_string(),
     }
 }
 

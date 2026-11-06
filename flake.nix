@@ -19,15 +19,10 @@
           doCheck = true;
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
-        packages.anixie = pkgs.rustPlatform.buildRustPackage {
-          pname = "anixie";
-          version = "0.1.0";
-          src = ./.;
-          cargoLock.lockFile = ./Cargo.lock;
-          cargoBuildFlags = [ "--bin" "anixie" ];
-          doCheck = true;
-          nativeBuildInputs = [ pkgs.pkg-config ];
-        };
+        packages.anixie = pkgs.runCommand "anixie" {} ''
+          mkdir -p $out/bin
+          ln -s ${self.packages.${system}.default}/bin/alexie $out/bin/anixie
+        '';
         devShells.default = pkgs.mkShell {
           buildInputs = [
             pkgs.cargo

@@ -1,4 +1,3 @@
-use std::env;
 use std::process::Command;
 
 const GROUPS: &str = r#"
@@ -27,15 +26,15 @@ screentime|screentime||show json reset path panel|screen time for today: show, j
 "#;
 
 #[derive(Clone)]
-struct Group {
-    name: String,
-    cmd: String,
-    aliases: Vec<String>,
-    subs: Vec<String>,
-    desc: String,
+pub struct Group {
+    pub name: String,
+    pub cmd: String,
+    pub aliases: Vec<String>,
+    pub subs: Vec<String>,
+    pub desc: String,
 }
 
-fn parse_groups() -> Vec<Group> {
+pub fn parse_groups() -> Vec<Group> {
     let mut out = Vec::new();
     for line in GROUPS.lines() {
         let line = line.trim();
@@ -52,39 +51,49 @@ fn parse_groups() -> Vec<Group> {
     out
 }
 
-fn available(cmd: &str) -> bool {
+pub fn available(cmd: &str) -> bool {
     let first = cmd.split_whitespace().next().unwrap_or("");
     Command::new("sh").args(["-c", &format!("command -v {} >/dev/null 2>&1", first)]).status().map(|s| s.success()).unwrap_or(false)
 }
 
-fn find_group<'a>(groups: &'a [Group], name: &str) -> Option<&'a Group> {
+pub fn find_group<'a>(groups: &'a [Group], name: &str) -> Option<&'a Group> {
     groups.iter().find(|g| g.name == name || g.aliases.iter().any(|a| a == name))
 }
 
-fn resolve(groups: &[Group], name: &str) -> Option<String> {
+pub fn resolve(groups: &[Group], name: &str) -> Option<String> {
     find_group(groups, name).map(|g| g.cmd.clone())
 }
 
-fn usage(groups: &[Group]) {
-    println!("anixie — desktop command center\n");
+pub fn usage(groups: &[Group]) {
+    println!("alexie — desktop command center\n");
     println!("Usage:");
-    println!("  anixie <group> [args...]");
-    println!("  anixie help <group>");
-    println!("  anixie commands [--aliases]");
-    println!("  anixie resolve <group>");
-    println!("  anixie subcommands <group>\n");
+    println!("  alexie <group> [args...]");
+    println!("  alexie help <group>");
+    println!("  alexie commands [--aliases]");
+    println!("  alexie resolve <group>");
+    println!("  alexie subcommands <group>\n");
     println!("Groups:");
+    let mut rows: Vec<Vec<String>> = Vec::new();
     for g in groups {
         if !available(&g.cmd) { continue; }
-        if !g.aliases.is_empty() {
-            println!("  {:<11} {} (also: {})", g.name, g.desc, g.aliases.join(", "));
+        rows.push(vec![g.name.clone(), g.desc.clone(), g.aliases.join(", ")]);
+    }
+    let mut widths = [0usize; 2];
+    for r in &rows {
+        for i in 0..2 {
+            widths[i] = widths[i].max(r[i].chars().count());
+        }
+    }
+    for r in &rows {
+        if r[2].is_empty() {
+            println!("  {:<w0$}  {}", r[0], r[1], w0 = widths[0]);
         } else {
-            println!("  {:<11} {}", g.name, g.desc);
+            println!("  {:<w0$}  {:<w1$}  (also: {})", r[0], r[1], r[2], w0 = widths[0], w1 = widths[1]);
         }
     }
 }
 
-fn group_names(groups: &[Group], aliases: bool) {
+pub fn group_names(groups: &[Group], aliases: bool) {
     for g in groups {
         if !available(&g.cmd) { continue; }
         println!("{}", g.name);
@@ -94,109 +103,82 @@ fn group_names(groups: &[Group], aliases: bool) {
     }
 }
 
-fn subcommands(groups: &[Group], name: &str) -> Result<(), i32> {
+pub fn subcommands(groups: &[Group], name: &str) -> Result<(), i32> {
     let g = find_group(groups, name).ok_or(2)?;
     if !available(&g.cmd) { return Err(2); }
     for s in &g.subs { println!("{}", s); }
     Ok(())
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    let groups = parse_groups();
-
+/// Handle anixie-style meta commands. Returns Some(exit_code) if handled.
+pub fn try_meta(args: &[String], groups: &[Group]) -> Option<i32> {
     match args.get(1).map(|s| s.as_str()) {
         None | Some("") | Some("-h") | Some("--help") => {
             if args.len() > 2 {
-                eprintln!("anixie: unexpected argument \"{}\"", args[2]);
-                std::process::exit(2);
+                eprintln!("alexie: unexpected argument \"{}\"", args[2]);
+                return Some(2);
             }
-            usage(&groups);
-            std::process::exit(0);
+            usage(groups);
+            Some(0)
         }
         Some("help") => {
             if args.len() == 2 {
-                usage(&groups);
-                std::process::exit(0);
+                usage(groups);
+                Some(0)
             } else if args.len() == 3 {
                 let name = &args[2];
                 if name.starts_with('-') {
-                    eprintln!("anixie: unknown option \"{}\"", name);
-                    std::process::exit(2);
+                    eprintln!("alexie: unknown option \"{}\"", name);
+                    return Some(2);
                 }
-                let cmd = match resolve(&groups, name) {
+                let cmd = match resolve(groups, name) {
                     Some(c) => c,
-                    None => { eprintln!("anixie: no group called \"{}\"", name); std::process::exit(2); }
+                    None => { eprintln!("alexie: no group called \"{}\"", name); return Some(2); }
                 };
                 let first = cmd.split_whitespace().next().unwrap_or("");
-                if !available(&cmd) { eprintln!("anixie: {} is not available on this host", first); std::process::exit(127); }
-                let mut c = Command::new(first);
-                let parts: Vec<&str> = cmd.split_whitespace().collect();
-                if parts.len() > 1 { c.args(&parts[1..]); }
-                c.arg("--help");
-                let status = c.status().unwrap_or_else(|_| std::process::exit(1));
-                std::process::exit(status.code().unwrap_or(1));
+                if !available(&cmd) { eprintln!("alexie: {} is not available on this host", first); return Some(127); }
+                // Print subcommands instead of execing.
+                if let Some(g) = find_group(groups, name) {
+                    for s in &g.subs { println!("{}", s); }
+                }
+                Some(0)
             } else {
-                eprintln!("anixie: help takes at most one group");
-                std::process::exit(2);
+                eprintln!("alexie: help takes at most one group");
+                Some(2)
             }
         }
         Some("commands") => {
             if args.len() == 2 {
-                group_names(&groups, false);
-                std::process::exit(0);
+                group_names(groups, false);
+                Some(0)
             } else if args.len() == 3 && args[2] == "--aliases" {
-                group_names(&groups, true);
-                std::process::exit(0);
+                group_names(groups, true);
+                Some(0)
             } else {
-                eprintln!("anixie: commands takes at most one option");
-                std::process::exit(2);
+                eprintln!("alexie: commands takes at most one option");
+                Some(2)
             }
         }
         Some("resolve") => {
             if args.len() != 3 {
-                eprintln!("anixie: resolve needs exactly one group (try: anixie commands)");
-                std::process::exit(2);
+                eprintln!("alexie: resolve needs exactly one group (try: anixie commands)");
+                return Some(2);
             }
-            match resolve(&groups, &args[2]) {
-                Some(c) => { println!("{}", c); std::process::exit(0); }
-                None => { eprintln!("anixie: no group called \"{}\"", args[2]); std::process::exit(2); }
+            match resolve(groups, &args[2]) {
+                Some(c) => { println!("{}", c); Some(0)}
+                None => { eprintln!("alexie: no group called \"{}\"", args[2]); Some(2)}
             }
         }
         Some("subcommands") => {
             if args.len() != 3 {
-                eprintln!("anixie: subcommands needs exactly one group (try: anixie commands)");
-                std::process::exit(2);
+                eprintln!("alexie: subcommands needs exactly one group (try: anixie commands)");
+                return Some(2);
             }
-            match subcommands(&groups, &args[2]) {
-                Ok(()) => std::process::exit(0),
-                Err(_) => { eprintln!("anixie: no group called \"{}\"", args[2]); std::process::exit(2); }
+            match subcommands(groups, &args[2]) {
+                Ok(()) => Some(0),
+                Err(_) => { eprintln!("alexie: no group called \"{}\"", args[2]); Some(2)}
             }
         }
-        Some(opt) if opt.starts_with('-') => {
-            eprintln!("anixie: unknown option \"{}\"", opt);
-            std::process::exit(2);
-        }
-        Some(_) => {}
+        _ => None,
     }
-
-    let group = &args[1];
-    let cmd = match resolve(&groups, group) {
-        Some(c) => c,
-        None => { eprintln!("anixie: no group called \"{}\" (try: anixie commands)", group); std::process::exit(2); }
-    };
-    let first = cmd.split_whitespace().next().unwrap_or("");
-    if !available(&cmd) {
-        eprintln!("anixie: {} is not available on this host", first);
-        std::process::exit(127);
-    }
-
-    let mut exec_args: Vec<String> = cmd.split_whitespace().map(|s| s.to_string()).collect();
-    for a in args.iter().skip(2) { exec_args.push(a.clone()); }
-
-    let status = Command::new(&exec_args[0])
-        .args(&exec_args[1..])
-        .status()
-        .unwrap_or_else(|_| std::process::exit(1));
-    std::process::exit(status.code().unwrap_or(1));
 }

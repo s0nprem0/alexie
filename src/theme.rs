@@ -1,4 +1,5 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{resolve_tool, run};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -103,12 +104,48 @@ fn delegate(args: &[String]) -> String {
     }
 }
 
+fn home_dir() -> PathBuf {
+    env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp"))
+}
+
+fn presets_dir() -> PathBuf {
+    if let Ok(v) = env::var("THEME_PRESETS_DIR") { return PathBuf::from(v); }
+    home_dir().join(".config/alexie/presets")
+}
+
+fn presets() -> String {
+    let dir = presets_dir();
+    let mut entries: Vec<serde_json::Value> = Vec::new();
+    if let Ok(read) = fs::read_dir(&dir) {
+        for entry in read.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") { continue; }
+            let content = match fs::read_to_string(&path) { Ok(c) => c, Err(_) => continue };
+            let value: toml::Value = match content.parse::<toml::Value>() { Ok(v) => v, Err(_) => continue };
+            let colors_table = match value.get("colors").and_then(|v| v.as_table()) { Some(t) => t, None => continue };
+            let mut colors: BTreeMap<String, String> = BTreeMap::new();
+            for (k, v) in colors_table {
+                if let Some(s) = v.as_str() { colors.insert(k.clone(), s.to_string()); }
+            }
+            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            entries.push(serde_json::json!({
+                "name": stem,
+                "path": path.to_string_lossy(),
+                "colors": colors,
+            }));
+        }
+    }
+    entries.sort_by(|a, b| a["name"].as_str().unwrap_or("").cmp(b["name"].as_str().unwrap_or("")));
+    serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string())
+}
+
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
         return "ERR theme: missing subcommand".to_string();
     }
     match args[0].as_str() {
         "list" => theme_names().join("\n"),
+    "presets" => presets(),
         "current" => {
             let c = current_theme();
             if c.is_empty() { "none".to_string() } else { c }
@@ -124,7 +161,7 @@ pub fn handle(args: &[String]) -> String {
                 if idx == 0 { names.len() - 1 } else { idx - 1 }
             };
             let name = &names[newidx];
-            delegate(&[format!("set"), name.clone()])
+            delegate(&["set".to_string(), name.clone()])
         }
         "state" => {
             let sp = state_dir().join("state.json");

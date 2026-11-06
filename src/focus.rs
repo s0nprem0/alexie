@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::run;
 use std::env;
 
 fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
@@ -8,7 +8,7 @@ fn usage() -> String {
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("status");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("status");
     match sub {
         "-h" | "--help" | "help" => usage(),
         "" | "status" => {

@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{resolve_tool, run};
 
 pub fn handle(args: &[String]) -> String {
     let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();

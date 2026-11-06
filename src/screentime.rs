@@ -158,7 +158,7 @@ pub fn watch() {
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("show");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("show");
     let conn = match open_db() {
         Ok(c) => c,
         Err(e) => return format!("ERR db: {}", e),
@@ -182,10 +182,9 @@ pub fn handle(args: &[String]) -> String {
             }
             let mut out = String::new();
             out.push_str(&format!("active: {}\n", format_seconds(total)));
-            out.push_str("\napps:\n");
-            for (app, secs) in rows {
-                out.push_str(&format!("  {:<10} {}\n", format_seconds(secs), app));
-            }
+            out.push('\n');
+            let rows: Vec<Vec<String>> = rows.into_iter().map(|(app, secs)| vec![app, format_seconds(secs)]).collect();
+            out.push_str(&crate::table::render(&["App", "Time"], &rows));
             out.trim_end().to_string()
         }
         "json" => {
@@ -209,7 +208,7 @@ pub fn handle(args: &[String]) -> String {
         "reset" => {
             let ts = today_start();
             let _ = conn.execute("DELETE FROM sessions WHERE start_time >= ?1", params![ts]);
-            format!("Screen time reset for today.")
+            "Screen time reset for today.".to_string()
         }
         "path" => db_path().to_string_lossy().to_string(),
         "watch" => "Run `alexie screentime watch` directly (it blocks).".to_string(),

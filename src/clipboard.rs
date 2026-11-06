@@ -1,7 +1,5 @@
 use crate::proc::{resolve_tool, run, shell_quote};
 use std::env;
-use std::fs;
-use std::process::Command;
 
 fn cliphist() -> String { env::var("CLIPHIST").unwrap_or_else(|_| "cliphist".to_string()) }
 fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
@@ -52,16 +50,16 @@ fn ensure_watcher() {
 
 pub fn handle(args: &[String]) -> String {
     ensure_watcher();
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "--copy" => {
             if args.len() < 2 { return "ERR usage: clipboard --copy ID".to_string(); }
             let id = &args[1];
             // decode to temp
             let tmp = format!("/tmp/anixie-clip-{}", std::process::id());
-            let (code, _, err) = run(&cliphist(), &["decode", id]);
+            let (_code, _, _err) = run(&cliphist(), &["decode", id]);
             // cliphist decode writes to stdout; capture via sh
-            let (code, out, err) = run("sh", &["-c", &format!("{} decode {} > {}", cliphist(), id, tmp)]);
+            let (code, _out, err) = run("sh", &["-c", &format!("{} decode {} > {}", cliphist(), id, tmp)]);
             if code != 0 { let _ = std::fs::remove_file(&tmp); return format!("ERR {}", err.trim()); }
             if std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) == 0 {
                 let _ = std::fs::remove_file(&tmp);

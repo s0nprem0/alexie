@@ -9,10 +9,10 @@ use std::time::Duration;
 pub fn run() {
     // apply once at login
     crate::power::apply_pub();
-    let state_dir = crate::power::state_dir_pub();
+    let _state_dir = crate::power::state_dir_pub();
 
     // udev monitor thread
-    let monitor_handle = thread::spawn(move || {
+    let _monitor_handle = thread::spawn(move || {
         let child = Command::new("udevadm")
             .args(["monitor", "--subsystem-match=power_supply", "--property"])
             .stdout(Stdio::piped())

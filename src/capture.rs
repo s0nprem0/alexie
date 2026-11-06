@@ -1,7 +1,5 @@
 use crate::proc::{resolve_tool, run, shell_quote};
 use std::env;
-use std::fs;
-use std::process::Command;
 
 
 fn shot_pick() -> String {
@@ -11,13 +9,6 @@ fn grim() -> String { env::var("GRIM").unwrap_or_else(|_| "grim".to_string()) }
 fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
 fn notify() -> String { env::var("NOTIFY_SEND").unwrap_or_else(|_| "notify-send".to_string()) }
 
-fn state_dir() -> std::path::PathBuf {
-    let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-        let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        format!("{}/.local/state", home)
-    });
-    std::path::PathBuf::from(state).join("anixie")
-}
 
 fn runtime_dir() -> std::path::PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
@@ -83,7 +74,7 @@ fn capture_text() -> String {
         return format!("ERR grim: {}", err.trim());
     }
 
-    let (code, text, _) = run(&tesseract_bin, &[
+    let (_code, text, _) = run(&tesseract_bin, &[
         &tmp, "stdout", "--oem", "1", "--psm", "6", "--dpi", &dpi,
         "-l", &langs, "-c", "preserve_interword_spaces=1",
     ]);
@@ -119,7 +110,7 @@ fn capture_qr() -> String {
     let (code, _, err) = run(&grim_bin, &["-g", &geom, &tmp]);
     if code != 0 { release_freeze(&freeze_file); let _ = std::fs::remove_file(&tmp); return format!("ERR grim: {}", err.trim()); }
 
-    let (code, result, _) = run("sh", &["-c", &format!("{} -q --raw -Sdisable -Sqrcode.enable - < {}", zbar_bin, tmp)]);
+    let (_code, result, _) = run("sh", &["-c", &format!("{} -q --raw -Sdisable -Sqrcode.enable - < {}", zbar_bin, tmp)]);
     let _ = std::fs::remove_file(&tmp);
     release_freeze(&freeze_file);
 

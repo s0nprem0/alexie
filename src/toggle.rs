@@ -1,5 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
-use std::env;
+use crate::proc::{resolve_tool, run};
 
 
 fn hyprctl_temp() -> String {
@@ -90,7 +89,7 @@ fn toggle_one(name: &str) {
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "" | "show" | "status" => {
             if args.len() >= 2 {
@@ -103,11 +102,11 @@ pub fn handle(args: &[String]) -> String {
             out.trim_end().to_string()
         }
         "list" => {
-            let mut out = String::new();
-            for name in ["nightlight", "idle", "dnd", "stayawake"] {
-                out.push_str(&format!("{}\t{}\n", label(name), state_of(name)));
-            }
-            out.trim_end().to_string()
+            let rows: Vec<Vec<String>> = ["nightlight", "idle", "dnd", "stayawake"]
+                .iter()
+                .map(|name| vec![label(name).to_string(), state_of(name)])
+                .collect();
+            crate::table::render(&["Toggle", "State"], &rows)
         }
         "nightlight" | "idle" | "dnd" | "stayawake" => {
             toggle_one(sub);

@@ -74,7 +74,7 @@ pub fn handle(args: &[String]) -> String {
         positional.push(args[i].clone());
         i += 1;
     }
-    let input = positional.get(0).cloned().unwrap_or_default();
+    let input = positional.first().cloned().unwrap_or_default();
     let format = positional.get(1).cloned().unwrap_or_default();
     let resolution = positional.get(2).cloned().unwrap_or_default();
 

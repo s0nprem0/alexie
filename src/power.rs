@@ -1,6 +1,5 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::run;
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 
 pub fn state_dir_pub() -> PathBuf { state_dir() }
@@ -210,7 +209,7 @@ fn set_automation(state: &str) {
 fn charge(args: &[String]) -> String {
     let cl = charge_limit_bin();
     let sudo_bin = sudo();
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("show");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("show");
     match sub {
         "" | "show" => {
             // print ceiling
@@ -235,7 +234,7 @@ fn charge(args: &[String]) -> String {
             let (code, _, err) = run(&cl, &["apply"]);
             if code != 0 { format!("ERR {}", err.trim()) } else { "OK".to_string() }
         }
-        _ => format!("ERR charge wants show, full, limit [N] or apply"),
+        _ => "ERR charge wants show, full, limit [N] or apply".to_string(),
     }
 }
 
@@ -243,27 +242,28 @@ fn show() -> String {
     let src = source_name();
     let (code, profile, _) = run(&ppd(), &["get"]);
     let profile = if code == 0 { profile.trim().to_string() } else { "unknown".to_string() };
-    let mut out = String::new();
-    out.push_str(&format!("source:  {}\n", src));
-    out.push_str(&format!("profile: {}\n", profile));
-    out.push_str(&format!("on mains:  {}\n", preferred("ac")));
-    out.push_str(&format!("on battery: {}\n", preferred("battery")));
+    let mut pairs: Vec<(&str, String)> = vec![
+        ("source", src.to_string()),
+        ("profile", profile),
+        ("on mains", preferred("ac")),
+        ("on battery", preferred("battery")),
+    ];
     if let Some(ceil) = charge_ceiling() {
-        out.push_str(&format!("charge:    {}% ceiling\n", ceil));
+        pairs.push(("charge", format!("{}% ceiling", ceil)));
     }
     if automation_enabled() {
         let bat = battery_percent().map(|v| v.to_string()).unwrap_or_else(|| "n/a".to_string());
-        out.push_str(&format!("battery:   {}%\n", bat));
-        out.push_str(&format!("automation: on (low {}% -> {} at {}%, critical {}% -> {} at {}%)\n",
-            low_pct(), low_profile(), low_brightness(), critical_pct(), critical_profile(), critical_brightness()));
+        pairs.push(("battery", format!("{}%", bat)));
+        pairs.push(("automation", format!("on (low {}% -> {} at {}%, critical {}% -> {} at {}%)",
+            low_pct(), low_profile(), low_brightness(), critical_pct(), critical_profile(), critical_brightness())));
     } else {
-        out.push_str("automation: off\n");
+        pairs.push(("automation", "off".to_string()));
     }
-    out.trim_end().to_string()
+    crate::table::render_kv(&pairs)
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "" | "show" | "status" => show(),
         "apply" => { apply(); "OK".to_string() }

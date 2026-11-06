@@ -11,7 +11,6 @@ fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
 fn dest() -> String { env::var("DEST").unwrap_or_else(|_| "/.snapshots/home".to_string()) }
 fn keep_default() -> i64 { env::var("KEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(5) }
 fn btrfs() -> String { env::var("BTRFS").unwrap_or_else(|_| "btrfs".to_string()) }
-fn sudo() -> String { env::var("SUDO").unwrap_or_else(|_| "sudo".to_string()) }
 fn rsync() -> String { env::var("RSYNC").unwrap_or_else(|_| "rsync".to_string()) }
 
 // avoid libc dependency: check via id
@@ -31,7 +30,7 @@ fn run_root(cmd: &str, args: &[&str]) -> (i32, String, String) {
 }
 
 pub fn handle(args: &[String]) -> String {
-    let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
+    let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "" | "create" => {
             let label = if sub == "create" { args.get(1).cloned().unwrap_or_else(|| "manual".to_string()) } else { "manual".to_string() };
@@ -46,7 +45,7 @@ pub fn handle(args: &[String]) -> String {
             let (code, _, err) = run_root(&btrfs(), &["subvolume", "snapshot", "-r", "/home", &snap_path]);
             if code != 0 { return format!("ERR snapshot failed: {}", err.trim()); }
             // prune
-            let _ = prune("5");
+            prune("5");
             snap
         }
         "list" => {
