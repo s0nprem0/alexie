@@ -55,9 +55,73 @@ fn socket_path() -> PathBuf {
     PathBuf::from(runtime).join("alexie").join("daemon.sock")
 }
 
+fn is_help_flag(s: &str) -> bool {
+    matches!(s, "--help" | "-h" | "help")
+}
+
+fn help_text(cmd: Option<&str>) -> String {
+    match cmd {
+        None => {
+            let mut s = String::new();
+            s.push_str("usage: alexie <command...> | alexie daemon\n\n");
+            s.push_str("commands:\n");
+            for (name, desc, _) in COMMANDS {
+                s.push_str(&format!("  {:<15} {}\n", name, desc));
+            }
+            s.push_str("\nhelp: alexie --help | alexie <command> --help | alexie help <command>\n");
+            s
+        }
+        Some(c) => {
+            if let Some((_, desc, subs)) = COMMANDS.iter().find(|(n, _, _)| *n == c) {
+                let mut s = String::new();
+                s.push_str(&format!("usage: alexie {} <subcommand>...\n\n", c));
+                s.push_str(&format!("{}\n\n", desc));
+                s.push_str("subcommands:\n");
+                s.push_str(subs);
+                if !subs.ends_with('\n') { s.push('\n'); }
+                s
+            } else {
+                format!("unknown command: {}\n\n{}", c, help_text(None))
+            }
+        }
+    }
+}
+
+const COMMANDS: &[(&str, &str, &str)] = &[
+    ("monitors", "display scaling, mode, position, mirroring, workspaces.", "  status, list, set OUTPUT KEY VALUE\n  scale set|up|down|reset\n  brightness up|down|max|min|set N\n  identify, wake, recover\n  internal on|off|toggle\n  mirror on|off|toggle\n  lid close|open|toggle|reconcile\n  try OUTPUT KEY VALUE, keep, revert\n  workspaces sync|show|reset\n  workspace N, workspace-step next|prev\n  move-window N, identities, sync-identities\n"),
+    ("theme", "palette listing and switching.", "  list, current, next, prev, state, list --json\n  switch THEME\n  export, doctor, vars, render\n"),
+    ("wallpaper", "wallpaper set/watch and library.", "  current, status, set FILE, list, library\n  next, prev, rotate, pause, resume\n  watch, watch-foreground\n"),
+    ("power", "power profiles and charge limits.", "  show|status, apply, set ac|battery PROFILE\n  charge full|limit N\n  watch\n"),
+    ("screentime", "screen time tracking.", "  show, json, reset, path, panel, watch\n"),
+    ("focus", "focus mode.", "  start, stop, extend, status\n"),
+    ("snapshot", "btrfs snapshots.", "  create, list, restore, prune\n"),
+    ("webapp", "websites as apps.", "  add, list, remove\n"),
+    ("shot", "screenshots.", "  smart, region, windows, fullscreen, window\n  copy, save, preview, annotate, redact, text\n"),
+    ("record", "screen recording.", "  --status, --stop, --fullscreen, --audio\n"),
+    ("transcode", "picture/video resize.", "  picture|video ...\n"),
+    ("webcam-overlay", "webcam overlay.", "  start, stop, resize, list\n"),
+    ("clipboard", "clipboard history.", "  --copy, --list, --text, --image\n"),
+    ("emoji", "emoji picker.", "  (no subcommands)\n"),
+    ("pick", "generic picker.", "  --title, --placeholder, --input\n"),
+    ("reminder", "reminders.", "  show, count, clear\n"),
+    ("share", "file sharing.", "  uri, path, edit, folder, compress\n"),
+    ("shortcuts", "keyboard shortcuts.", "  (help)\n"),
+    ("toggle", "nightlight, idle, dnd, stay-awake.", "  nightlight, idle, dnd, stayawake\n  status, list\n"),
+    ("menu", "application and action menu.", "  apps, --list, --only\n"),
+    ("capture", "capture text/qr/share.", "  text, qr, share\n"),
+    ("daemon", "run the alexie daemon.", "  (no subcommands)\n"),
+    ("ping", "health check.", "  (no subcommands)\n"),
+];
+
 pub fn handle_command(cmd: &str) -> String {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     match parts.first().copied() {
+        None | Some("--help") | Some("-h") | Some("help") => {
+            return help_text(parts.get(1).copied());
+        }
+        Some(c) if parts.len() >= 2 && is_help_flag(parts[1]) => {
+            return help_text(Some(c));
+        }
         Some("ping") => "pong".to_string(),
         Some("monitors") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
@@ -245,9 +309,16 @@ fn run_client(args: &[String]) {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() >= 2 && (args[1] == "--help" || args[1] == "-h" || args[1] == "help") {
-        eprintln!("usage: alexie <command...>");
-        eprintln!("usage: alexie daemon");
+    if args.len() >= 3 && args[1] == "help" {
+        print!("{}", help_text(Some(&args[2])));
+        std::process::exit(0);
+    }
+    if args.len() < 2 || is_help_flag(&args[1]) || args[1] == "--help" || args[1] == "-h" {
+        print!("{}", help_text(None));
+        std::process::exit(0);
+    }
+    if args.len() >= 3 && is_help_flag(&args[2]) {
+        print!("{}", help_text(Some(&args[1])));
         std::process::exit(0);
     }
 
