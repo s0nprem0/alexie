@@ -53,7 +53,7 @@ fn runtime_dir() -> std::path::PathBuf {
         });
         st
     });
-    std::path::PathBuf::from(rt)
+    std::path::PathBuf::from(rt).join("anixie")
 }
 
 pub fn handle(args: &[String]) -> String {
@@ -66,21 +66,21 @@ pub fn handle(args: &[String]) -> String {
         "share" => {
             // delegate to bash share
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = crate::resolve_tool("share");
+            let tool = resolve_tool("share");
             let (code, out, err) = run(&tool, &a);
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }
         }
         "cancel" | "edit-last" | "copy-path" | "copy-uri" => {
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = crate::resolve_tool("shot");
+            let tool = resolve_tool("shot");
             let (code, out, err) = run(&tool, &a);
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }
         }
         _ => {
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = crate::resolve_tool("shot");
+            let tool = resolve_tool("shot");
             let (code, out, err) = run(&tool, &a);
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }
@@ -143,7 +143,7 @@ fn capture_qr() -> String {
     if geom.is_empty() { release_freeze(&freeze_file); return "ERR no region".to_string(); }
 
     let grim_bin = grim();
-    let zbar_bin = env::var("ZBAR").unwrap_or_else(|_| "zbar".to_string());
+    let zbar_bin = env::var("ZBAR").unwrap_or_else(|_| "zbarimg".to_string());
     let tmp = format!("/tmp/anixie-qr-{}.png", std::process::id());
     let (code, _, err) = run(&grim_bin, &["-g", &geom, &tmp]);
     if code != 0 { release_freeze(&freeze_file); let _ = std::fs::remove_file(&tmp); return format!("ERR grim: {}", err.trim()); }

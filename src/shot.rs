@@ -32,7 +32,7 @@ fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
 
 fn delegate(args: &[String]) -> String {
     let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) = run("shot", &a);
+    let (code, out, err) = run("shot-legacy", &a);
     if code == 0 {
         if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
     } else {
@@ -63,7 +63,7 @@ fn runtime_dir() -> std::path::PathBuf {
         });
         st
     });
-    std::path::PathBuf::from(rt)
+    std::path::PathBuf::from(rt).join("anixie")
 }
 
 pub fn handle(args: &[String]) -> String {
@@ -117,8 +117,10 @@ pub fn handle(args: &[String]) -> String {
             return "ERR no previous capture".to_string();
         }
         let satty = env::var("SATTY").unwrap_or_else(|_| "satty".to_string());
-        let _ = Command::new(&satty).args(["--filename", &last, "--output-filename", &last, "--initial-tool", "crop"]).spawn();
-        return "OK".to_string();
+        match Command::new(&satty).args(["--filename", &last, "--output-filename", &last, "--initial-tool", "crop"]).spawn() {
+            Ok(_) => return "OK".to_string(),
+            Err(e) => return format!("ERR spawn satty: {}", e),
+        }
     }
 
     // copy-path
@@ -156,6 +158,16 @@ pub fn handle(args: &[String]) -> String {
     }
 
     handle_mode_dest(&mode, &dest, &rest)
+}
+
+
+fn move_file(src: &str, dst: &str) -> std::io::Result<()> {
+    if std::fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(src, dst)?;
+    let _ = std::fs::remove_file(src);
+    Ok(())
 }
 
 fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
@@ -199,7 +211,12 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
     });
     let _ = std::fs::create_dir_all(&shot_dir);
     let stamp = chrono_like_stamp();
-    let base = format!("Screenshot_{}", stamp);
+    let slug = window_slug();
+    let base = if slug.is_empty() {
+        format!("screenshot-{}", stamp)
+    } else {
+        format!("screenshot-{}-{}", stamp, slug)
+    };
     let mut candidate = format!("{}/{}.png", shot_dir, base);
     let mut suffix = 1;
     while std::path::Path::new(&candidate).exists() {
@@ -209,7 +226,7 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
 
     // grim to captured file (for save/preview) or scratch (for copy)
     let tmp_scratch = format!("/tmp/anixie-shot-{}.png", std::process::id());
-    let (code, _, err) = run(&grim(), &["-g", &geometry, &tmp_scratch]);
+    let (code, _, err) = run(&grim(), &["-c", "-g", &geometry, &tmp_scratch]);
     if code != 0 {
         release_freeze();
         let _ = std::fs::remove_file(&tmp_scratch);
@@ -220,30 +237,41 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
 
     match dest {
         "copy" => {
-            let _ = run("sh", &["-c", &format!("{} --type image/png < {}", wl_copy(), tmp_scratch)]);
-            let _ = std::fs::write(&last_capture_file, &tmp_scratch);
-            release_freeze();
-            // cleanup scratch? keep for last-capture? bash keeps nothing for copy. Remove scratch.
-            let _ = std::fs::remove_file(&tmp_scratch);
-            let _ = std::fs::remove_file(&last_capture_file);
-            "OK copied".to_string()
+            // Try to put it on the clipboard; on failure, save instead.
+            let (code, _, _) = run("sh", &["-c", &format!("{} --type image/png < {}", wl_copy(), tmp_scratch)]);
+            if code == 0 {
+                let _ = std::fs::write(&last_capture_file, format!("{}\n", tmp_scratch));
+                release_freeze();
+                let _ = std::fs::remove_file(&tmp_scratch);
+                "OK copied".to_string()
+            } else {
+                let _ = move_file(&tmp_scratch, &candidate);
+                let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
+                release_freeze();
+                let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "8000", "Screenshot saved, not copied", "The clipboard could not be reached."]);
+                format!("ERR clipboard unavailable; saved to {}", candidate)
+            }
         }
         "save" => {
-            let _ = std::fs::rename(&tmp_scratch, &candidate);
-            let _ = std::fs::write(&last_capture_file, &candidate);
+            let _ = move_file(&tmp_scratch, &candidate);
+            let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
             release_freeze();
             let _ = run(&notify(), &["-a", "capture", "-u", "low", "-t", "2000", "Screenshot saved", &candidate]);
             candidate
         }
         "preview" => {
-            let _ = std::fs::rename(&tmp_scratch, &candidate);
-            let _ = std::fs::write(&last_capture_file, &candidate);
+            let _ = move_file(&tmp_scratch, &candidate);
+            let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
             release_freeze();
-            // copy to clipboard
-            let _ = run("sh", &["-c", &format!("{} --type image/png < {}", wl_copy(), candidate)]);
-            // reveal in capture preview
-            let _ = run("quickshell", &["ipc", "call", "capture", "preview", &candidate]);
-            candidate
+            let mut copied = true;
+            let (code, _, _) = run("sh", &["-c", &format!("{} --type image/png < {}", wl_copy(), candidate)]);
+            if code != 0 { copied = false; }
+            let ipc_action = if copied { "preview" } else { "previewCopyFailed" };
+            let (ipc_code, _, _) = run("quickshell", &["ipc", "call", "capture", ipc_action, &candidate]);
+            if ipc_code != 0 {
+                let _ = run(&notify(), &["-a", "capture", "-u", "low", "-t", "4000", "Screenshot saved", &candidate]);
+            }
+            if copied { format!("Saved {}", candidate) } else { format!("Saved {} (not copied)", candidate) }
         }
         _ => {
             release_freeze();
@@ -262,6 +290,31 @@ fn release_freeze() {
         }
     }
     let _ = std::fs::remove_file(&freeze_pid_file);
+}
+
+fn window_slug() -> String {
+    let (code, out, _) = run(&hyprctl(), &["activewindow", "-j"]);
+    if code != 0 { return String::new(); }
+    let filter = r#".class // empty"#;
+    let script = format!("printf '%s' {} | jq -r {}", shell_quote(&out), shell_quote(filter));
+    let (code, g, _) = run("sh", &["-c", &script]);
+    if code != 0 { return String::new(); }
+    let class = g.trim();
+    if class.is_empty() { return String::new(); }
+    let lowered = class.to_lowercase();
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for c in lowered.chars() {
+        if c.is_alphanumeric() {
+            slug.push(c);
+            prev_dash = false;
+        } else if !prev_dash {
+            slug.push('-');
+            prev_dash = true;
+        }
+    }
+    let slug = slug.trim_matches('-').to_string();
+    slug.chars().take(40).collect()
 }
 
 fn chrono_like_stamp() -> String {
