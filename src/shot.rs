@@ -70,7 +70,7 @@ pub fn handle(args: &[String]) -> String {
     }
 
     // delegate the most complex modes
-    if mode == "smart" || mode == "scroll" {
+    if mode == "scroll" {
         return delegate(args);
     }
 
@@ -122,11 +122,6 @@ pub fn handle(args: &[String]) -> String {
         return uri;
     }
 
-    // redact/text/annotate destinations: open satty with specific tool
-    if dest == "redact" || dest == "text" || dest == "annotate" {
-        // delegate to bash shot for these (satty hand-off with specific tool)
-        return delegate(args);
-    }
     if !post.is_empty() {
         return delegate(args);
     }
@@ -167,7 +162,7 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
         g.trim().to_string()
     } else {
         // region / windows: use shot-pick
-        let picker_mode = if mode == "windows" { "windows" } else { "region" };
+        let picker_mode = if mode == "windows" { "windows" } else if mode == "smart" { "smart" } else { "region" };
         let sp = shot_pick();
         let (code, g, err) = run(&sp, &[picker_mode, "--keep-freeze"]);
         if code != 0 { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", &format!("Could not pick region: {}", err.trim())]); return format!("ERR pick: {}", err.trim()); }
@@ -210,6 +205,34 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
     let last_capture_file = runtime_dir().join("last-capture");
 
     match dest {
+        "redact" | "text" | "annotate" => {
+            let tool = if dest == "redact" { "blur" } else if dest == "text" { "text" } else { "crop" };
+            let suffix = if dest == "redact" { "redacted" } else if dest == "text" { "text" } else { "annotated" };
+            let stem = format!("{}-{}", base, suffix);
+            // unique path
+            let _ = fs::create_dir_all(&shot_dir);
+            let mut output = format!("{}/{}.png", shot_dir, stem);
+            let mut n = 1;
+            while std::path::Path::new(&output).exists() {
+                output = format!("{}/{}-{}.png", shot_dir, stem, n);
+                n += 1;
+            }
+            let satty_bin = env::var("SATTY").unwrap_or_else(|_| "satty".to_string());
+            let status = Command::new(&satty_bin).args(["--filename", &tmp_scratch, "--output-filename", &output, "--initial-tool", tool]).status();
+            let code = status.map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
+            if code != 0 {
+                release_freeze();
+                let _ = fs::remove_file(&tmp_scratch);
+                return "OK".to_string();
+            }
+            let _ = fs::write(&last_capture_file, format!("{}\n", output));
+            release_freeze();
+            let _ = fs::remove_file(&tmp_scratch);
+            let cmd = format!("{} --type image/png < {}", wl_copy(), output);
+            let _ = run("sh", &["-c", &cmd]);
+            let _ = run("quickshell", &["ipc", "call", "capture", "preview", &output]);
+            format!("Saved {}", output)
+        }
         "copy" => {
             // Try to put it on the clipboard; on failure, save instead.
             let code = crate::proc::run_sh_status(&format!("{} --type image/png < {}", wl_copy(), tmp_scratch));
