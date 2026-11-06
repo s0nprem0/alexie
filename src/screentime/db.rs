@@ -1,7 +1,6 @@
 //! DB: open/migrate, active window, daily JSON mirror.
 
 use super::time::{today_start, today_string};
-use crate::proc::run;
 use rusqlite::{Connection, params};
 use serde_json::Value;
 use std::env;

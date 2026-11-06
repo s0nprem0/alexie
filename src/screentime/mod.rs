@@ -4,6 +4,7 @@
 //! - `time` — now/today/midnight/format
 //! - `db` — paths, open/migrate, daily JSON mirror
 //! - `watch` — polling loop block
+//!
 //! `handle()` below is non-DB subcommands first, then DB-backed.
 
 mod db;

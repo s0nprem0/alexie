@@ -3,6 +3,7 @@
 //! Split from a single 297-line transcode.rs:
 //! - `pick` — stdin feeding, on-select chaining
 //! - `convert` — media type, validation, magick/ffmpeg
+//!
 //! `handle()` below is just argument parsing/dispatch.
 
 pub(crate) mod pick;
