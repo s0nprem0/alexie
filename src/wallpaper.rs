@@ -198,6 +198,77 @@ fn pause_toggle() -> String {
     }
 }
 
+fn set_wallpaper(raw: &str) -> String {
+    let path = match std::fs::canonicalize(raw) {
+        Ok(p) => p,
+        Err(e) => return format!("ERR cannot resolve path '{}': {}", raw, e),
+    };
+    let ext = path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).unwrap_or_default();
+    let path_str = path.to_string_lossy().to_string();
+    if ext == "mp4" || ext == "webm" {
+        // kill existing mpvpaper
+        let _ = Command::new("pkill").args(["-f", "mpvpaper"]).status();
+        for _ in 0..20 {
+            let running = Command::new("pgrep").args(["-f", "mpvpaper"]).status().map(|s| s.success()).unwrap_or(false);
+            if !running { break; }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let paused_flag = cache_dir().join("live_wallpaper_paused");
+        let is_paused = fs::read_to_string(&paused_flag).map(|s| s.trim() == "true").unwrap_or(false);
+        let mut mpv_opts = String::from("--loop --no-audio --hwdec=no --load-scripts=no --cache=no --demuxer-max-bytes=10M --vd-lavc-fast=yes --vd-lavc-skiploopfilter=all --vf=fps=30 --scale=bilinear --cscale=bilinear --dscale=bilinear --sws-scaler=fast-bilinear --correct-downscaling=no --linear-downscaling=no --sigmoid-upscaling=no --hdr-compute-peak=no --input-ipc-server=/tmp/mpvpaper-ipc");
+        if is_paused { mpv_opts.push_str(" --pause"); }
+        let cmd = format!("uwsm app -- mpvpaper -o \"{}\" '*' '{}' >/tmp/mpvpaper_rust.log 2>&1", mpv_opts, path_str);
+        match Command::new("bash").args(["-c", &cmd]).spawn() {
+            Ok(_) => format!("wallpaper set to {}", path_str),
+            Err(e) => format!("ERR spawn mpvpaper: {}", e),
+        }
+    } else {
+        // image: try swww
+        let swww = Command::new("sh").args(["-c", "command -v swww"]).output();
+        let has_swww = swww.map(|o| o.status.success()).unwrap_or(false);
+        if has_swww {
+            let status = Command::new("swww").args(["img", &path_str]).status();
+            match status {
+                Ok(s) if s.success() => format!("wallpaper set to {}", path_str),
+                Ok(s) => format!("ERR swww exited {}", s.code().unwrap_or(-1)),
+                Err(e) => format!("ERR swww: {}", e),
+            }
+        } else {
+            // fallback to legacy wallpaper binary
+            let a = ["set", &path_str];
+            let (code, out, err) = crate::proc::run("wallpaper", &a);
+            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } } else { format!("ERR (exit {}) {}", code, err.trim()) }
+        }
+    }
+}
+
+fn watch_wallpapers(args: &[String]) -> ! {
+    let dirs = if args.len() > 1 { vec![PathBuf::from(&args[1])] } else { watch_dirs() };
+    let interval: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(2);
+    // Run in foreground; generate thumbnails and search index.
+    loop {
+        let _ = thumbs(&dirs); // ensure thumbs generated
+        // build search index
+        let files = scan(&dirs);
+        let mut entries = Vec::new();
+        for path in files {
+            let tp = thumb_path(&cache_dir(), &path);
+            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            entries.push(serde_json::json!({
+                "path": path.to_string_lossy(),
+                "thumb": tp.to_string_lossy(),
+                "stem": stem,
+            }));
+        }
+        let index_path = cache_dir().join("search_index.json");
+        let _ = fs::create_dir_all(cache_dir());
+        if let Ok(json) = serde_json::to_string(&entries) {
+            let _ = fs::write(&index_path, json);
+        }
+        std::thread::sleep(std::time::Duration::from_secs(interval));
+    }
+}
+
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
         return delegate(args);
@@ -241,7 +312,12 @@ pub fn handle(args: &[String]) -> String {
             search(&dirs, query)
         }
         "status" => delegate(args),
+        "set" => {
+            if args.len() < 2 { return "ERR usage: wallpaper set FILE".to_string(); }
+            set_wallpaper(&args[1])
+        }
         "pause" | "toggle-pause" | "resume" => pause_toggle(),
+        "watch" => watch_wallpapers(args),
         "list" | "library" => delegate(args),
         _ => delegate(args),
     }

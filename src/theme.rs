@@ -115,6 +115,59 @@ fn presets_dir() -> PathBuf {
     home_dir().join(".config/alexie/presets")
 }
 
+fn switch_theme(wallpaper: &str, mode: &str) -> String {
+    if wallpaper.is_empty() {
+        return "ERR usage: theme switch WALLPAPER [auto|light|dark]".to_string();
+    }
+    let path = match std::fs::canonicalize(wallpaper) {
+        Ok(p) => p,
+        Err(e) => return format!("ERR cannot resolve path: {}", e),
+    };
+    let home = home_dir();
+    let cache_dir = home.join(".cache").join("alexie").join("theme_switcher");
+    let hash = {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        path.to_string_lossy().hash(&mut h);
+        format!("{:016x}", h.finish())
+    };
+    let force = mode.to_string();
+    let cache_path = cache_dir.join(format!("{}_{}.json", hash, force));
+    // cache freshness
+    let cache_fresh = match (std::fs::metadata(&cache_path), std::fs::metadata(&path)) {
+        (Ok(cm), Ok(wm)) => match (cm.modified(), wm.modified()) {
+            (Ok(c), Ok(w)) => c >= w,
+            _ => false,
+        },
+        _ => false,
+    };
+    if cache_path.exists() && cache_fresh {
+        if let Ok(s) = std::fs::read_to_string(&cache_path) {
+            return s;
+        }
+    }
+    let mut cmd = std::process::Command::new("matugen");
+    cmd.args(["image", path.to_str().unwrap_or(""), "--json", "hex", "--source-color-index", "0"]);
+    match mode {
+        "light" => { cmd.args(["--mode", "light"]); }
+        "dark" => { cmd.args(["--mode", "dark"]); }
+        _ => {}
+    }
+    let out = match cmd.output() {
+        Ok(o) => o,
+        Err(e) => return format!("ERR matugen: {}", e),
+    };
+    if !out.status.success() {
+        return format!("ERR matugen: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    let json = String::from_utf8_lossy(&out.stdout).to_string();
+    if let Some(parent) = cache_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&cache_path, &json);
+    json
+}
+
 fn presets() -> String {
     let dir = presets_dir();
     let mut entries: Vec<serde_json::Value> = Vec::new();
@@ -148,6 +201,11 @@ pub fn handle(args: &[String]) -> String {
     match args[0].as_str() {
         "list" => theme_names().join("\n"),
     "presets" => presets(),
+    "switch" => {
+        let wp = args.get(1).cloned().unwrap_or_default();
+        let mode = args.get(2).cloned().unwrap_or_else(|| "auto".to_string());
+        switch_theme(&wp, &mode)
+    }
         "current" => {
             let c = current_theme();
             if c.is_empty() { "none".to_string() } else { c }
