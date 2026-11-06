@@ -57,7 +57,7 @@ Over time, anixie's Hyprland binds and shell IPC would call `alexie <cmd>` inste
 ## Roadmap
 
 - `monitors` fully ported (native, no bash delegation).
-- Port `theme`/`wallpaper` (palette math, matugen, caching).
+- Port `theme`/`wallpaper` (list/current/next/prev/state done; set/wallpaper delegate to bash).
 - Port `shot`/capture (freeze, region, window snap, swappy hand-off).
 - Port `menu` (fast, structured, no jq).
 - Port `clipboard`, `emoji`, `focus`, `screentime`, `toggle`, `power`, `snapshot`, `webapp`.
