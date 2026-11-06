@@ -18,8 +18,21 @@ use std::path::PathBuf;
 
 use std::process::Command;
 
+fn resolve_tool(name: &str) -> String {
+    let check = format!("command -v {} >/dev/null 2>&1", name);
+    if Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
+        return name.to_string();
+    }
+    let legacy = format!("{}-legacy", name);
+    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
+    if Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
+        return legacy;
+    }
+    name.to_string()
+}
+
 fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
-    match Command::new(cmd).args(args).output() {
+    match Command::new(resolve_tool(cmd)).args(args).output() {
         Ok(o) => {
             let code = o.status.code().unwrap_or(-1);
             let out = String::from_utf8_lossy(&o.stdout).to_string();
@@ -30,14 +43,6 @@ fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
     }
 }
 
-
-pub fn resolve_tool(name: &str) -> String {
-    // Prefer a "*-legacy" binary when present (installed alongside the alexie
-    // shim) so delegation does not recurse through the shim.
-    let legacy = format!("{}-legacy", name);
-    let (code, _, _) = run_tool("sh", &["-c", &format!("command -v {} >/dev/null 2>&1", legacy)]);
-    if code == 0 { legacy } else { name.to_string() }
-}
 
 fn socket_path() -> PathBuf {
     let runtime = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
