@@ -183,7 +183,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let old = std::env::var("XDG_STATE_HOME").ok();
-        std::env::set_var("XDG_STATE_HOME", &tmp);
+        unsafe { std::env::set_var("XDG_STATE_HOME", &tmp) }
 
         let flag = tmp.join("anixie").join("theme").join("video-paused");
         assert_eq!(pause_video(), "paused");
@@ -198,8 +198,8 @@ mod tests {
         assert_eq!(toggle_pause_video(), "resumed");
 
         match old {
-            Some(v) => std::env::set_var("XDG_STATE_HOME", v),
-            None => std::env::remove_var("XDG_STATE_HOME"),
+            Some(v) => unsafe { std::env::set_var("XDG_STATE_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_STATE_HOME") },
         }
         let _ = std::fs::remove_dir_all(&tmp);
     }

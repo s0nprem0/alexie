@@ -109,7 +109,8 @@ pub(crate) fn presets() -> String {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) != Some("toml") { continue; }
             let content = match fs::read_to_string(&path) { Ok(c) => c, Err(_) => continue };
-            let value: toml::Value = match content.parse::<toml::Value>() { Ok(v) => v, Err(_) => continue };
+            // toml 1.x parses documents into a Table, not a bare Value.
+            let value: toml::Table = match toml::from_str(&content) { Ok(v) => v, Err(_) => continue };
             let colors_table = match value.get("colors").and_then(|v| v.as_table()) { Some(t) => t, None => continue };
             let mut colors: BTreeMap<String, String> = BTreeMap::new();
             for (k, v) in colors_table {

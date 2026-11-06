@@ -131,15 +131,15 @@ pub(crate) fn prune_generations(current: &Path) {
         .collect();
     gens.sort_by_key(|a| std::cmp::Reverse(a.0));
     let mut keep = 0;
-    for (_, gen) in gens {
-        if gen == current {
+    for (_, gen_dir) in gens {
+        if gen_dir == current {
             continue;
         }
         keep += 1;
         if keep <= 2 {
             continue;
         }
-        let _ = std::fs::remove_dir_all(&gen);
+        let _ = std::fs::remove_dir_all(&gen_dir);
     }
 }
 
@@ -185,7 +185,7 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
 
     write_atomic(&mode_file(), &format!("{}\n", mode_value)).map_err(|e| e.to_string())?;
 
-    let gen = {
+    let gen_dir = {
         let stamp = {
             let (code, out, _) = run("date", &["+%Y%m%d%H%M%S"]);
             if code == 0 { out.trim().to_string() } else { "0".to_string() }
@@ -200,40 +200,40 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         candidate
     };
 
-    let cleanup = |gen: &Path| { let _ = std::fs::remove_dir_all(gen); };
-    if std::fs::copy(generated_file(), gen.join("palette.json")).is_err() {
-        cleanup(&gen);
+    let cleanup = |gen_dir: &Path| { let _ = std::fs::remove_dir_all(gen_dir); };
+    if std::fs::copy(generated_file(), gen_dir.join("palette.json")).is_err() {
+        cleanup(&gen_dir);
         return Err("could not stage the palette".to_string());
     }
-    if write_atomic(&gen.join("mode"), &format!("{}\n", mode_value)).is_err() {
-        cleanup(&gen);
+    if write_atomic(&gen_dir.join("mode"), &format!("{}\n", mode_value)).is_err() {
+        cleanup(&gen_dir);
         return Err("could not stage the mode".to_string());
     }
 
-    let generated_json: serde_json::Value = std::fs::read_to_string(gen.join("palette.json"))
+    let generated_json: serde_json::Value = std::fs::read_to_string(gen_dir.join("palette.json"))
         .map_err(|e| e.to_string())
         .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))?;
-    if write_kitty(&generated_json, &gen.join("kitty.conf")).is_err() {
-        cleanup(&gen);
+    if write_kitty(&generated_json, &gen_dir.join("kitty.conf")).is_err() {
+        cleanup(&gen_dir);
         return Err("could not write the terminal palette".to_string());
     }
 
     // renderer record: embedded palettes + the theme-apps binary in use
     if write_atomic(
-        &gen.join("renderer"),
+        &gen_dir.join("renderer"),
         &format!("embedded-themes {}\n", theme_apps_bin()),
     )
     .is_err()
     {
-        cleanup(&gen);
+        cleanup(&gen_dir);
         return Err("could not record the renderer".to_string());
     }
 
     // theme-apps renders the application files; it is the one
     // external renderer legacy used (@THEME_APPS@).
-    let (code, _, err) = run(&theme_apps_bin(), &[name, gen.to_string_lossy().as_ref()]);
+    let (code, _, err) = run(&theme_apps_bin(), &[name, gen_dir.to_string_lossy().as_ref()]);
     if code != 0 {
-        cleanup(&gen);
+        cleanup(&gen_dir);
         return Err(format!("could not render the application themes: {}", err.trim()));
     }
 
@@ -244,8 +244,8 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         "share-picker.css", "discord.css", "librewolf-userChrome.css", "librewolf-userContent.css",
         "tmux.conf", "btop.theme", "terminal.zsh",
     ] {
-        if std::fs::metadata(gen.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
-            cleanup(&gen);
+        if std::fs::metadata(gen_dir.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
+            cleanup(&gen_dir);
             return Err(format!("the generation is missing {}", source));
         }
     }
@@ -256,31 +256,31 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::symlink;
-        if symlink(&gen, &tmp_link).is_err() {
-            cleanup(&gen);
+        if symlink(&gen_dir, &tmp_link).is_err() {
+            cleanup(&gen_dir);
             return Err("could not activate the generation".to_string());
         }
     }
     #[cfg(not(unix))]
     {
-        cleanup(&gen);
+        cleanup(&gen_dir);
         return Err("could not activate the generation".to_string());
     }
     if std::fs::rename(&tmp_link, live_link()).is_err() {
         let _ = std::fs::remove_file(&tmp_link);
-        cleanup(&gen);
+        cleanup(&gen_dir);
         return Err("could not activate the generation".to_string());
     }
 
     let source = if name == "wallpaper" { "wallpaper" } else { "preset" };
     write_atomic(&state::current_file(), &format!("{}\n", name)).map_err(|e| e.to_string())?;
     state_set_theme(name, source)?;
-    let gen_name = gen.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let gen_name = gen_dir.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     if state_set_generation(&gen_name).is_err() {
         eprintln!("theme: could not record the new generation");
     }
 
-    prune_generations(&gen);
+    prune_generations(&gen_dir);
     Ok(())
 }
 

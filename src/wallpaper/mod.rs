@@ -141,11 +141,11 @@ mod tests {
         )
         .unwrap();
         let old = std::env::var("XDG_STATE_HOME").ok();
-        std::env::set_var("XDG_STATE_HOME", &tmp);
+        unsafe { std::env::set_var("XDG_STATE_HOME", &tmp) }
         let out = handle(&["current".to_string()]);
         match old {
-            Some(v) => std::env::set_var("XDG_STATE_HOME", v),
-            None => std::env::remove_var("XDG_STATE_HOME"),
+            Some(v) => unsafe { std::env::set_var("XDG_STATE_HOME", v) },
+            None => unsafe { std::env::remove_var("XDG_STATE_HOME") },
         }
         let _ = std::fs::remove_dir_all(&tmp);
         assert_eq!(out, "/tmp/wp.png");

@@ -72,7 +72,8 @@ pub(crate) fn load_preset_palette_from(
 ) -> Option<std::collections::HashMap<String, String>> {
     let path = dir.join(format!("{}.toml", name));
     let content = std::fs::read_to_string(path).ok()?;
-    let value: toml::Value = content.parse().ok()?;
+    // toml 1.x parses documents into a Table, not a bare Value.
+    let value: toml::Table = toml::from_str(&content).ok()?;
     let colors_table = value.get("colors")?.as_table()?;
     let mut palette = std::collections::HashMap::new();
     for (key, val) in colors_table {

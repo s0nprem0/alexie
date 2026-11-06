@@ -199,12 +199,12 @@ pub(crate) fn state_set_theme(name: &str, source: &str) -> Result<(), String> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn state_set_generation(gen: &str) -> Result<(), String> {
+pub(crate) fn state_set_generation(gen_dir: &str) -> Result<(), String> {
     state_ensure()?;
     let mut state = read_state_json().unwrap_or_else(migrated_state_json);
     if let Some(obj) = state.as_object_mut() {
         obj.insert("version".into(), serde_json::json!(1));
-        obj.insert("generation".into(), serde_json::json!(gen));
+        obj.insert("generation".into(), serde_json::json!(gen_dir));
     }
     write_atomic(&state_file(), &serde_json::to_string_pretty(&state).unwrap_or_else(|_| "{}".to_string()))
         .map_err(|e| e.to_string())

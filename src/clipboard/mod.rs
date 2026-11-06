@@ -249,12 +249,12 @@ mod tests {
         make_fake(dir, "file", "#!/bin/sh\nprintf 'text/plain\\n'\n");
         make_fake(dir, "quickshell", "#!/bin/sh\nprintf 'ok\\n'\n");
 
-        std::env::set_var("CLIPHIST", format!("{}/cliphist", dir));
-        std::env::set_var("WL_COPY", format!("{}/wl-copy", dir));
-        std::env::set_var("FILE", format!("{}/file", dir));
-        std::env::set_var("QUICKSHELL", format!("{}/quickshell", dir));
+        unsafe { std::env::set_var("CLIPHIST", format!("{}/cliphist", dir)) }
+        unsafe { std::env::set_var("WL_COPY", format!("{}/wl-copy", dir)) }
+        unsafe { std::env::set_var("FILE", format!("{}/file", dir)) }
+        unsafe { std::env::set_var("QUICKSHELL", format!("{}/quickshell", dir)) }
         let old_path = std::env::var("PATH").unwrap_or_default();
-        std::env::set_var("PATH", format!("{}:{}", dir, old_path));
+        unsafe { std::env::set_var("PATH", format!("{}:{}", dir, old_path)) }
 
         let out = handle(&["--list".to_string()]);
         assert!(out.contains("hello"), "got: {}", out);
@@ -274,7 +274,7 @@ mod tests {
             "#!/bin/sh\ncase \"$1\" in list) printf '9\\t$(touch {}/pwned)\\n';; delete) cat > {};; esac\n",
             dir, log
         ));
-        std::env::set_var("CLIPHIST", format!("{}/cliphist", dir));
+        unsafe { std::env::set_var("CLIPHIST", format!("{}/cliphist", dir)) }
         let out = handle(&["--delete".to_string(), "9".to_string()]);
         assert_eq!(out, "OK", "got: {out}");
         assert!(!std::path::Path::new(&format!("{}/pwned", dir)).exists(), "shell injection via delete line");
