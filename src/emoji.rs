@@ -1,4 +1,3 @@
-use std::env;
 use std::process::Command;
 
 fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
@@ -22,7 +21,6 @@ fn resolve_tool(name: &str) -> String {
 }
 
 pub fn handle(_args: &[String]) -> String {
-    // emoji: awk + pick + wtype. Delegate to bash emoji (complex awk pipeline).
     let tool = resolve_tool("emoji");
     let (code, out, err) = run(&tool, &[]);
     if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }

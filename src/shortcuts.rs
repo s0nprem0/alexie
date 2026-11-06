@@ -1,4 +1,3 @@
-use std::env;
 use std::process::Command;
 
 fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
@@ -8,16 +7,23 @@ fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
     }
 }
 
-fn hyprctl() -> String { "hyprctl".to_string() }
-fn jq() -> String { "jq".to_string() }
+fn resolve_tool(name: &str) -> String {
+    let check = format!("command -v {} >/dev/null 2>&1", name);
+    if Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
+        return name.to_string();
+    }
+    let legacy = format!("{}-legacy", name);
+    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
+    if Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
+        return legacy;
+    }
+    name.to_string()
+}
 
-pub fn handle(_args: &[String]) -> String {
-    // shortcuts: hyprctl binds -j | jq transform | pick. Delegate to bash shortcuts
-    // (complex jq transform; keep correctness).
-    let tool = if Command::new("sh").args(["-c","command -v shortcuts >/dev/null 2>&1"]).status().map(|s|s.success()).unwrap_or(false) {
-        "shortcuts".to_string()
-    } else { "shortcuts-legacy".to_string() };
-    let (code, out, err) = run(&tool, &[]);
+pub fn handle(args: &[String]) -> String {
+    let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let tool = resolve_tool("shortcuts");
+    let (code, out, err) = run(&tool, &a);
     if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
     else { format!("ERR (exit {}) {}", code, err.trim()) }
 }

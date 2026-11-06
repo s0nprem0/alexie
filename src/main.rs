@@ -5,6 +5,7 @@ mod emoji;
 mod focus;
 mod pick;
 mod reminder;
+mod share;
 mod shortcuts;
 mod snapshot;
 mod webapp;
@@ -104,6 +105,22 @@ pub fn handle_command(cmd: &str) -> String {
         Some("emoji") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             emoji::handle(&args)
+        }
+        Some("pick") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            pick::handle(&args)
+        }
+        Some("reminder") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            reminder::handle(&args)
+        }
+        Some("share") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            share::handle(&args)
+        }
+        Some("shortcuts") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            shortcuts::handle(&args)
         }
         Some("pick") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();

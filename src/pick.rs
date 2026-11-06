@@ -1,4 +1,3 @@
-use std::env;
 use std::process::Command;
 
 fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
