@@ -1,3 +1,4 @@
+mod dbus;
 mod monitors;
 mod theme;
 mod wallpaper;
@@ -27,7 +28,7 @@ fn socket_path() -> PathBuf {
     PathBuf::from(runtime).join("alexie").join("daemon.sock")
 }
 
-fn handle_command(cmd: &str) -> String {
+pub fn handle_command(cmd: &str) -> String {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     match parts.first().copied() {
         Some("ping") => "pong".to_string(),
@@ -85,6 +86,12 @@ fn run_daemon() {
         }
     };
     eprintln!("alexie daemon listening on {}", sock.display());
+
+    // Start the optional DBus service in a background thread.
+    std::thread::spawn(|| {
+        dbus::run_dbus_server();
+    });
+
     for stream in listener.incoming() {
         match stream {
             Ok(s) => handle_stream(s),
