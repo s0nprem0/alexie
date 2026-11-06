@@ -1,6 +1,7 @@
 mod dbus;
 mod monitors;
 mod theme;
+mod toggle;
 mod wallpaper;
 
 use std::env;
@@ -43,6 +44,10 @@ pub fn handle_command(cmd: &str) -> String {
         Some("wallpaper") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             wallpaper::handle(&args)
+        }
+        Some("toggle") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            toggle::handle(&args)
         }
         Some(tool) if ["shot", "record", "transcode", "capture-text", "capture-qr", "share",
                         "webcam-overlay", "clipboard", "emoji", "focus", "screentime",
