@@ -8,8 +8,8 @@ fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
     }
 }
 
-fn dest() -> String { env::var("DEST").unwrap_or_else(|_| "/.snapshots/home".to_string()) }
-fn keep_default() -> i64 { env::var("KEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(5) }
+fn dest() -> String { env::var("DEST").unwrap_or_else(|_| "/var/lib/anixie/snapshots".to_string()) }
+fn keep_default() -> i64 { env::var("KEEP").ok().and_then(|s| s.parse().ok()).unwrap_or(20) }
 fn btrfs() -> String { env::var("BTRFS").unwrap_or_else(|_| "btrfs".to_string()) }
 fn rsync() -> String { env::var("RSYNC").unwrap_or_else(|_| "rsync".to_string()) }
 
@@ -45,7 +45,7 @@ pub fn handle(args: &[String]) -> String {
             let (code, _, err) = run_root(&btrfs(), &["subvolume", "snapshot", "-r", "/home", &snap_path]);
             if code != 0 { return format!("ERR snapshot failed: {}", err.trim()); }
             // prune
-            prune("5");
+            prune(&keep_default().to_string());
             snap
         }
         "list" | "ls" => {
@@ -65,7 +65,7 @@ pub fn handle(args: &[String]) -> String {
             let snap = format!("{}/{}", d, name);
             if !std::path::Path::new(&snap).exists() { return format!("ERR snapshot not found: {}", name); }
             let rs = rsync();
-            let (code, _, err) = run_root(&rs, &["-a", "--delete", &format!("{}/", snap), "/home/"]);
+            let (code, _, err) = run_root(&rs, &["-aHAX", "--delete", &format!("{}/", snap), "/home/"]);
             if code != 0 { return format!("ERR restore failed: {}", err.trim()); }
             format!("restored {}", name)
         }
@@ -96,7 +96,7 @@ mod tests {
 }
 
 fn prune(keep_str: &str) {
-    let keep: usize = keep_str.parse().unwrap_or(5);
+    let keep: usize = keep_str.parse().unwrap_or(20);
     let d = dest();
     let (code, out, _) = run_root("ls", &["-1", &d]);
     if code != 0 { return; }
