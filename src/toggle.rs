@@ -3,16 +3,16 @@ use std::process::Command;
 
 
 fn resolve_tool(name: &str) -> String {
-    // When the daemon is enabled, bash tools are renamed to *-legacy. Prefer
-    // the plain name, fall back to the legacy one so delegation keeps working.
-    let check = format!("command -v {} >/dev/null 2>&1", name);
-    if std::process::Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
-        return name.to_string();
-    }
+    // Prefer *-legacy (bash impl) when daemon is enabled, so delegation never
+    // recurses through the alexie shim.
     let legacy = format!("{}-legacy", name);
     let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
     if std::process::Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
         return legacy;
+    }
+    let check = format!("command -v {} >/dev/null 2>&1", name);
+    if std::process::Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
+        return name.to_string();
     }
     name.to_string()
 }

@@ -8,14 +8,16 @@ fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
 }
 
 fn resolve_tool(name: &str) -> String {
-    let check = format!("command -v {} >/dev/null 2>&1", name);
-    if Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
-        return name.to_string();
-    }
+    // When the daemon is enabled, bash tools are renamed to *-legacy. Prefer the
+    // legacy binary so delegation never recurses through the alexie shim.
     let legacy = format!("{}-legacy", name);
     let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
     if Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
         return legacy;
+    }
+    let check = format!("command -v {} >/dev/null 2>&1", name);
+    if Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
+        return name.to_string();
     }
     name.to_string()
 }
