@@ -60,6 +60,12 @@ pub fn handle(args: &[String]) -> String {
         return delegate(args);
     }
 
+    // Unknown tokens: legacy shot.sh errors instead of silently
+    // taking a smart screenshot for a typo like `shot bogus`.
+    if let Some(unknown) = rest.first() {
+        return format!("ERR unknown argument: {}", unknown);
+    }
+
     // cancel: dismiss preview, stop scrolling capture
     if mode == "cancel" {
         let runtime = runtime_dir();
@@ -315,5 +321,13 @@ mod tests {
     fn shell_quote_basic() {
         assert_eq!(shell_quote("abc"), "'abc'");
         assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
+
+    #[test]
+    fn unknown_argument_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown argument:"), "got: {out}");
+        let out = handle(&["region".to_string(), "__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown argument:"), "got: {out}");
     }
 }

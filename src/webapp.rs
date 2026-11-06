@@ -105,10 +105,27 @@ pub fn handle(args: &[String]) -> String {
             format!("webapp: removed \"{}\"", args[1])
         }
         _ => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let (code, out, err) = run("webapp", &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // Fully ported (no webapp-legacy): running `webapp` here
+            // would re-enter alexie via the shim and recurse.
+            // Match legacy: unknown -> error.
+            format!("ERR unknown subcommand: {}", sub)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
+    }
+
+    #[test]
+    fn slug_clean_basic() {
+        assert_eq!(slug_clean("My App!"), "my-app");
+        assert_eq!(slug_clean("---"), "");
     }
 }

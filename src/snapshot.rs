@@ -48,7 +48,7 @@ pub fn handle(args: &[String]) -> String {
             prune("5");
             snap
         }
-        "list" => {
+        "list" | "ls" => {
             let d = dest();
             let _ = run_root("mkdir", &["-p", &d]);
             let (code, out, _) = run_root("ls", &["-1", &d]);
@@ -75,11 +75,23 @@ pub fn handle(args: &[String]) -> String {
             "OK".to_string()
         }
         _ => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let (code, out, err) = run("snapshot", &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // Fully ported and the `snapshot` name is the alexie shim
+            // (the legacy bash lives at /run/current-system/sw/bin/snapshot
+            // and is shadowed by the shim). Running a binary named
+            // `snapshot` here would recurse. Match legacy: unknown -> error.
+            format!("ERR unknown subcommand: {}", sub)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run};
+use crate::proc::run;
 
 
 fn hyprctl_temp() -> String {
@@ -112,14 +112,33 @@ pub fn handle(args: &[String]) -> String {
             toggle_one(sub);
             format!("{}: {}", label(sub), state_of(sub))
         }
-        "automation" => String::new(), // not applicable; delegated
         _ => {
-            // delegate to bash toggle for unknown
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = resolve_tool("toggle");
-            let (code, out, err) = run(&tool, &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // Fully ported (no toggle-legacy): running `toggle` here
+            // would re-enter alexie via the toggle shim and recurse.
+            // There is also no `automation` subcommand in legacy
+            // toggle.sh — the old arm returned an empty string.
+            // Match legacy: unknown -> error.
+            format!("ERR unknown subcommand: {}", sub)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
+        // `automation` was a bogus arm returning ""; it is unknown now.
+        let out = handle(&["automation".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
+    }
+
+    #[test]
+    fn label_and_state_of_unknown() {
+        assert_eq!(label("nope"), "Unknown");
+        assert!(state_of("nope").starts_with("ERR"));
     }
 }

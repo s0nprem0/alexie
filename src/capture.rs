@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{run, shell_quote};
 use std::env;
 
 
@@ -41,19 +41,24 @@ pub fn handle(args: &[String]) -> String {
             crate::share::handle(&sub_args)
         }
         "cancel" | "edit-last" | "copy-path" | "copy-uri" => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = resolve_tool("shot");
-            let (code, out, err) = run(&tool, &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // These modes are already native in shot::handle. Calling
+            // shot::handle directly avoids spawning the `shot` binary,
+            // which via resolve_tool("shot") could re-enter alexie
+            // through the shot shim, and avoids depending on shot-legacy.
+            crate::shot::handle(args)
         }
-        _ => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = resolve_tool("shot");
-            let (code, out, err) = run(&tool, &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
-        }
+        _ => format!("ERR unknown subcommand: {}", args[0]),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
     }
 }
 
