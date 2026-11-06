@@ -328,9 +328,23 @@ pub fn handle(args: &[String]) -> String {
         "keep" => keep_action(),
         "revert" => revert_action(),
         "workspaces" => {
-            // sync/show/reset: delegate (complex workspace block logic)
-            delegate(args)
+            let action = if args.len() >= 2 { args[1].as_str() } else { "sync" };
+            workspaces_action(action)
         }
+        "workspace" => {
+            let slot = if args.len() >= 2 { args[1].as_str() } else { "" };
+            workspace_action(slot)
+        }
+        "workspace-step" => {
+            let dir = if args.len() >= 2 { args[1].as_str() } else { "next" };
+            workspace_step_action(dir)
+        }
+        "move-window" => {
+            let slot = if args.len() >= 2 { args[1].as_str() } else { "" };
+            move_window_action(slot)
+        }
+        "identities" => identities_action(),
+        "sync-identities" => sync_identities_action(),
         _ => format!("ERR unknown monitors subcommand: {}", args[0]),
     }
 }
@@ -617,4 +631,232 @@ fn revert_action() -> String {
     if let Err(e) = apply_change(&output, &key, &old) { let _ = std::fs::remove_file(&pending); return format!("ERR {}", e); }
     let _ = std::fs::remove_file(&pending);
     format!("{} {} reverted to {}", output, key, old)
+}
+
+fn workspace_file() -> std::path::PathBuf { state_dir().join("workspaces.json") }
+fn identities_file() -> std::path::PathBuf { state_dir().join("monitor_identities.json") }
+
+fn workspace_base(name: &str) -> String {
+    if !workspace_file().exists() {
+        return "1".to_string();
+    }
+    let filter = format!(r#".["{}"] // empty"#, name);
+    // workspace_file is a JSON object; use jq on file
+    let (code, out, _) = run("jq", &["-r", &format!(r#".["{}"] // empty"#, name), workspace_file().to_str().unwrap()]);
+    if code == 0 && !out.trim().is_empty() { out.trim().to_string() } else { "1".to_string() }
+}
+
+
+fn workspaces_sync_action() -> String {
+    let _ = std::fs::create_dir_all(state_dir());
+    // read map
+    let mut map = String::from("{}");
+    if workspace_file().exists() {
+        if let Ok(c) = std::fs::read_to_string(workspace_file()) {
+            let c = c.trim();
+            if !c.is_empty() {
+                let (code, _, _) = run("jq", &["-e", "type == \"object\"", "-n", &format!("--argjson m {} '$m'", c)]);
+                // simpler: validate with jq on the file content via stdin
+                let _ = code;
+                map = c.to_string();
+            }
+        }
+    }
+    // validate
+    {
+        let script = format!("printf '%s' {} | jq -e 'type == \"object\"' >/dev/null 2>&1", shell_quote(&map));
+        let (code, _, _) = run("sh", &["-c", &script]);
+        if code != 0 { map = "{}".to_string(); }
+    }
+
+    let mut identities = String::from("{}");
+    if identities_file().exists() {
+        if let Ok(c) = std::fs::read_to_string(identities_file()) {
+            let c = c.trim();
+            if !c.is_empty() { identities = c.to_string(); }
+        }
+    }
+    {
+        let script = format!("printf '%s' {} | jq -e 'type == \"object\"' >/dev/null 2>&1", shell_quote(&identities));
+        let (code, _, _) = run("sh", &["-c", &script]);
+        if code != 0 { identities = "{}".to_string(); }
+    }
+
+    // names of active monitors
+    let json = hypr_monitors(false);
+    let names_str = jq_filter(&json, r#".[].name"#);
+    let names: Vec<&str> = names_str.lines().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+
+    // all monitors json for identity
+    let all_json = hypr_monitors(true);
+
+    for name in &names {
+        // identity = serial or name
+        let filter = format!(r#".[] | select(.name == "{}") | (.serial // .name)"#, name);
+        let mut identity = jq_filter(&all_json, &filter).trim().to_string();
+        if identity.is_empty() { identity = name.to_string(); }
+
+        // migrate name-keyed entry to identity key
+        let has_name = {
+            let script = format!("printf '%s' {} | jq -r --arg n {} 'has($n)'", shell_quote(&map), shell_quote(name));
+            let (code, out, _) = run("sh", &["-c", &script]);
+            code == 0 && out.trim() == "true"
+        };
+        let has_ident = {
+            let script = format!("printf '%s' {} | jq -r --arg i {} 'has($i)'", shell_quote(&map), shell_quote(&identity));
+            let (code, out, _) = run("sh", &["-c", &script]);
+            code == 0 && out.trim() == "true"
+        };
+        if has_name && !has_ident {
+            let base = {
+                let script = format!("printf '%s' {} | jq -r --arg n {} '.[$n]'", shell_quote(&map), shell_quote(name));
+                let (_, out, _) = run("sh", &["-c", &script]);
+                out.trim().to_string()
+            };
+            let script = format!(
+                "printf '%s' {} | jq --arg n {} --arg i {} --argjson b {} 'del(.[$n]) + {{($i): $b}}'",
+                shell_quote(&map), shell_quote(name), shell_quote(&identity), base
+            );
+            let (_, out, _) = run("sh", &["-c", &script]);
+            if !out.trim().is_empty() { map = out.trim().to_string(); }
+        }
+        let has_ident2 = {
+            let script = format!("printf '%s' {} | jq -r --arg i {} 'has($i)'", shell_quote(&map), shell_quote(&identity));
+            let (code, out, _) = run("sh", &["-c", &script]);
+            code == 0 && out.trim() == "true"
+        };
+        if !has_ident2 {
+            // find candidate
+            let mut candidate = 1i64;
+            loop {
+                let script = format!("printf '%s' {} | jq -r --argjson b {} 'any(.[]; . == $b)'", shell_quote(&map), candidate);
+                let (_, out, _) = run("sh", &["-c", &script]);
+                if out.trim() != "true" { break; }
+                candidate += 10;
+            }
+            let script = format!("printf '%s' {} | jq --arg i {} --argjson b {} '. + {{($i): $b}}'", shell_quote(&map), shell_quote(&identity), candidate);
+            let (_, out, _) = run("sh", &["-c", &script]);
+            if !out.trim().is_empty() { map = out.trim().to_string(); }
+        }
+    }
+
+    // write map to workspace_file
+    let _ = std::fs::create_dir_all(state_dir());
+    let tmp = format!("/tmp/monitors.{}", std::process::id());
+    let (code, out, _) = run("jq", &["-S", ".", "-n", &format!("--argjson m {} '$m'", map)]);
+    // simpler: pipe map through jq -S .
+    let script = format!("printf '%s' {} | jq -S .", shell_quote(&map));
+    let (_, sorted, _) = run("sh", &["-c", &script]);
+    let to_write = if sorted.trim().is_empty() { map.clone() } else { sorted.trim().to_string() };
+    let _ = std::fs::write(&tmp, format!("{}\n", to_write));
+    let _ = std::fs::rename(&tmp, workspace_file());
+
+    // build lua and hyprctl eval
+    let mut lua = String::new();
+    for name in &names {
+        // find base by identity? Use name as key first (map keyed by identity). Need identity for name.
+        let identity = {
+            let filter = format!(r#".[] | select(.name == "{}") | (.serial // .name)"#, name);
+            let id = jq_filter(&all_json, &filter).trim().to_string();
+            if id.is_empty() { name.to_string() } else { id }
+        };
+        let base_str = {
+            let script = format!("printf '%s' {} | jq -r --arg i {} '.[$i]'", shell_quote(&map), shell_quote(&identity));
+            let (_, out, _) = run("sh", &["-c", &script]);
+            out.trim().to_string()
+        };
+        let base: i64 = base_str.parse().unwrap_or(1);
+        for i in 1..=10 {
+            if i == 1 {
+                lua.push_str(&format!("hl.workspace_rule({{ workspace = \"{}\", monitor = \"{}\", default = true }}); ", base, name));
+            } else {
+                lua.push_str(&format!("hl.workspace_rule({{ workspace = \"{}\", monitor = \"{}\" }}); ", base + i as i64 - 1, name));
+            }
+        }
+    }
+    if !lua.is_empty() {
+        let _ = run("hyprctl", &["eval", &lua]);
+    }
+    map
+}
+
+fn workspaces_action(action: &str) -> String {
+    match action {
+        "sync" => { workspaces_sync_action(); "OK".to_string() }
+        "show" => {
+            if workspace_file().exists() {
+                let (code, out, _) = run("jq", &["-S", ".", workspace_file().to_str().unwrap()]);
+                if code == 0 { out.trim().to_string() } else { "{}".to_string() }
+            } else { "{}".to_string() }
+        }
+        "reset" => {
+            let _ = std::fs::remove_file(workspace_file());
+            workspaces_sync_action();
+            "OK".to_string()
+        }
+        _ => format!("ERR workspaces takes sync, show or reset"),
+    }
+}
+
+fn workspace_action(slot: &str) -> String {
+    if slot.is_empty() { return "ERR workspace needs a number".to_string(); }
+    if !slot.chars().all(|c| c.is_ascii_digit()) { return "ERR workspace needs a number".to_string(); }
+    let n: i64 = match slot.parse() { Ok(v) => v, Err(_) => return "ERR workspace needs a number".to_string() };
+    if !(1..=10).contains(&n) { return "ERR workspace must be 1-10".to_string(); }
+    let focused = focused_name();
+    if focused.is_empty() { return "ERR no focused monitor".to_string(); }
+    let base_str = workspace_base(&focused);
+    let base: i64 = base_str.parse().unwrap_or(1);
+    let id = base + n - 1;
+    let lua = format!("hl.dispatch(hl.dsp.focus({{ workspace = \"{}\" }}))", id);
+    let _ = run("hyprctl", &["eval", &lua]);
+    format!("{} workspace {} (global {})", focused, n, id)
+}
+
+fn workspace_step_action(direction: &str) -> String {
+    if direction != "next" && direction != "prev" { return "ERR workspace-step takes next or prev".to_string(); }
+    let focused = focused_name();
+    if focused.is_empty() { return "ERR no focused monitor".to_string(); }
+    let base_str = workspace_base(&focused);
+    let base: i64 = base_str.parse().unwrap_or(1);
+    // current focused workspace id
+    let json = hypr_monitors(false);
+    let cur_str = jq_filter(&json, r#".[] | select(.focused == true) | .activeWorkspace.id"#);
+    let current: i64 = match cur_str.trim().parse() { Ok(v) => v, Err(_) => return "OK".to_string() };
+    let target = if direction == "next" { current + 1 } else { current - 1 };
+    let target = target.clamp(base, base + 9);
+    if target == current { return "OK".to_string(); }
+    let lua = format!("hl.dispatch(hl.dsp.focus({{ workspace = \"{}\" }}))", target);
+    let _ = run("hyprctl", &["eval", &lua]);
+    "OK".to_string()
+}
+
+fn move_window_action(slot: &str) -> String {
+    if slot.is_empty() { return "ERR move-window needs a number".to_string(); }
+    if !slot.chars().all(|c| c.is_ascii_digit()) { return "ERR move-window needs a number".to_string(); }
+    let n: i64 = match slot.parse() { Ok(v) => v, Err(_) => return "ERR move-window needs a number".to_string() };
+    if !(1..=10).contains(&n) { return "ERR move-window must be 1-10".to_string(); }
+    let focused = focused_name();
+    if focused.is_empty() { return "ERR no focused monitor".to_string(); }
+    let base_str = workspace_base(&focused);
+    let base: i64 = base_str.parse().unwrap_or(1);
+    let id = base + n - 1;
+    let lua = format!("hl.dispatch(hl.dsp.window.move({{ workspace = \"{}\" }}))", id);
+    let _ = run("hyprctl", &["eval", &lua]);
+    format!("window to {} workspace {} (global {})", focused, n, id)
+}
+
+fn identities_action() -> String {
+    let json = hypr_monitors(true);
+    let filter = r#"map({ (.name): { make, model, serial, description } }) | add"#;
+    jq_filter(&json, filter).trim().to_string()
+}
+
+fn sync_identities_action() -> String {
+    let json = hypr_monitors(true);
+    let filter = r#"map({ (.name): { make, model, serial, description } }) | add"#;
+    let out = jq_filter(&json, filter);
+    let _ = std::fs::create_dir_all(state_dir());
+    let _ = std::fs::write(state_dir().join("monitor_identities.json"), format!("{}\n", out.trim()));
+    "identities saved".to_string()
 }
