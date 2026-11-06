@@ -8,13 +8,15 @@ Substantially complete. Native (no bash delegation):
 - `monitors` — fully ported (status, list, set, scale, brightness, identify, wake, recover, internal, mirror, lid, try, keep, revert, workspaces, workspace, workspace-step, move-window, identities).
 - `theme` — list/current/next/prev/state (set/wallpaper delegate to legacy bash).
 - `wallpaper` — current (heavy ops delegate).
-- `shot`/capture — core modes (region/windows/fullscreen/window + copy/save/preview), capture-text, capture-qr (smart/scroll/redact/text/annotate delegate).
+- `shot`/capture — core modes (region/windows/fullscreen/window + copy/save/preview), capture-text, capture-qr (smart/scroll/redact/text/annotate delegate). Cursor included; cross-filesystem safe; notifies on failure.
 - `toggle` — nightlight/idle/dnd/stayawake.
-- `focus`, `screentime` — ported.
+- `screentime` — native SQLite-backed tracking (`screentime watch` records active-window sessions; show/json/reset/path). DB at `$XDG_STATE_HOME/anixie/screentime.db`, shared with anixie's quickshell via a daily JSON file.
 - `snapshot`, `webapp` — ported.
-- `clipboard` — copy/list/text/image/delete/wipe/open.
+- `clipboard` — copy/list/text/image/delete/wipe/open (auto-starts the watcher; dedups history).
 - `emoji`, `shortcuts`, `reminder`, `pick`, `menu` — thin wrappers.
 - `power` — fully ported including udev watcher (no bash delegation).
+
+Thin wrappers (delegate to the quickshell, which owns the UI/timer): `focus`.
 
 Delegated to legacy bash (complex process/systemd management): `record`, `transcode`, `webcam-overlay`, `share`.
 
@@ -35,6 +37,8 @@ alexie daemon &          # start the daemon
 alexie ping              # pong
 alexie monitors status
 alexie theme list
+alexie screentime watch &  # track active-window time
+alexie screentime show
 ```
 
 ## Integration with anixie
@@ -43,7 +47,8 @@ Enabled via `anixie.daemon.enable = true;` (home-manager option). When enabled, 
 
 ## Design notes
 
-- std-only (no external crates except zbus) to keep the build offline-friendly (cargo network used only for zbus).
+- Dependencies: serde, serde_json, toml, zbus, and rusqlite (bundled) for screentime. Build is offline-friendly once the crate cache is populated.
+- Process helpers are centralized in `src/proc.rs` (`resolve_tool`, `run`, `shell_quote`).
 - Protocol is line-based text (`CMD args\n` → response lines + `__END__`).
 - State files shared with anixie (`XDG_STATE_HOME/anixie/`).
-- No test suite yet (planned).
+- Test suite: `cargo test` (unit tests for monitors, theme, wallpaper, clipboard).

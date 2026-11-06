@@ -3,10 +3,14 @@ use std::env;
 
 fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
 
+fn usage() -> String {
+    "focus — a timed distraction block\n\nUsage:\n  focus [status]\n  focus start [MINUTES]\n  focus stop\n  focus extend [MINUTES]\n".to_string()
+}
 
 pub fn handle(args: &[String]) -> String {
     let sub = args.get(0).map(|s| s.as_str()).unwrap_or("status");
     match sub {
+        "-h" | "--help" | "help" => usage(),
         "" | "status" => {
             let (code, out, _) = run(&qs(), &["ipc", "call", "focus", "status"]);
             if code == 0 { out.trim().to_string() } else { "off".to_string() }
