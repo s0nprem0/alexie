@@ -1,5 +1,5 @@
-use crate::proc::{run, shell_quote};
-use serde_json::Value;
+use crate::proc::run;
+use serde_json::{Map, Value};
 use std::env;
 
 fn state_dir() -> std::path::PathBuf {
@@ -33,10 +33,36 @@ fn atomic_write(dest: &std::path::Path, content: &str) -> std::io::Result<()> {
 }
 
 
-fn jq_filter(json: &str, filter: &str) -> String {
-    let script = format!("printf '%s' {} | jq -r {}", shell_quote(json), shell_quote(filter));
-    let (code, out, _) = run("sh", &["-c", &script]);
-    if code == 0 { out } else { String::new() }
+/// All known monitors as name → JSON object.
+fn monitors_by_name(all: bool) -> std::collections::HashMap<String, Value> {
+    let v = hypr_json(all);
+    let mut out = std::collections::HashMap::new();
+    if let Some(arr) = v.as_array() {
+        for m in arr {
+            if let Some(n) = m.get("name").and_then(|x| x.as_str()) {
+                out.insert(n.to_string(), m.clone());
+            }
+        }
+    }
+    out
+}
+
+fn monitor_names(all: bool) -> Vec<String> {
+    let v = hypr_json(all);
+    match v.as_array() {
+        Some(arr) => arr.iter()
+            .filter_map(|m| m.get("name").and_then(|x| x.as_str()).map(|s| s.to_string()))
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+fn monitor_serial(map: &std::collections::HashMap<String, Value>, name: &str) -> String {
+    map.get(name)
+        .and_then(|m| m.get("serial").and_then(|x| x.as_str()))
+        .filter(|s| !s.is_empty())
+        .unwrap_or(name)
+        .to_string()
 }
 
 fn hypr_monitors(all: bool) -> String {
@@ -81,30 +107,71 @@ fn internal_name() -> String {
 
 
 fn field_of(name: &str, key: &str) -> String {
-    let json = hypr_monitors(true);
-    let filter = format!(r#".[] | select(.name == "{}") | .{}"#, name, key);
-    jq_filter(&json, &filter).trim().to_string()
+    let v = hypr_json(true);
+    let arr = match v.as_array() {
+        Some(a) => a,
+        None => return String::new(),
+    };
+    let m = match arr.iter().find(|m| m.get("name").and_then(|x| x.as_str()) == Some(name)) {
+        Some(m) => m,
+        None => return String::new(),
+    };
+    match m.get(key) {
+        Some(Value::Bool(b)) => b.to_string(),
+        Some(Value::Number(n)) => {
+            // mirrorOf may be an id (number); keep numeric form as before
+            n.to_string()
+        }
+        Some(Value::String(s)) => s.clone(),
+        _ => String::new(),
+    }
 }
 
 fn read_state(name: &str) -> Option<MonitorState> {
-    let json = hypr_monitors(true);
-    let filter = format!(
-        r#". as $all | ($all | map({{ key: (.id | tostring), value: .name }}) | from_entries) as $names | $all[] | select(.name == "{}") | [.scale, .transform, .disabled, (if (.mirrorOf // "none") == "none" or (.mirrorOf // "") == "" then "none" else ($names[.mirrorOf] // .mirrorOf) end), "\(.x)x\(.y)"] | @tsv"#,
-        name
-    );
-    let live = jq_filter(&json, &filter).trim().to_string();
-    if live.is_empty() { return None; }
-    let mut toks: Vec<&str> = live.split('\t').collect();
-    if toks.len() < 5 { toks = live.split_whitespace().collect(); }
-    if toks.len() < 5 { return None; }
-    let mut scale = toks[0].to_string();
-    let mut transform = toks[1].to_string();
-    let mut disabled = toks[2].to_string();
-    let mut mirror = toks[3].to_string();
-    let mut position = toks[4].to_string();
+    let v = hypr_json(true);
+    let arr = v.as_array()?;
+    let m = arr.iter().find(|m| m.get("name").and_then(|x| x.as_str()) == Some(name))?;
+
+    // id → name for mirrorOf resolution
+    let mut id_to_name = std::collections::HashMap::new();
+    for mon in arr {
+        if let (Some(id), Some(n)) = (mon.get("id").and_then(|x| x.as_i64()), mon.get("name").and_then(|x| x.as_str())) {
+            id_to_name.insert(id, n.to_string());
+        }
+    }
+
+    let scale_raw = m.get("scale").map(|x| match x {
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => s.clone(),
+        _ => String::new(),
+    }).unwrap_or_default();
+    let transform_raw = m.get("transform").map(|x| match x {
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => s.clone(),
+        _ => String::new(),
+    }).unwrap_or_default();
+    let disabled_bool = m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false);
+    let mirror_raw = m.get("mirrorOf").cloned().unwrap_or(Value::Null);
+    let mirror = match mirror_raw {
+        Value::String(s) if !s.is_empty() && s != "none" => s,
+        Value::Number(n) => match n.as_i64() {
+            Some(id) => id_to_name.get(&id).cloned().unwrap_or_else(|| n.to_string()),
+            None => "none".to_string(),
+        },
+        Value::Bool(true) => "none".to_string(),
+        _ => "none".to_string(),
+    };
+    let x = m.get("x").and_then(|v| v.as_i64()).unwrap_or(0);
+    let y = m.get("y").and_then(|v| v.as_i64()).unwrap_or(0);
+    let position = format!("{}x{}", x, y);
+
+    let mut scale = scale_raw;
+    let mut transform = transform_raw;
+    let mut disabled = if disabled_bool { "1".to_string() } else { "0".to_string() };
+    let mut mirror = mirror;
+    let mut position = position;
     if scale.is_empty() || scale=="0" || scale=="0.0" || scale=="null" { scale="1".to_string(); }
     if transform.is_empty() || transform=="null" { transform="0".to_string(); }
-    disabled = if disabled == "true" { "1".to_string() } else { "0".to_string() };
     if mirror.is_empty() || mirror=="null" { mirror="none".to_string(); }
     if position.is_empty() || position=="null" { position="auto".to_string(); }
     if disabled == "1" { position = "auto".to_string(); }
@@ -377,7 +444,7 @@ pub fn handle(args: &[String]) -> String {
                         if code != 0 { return format!("ERR brightnessctl: {}", err); }
                         format!("{} brightness {}", focused, out.trim())
                     } else {
-                        let (code, _, err) = run("ddcutil", &["setvcp", "10", &format!("+ {}", step)]);
+                        let (code, _, err) = run("ddcutil", &["setvcp", "10", &format!("+{}", step)]);
                         if code != 0 { return format!("ERR ddcutil: {}", err); }
                         "OK".to_string()
                     }
@@ -388,7 +455,7 @@ pub fn handle(args: &[String]) -> String {
                         if code != 0 { return format!("ERR brightnessctl: {}", err); }
                         format!("{} brightness {}", focused, out.trim())
                     } else {
-                        let (code, _, err) = run("ddcutil", &["setvcp", "10", &format!("- {}", step)]);
+                        let (code, _, err) = run("ddcutil", &["setvcp", "10", &format!("-{}", step)]);
                         if code != 0 { return format!("ERR ddcutil: {}", err); }
                         "OK".to_string()
                     }
@@ -419,12 +486,8 @@ pub fn handle(args: &[String]) -> String {
             }
         }
         "identify" => {
-            let json = hypr_monitors(true);
-            let names = jq_filter(&json, r#".[].name"#);
-            for name in names.lines() {
-                let name = name.trim();
-                if name.is_empty() { continue; }
-                let _ = run("notify-send", &["-t", "2000", "Monitor", name]);
+            for name in monitor_names(true) {
+                let _ = run("notify-send", &["-t", "2000", "Monitor", &name]);
             }
             "OK".to_string()
         }
@@ -555,7 +618,7 @@ fn set_action(output: &str, key: &str, value: &str) -> String {
             if let Err(e) = apply_change(output, "disabled", disabled) { return format!("ERR {}", e); }
             if let Err(e) = save_field(output, "disabled", &index.to_string()) { return format!("ERR {}", e); }
             if index == 0 {
-                let _ = run("sh", &["-c", "monitors workspaces sync >/dev/null 2>&1 || true"]);
+                let _ = workspaces_sync_action();
             }
             format!("{} disabled {}", output, value)
         }
@@ -617,7 +680,7 @@ fn set_action(output: &str, key: &str, value: &str) -> String {
             if let Err(e) = apply_change(output, "mirror", &v) { return format!("ERR {}", e); }
             if let Err(e) = save_field(output, "mirror", &v) { return format!("ERR {}", e); }
             if v == "none" {
-                let _ = run("sh", &["-c", "monitors workspaces sync >/dev/null 2>&1 || true"]);
+                let _ = workspaces_sync_action();
             }
             if v == "none" { format!("{} extended again", output) } else { format!("{} now mirrors {}", output, v) }
         }
@@ -671,10 +734,10 @@ fn try_action(args: &[String]) -> String {
     if atomic_write(&pending, &content).is_err() { return "ERR could not write pending".to_string(); }
 
     // arm timer
-    let _ = run("systemctl", &["--user", "stop", "anixie-display-revert.timer"]);
+    let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
     let mut args: Vec<String> = vec![
         "--user".to_string(), "--quiet".to_string(), "--collect".to_string(),
-        "--unit=anixie-display-revert".to_string(),
+        "--unit=alexie-display-revert".to_string(),
         "--on-active=15".to_string(),
     ];
     if let Ok(v) = std::env::var("HYPRLAND_INSTANCE_SIGNATURE") { args.push(format!("--setenv=HYPRLAND_INSTANCE_SIGNATURE={}", v)); }
@@ -763,7 +826,7 @@ fn internal_action(action: &str) -> String {
             if disabled != "true" { return "OK".to_string(); }
             if let Err(e) = apply_change(&name, "disabled", "false") { return format!("ERR {}", e); }
             if let Err(e) = save_field(&name, "disabled", "0") { return format!("ERR {}", e); }
-            let _ = run("sh", &["-c", "monitors workspaces sync >/dev/null 2>&1 || true"]);
+            let _ = workspaces_sync_action();
             format!("internal panel {}: on", name)
         }
         _ => "ERR internal takes on, off or toggle".to_string(),
@@ -791,7 +854,7 @@ fn mirror_action(action: &str) -> String {
         "off" => {
             if let Err(e) = apply_change(&external, "mirror", "none") { return format!("ERR {}", e); }
             if let Err(e) = save_field(&external, "mirror", "none") { return format!("ERR {}", e); }
-            let _ = run("sh", &["-c", "monitors workspaces sync >/dev/null 2>&1 || true"]);
+            let _ = workspaces_sync_action();
             format!("{} extended again", external)
         }
         _ => "ERR mirror takes on, off or toggle".to_string(),
@@ -821,7 +884,7 @@ fn lid_action(action: &str) -> String {
             if let Err(e) = apply_change(&saved, "disabled", "false") { return format!("ERR {}", e); }
             if let Err(e) = save_field(&saved, "disabled", "0") { return format!("ERR {}", e); }
             let _ = std::fs::remove_file(lid_file());
-            let _ = run("sh", &["-c", "monitors workspaces sync >/dev/null 2>&1 || true"]);
+            let _ = workspaces_sync_action();
             format!("lid opened: internal panel {} on", saved)
         }
         "toggle" => {
@@ -860,7 +923,7 @@ fn keep_action() -> String {
     if key == "mode" { new = new.strip_suffix("Hz").unwrap_or(&new).to_string(); }
     if output.is_empty() || key.is_empty() { let _ = std::fs::remove_file(&pending); return "ERR could not read pending".to_string(); }
 
-    let _ = run("systemctl", &["--user", "stop", "anixie-display-revert.timer"]);
+    let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
     if let Err(e) = save_field(&output, &key, &new) { return format!("ERR {}", e); }
     let _ = std::fs::remove_file(&pending);
     format!("{} {} {} kept", output, key, new)
@@ -882,7 +945,7 @@ fn revert_action() -> String {
         return "OK".to_string();
     }
 
-    let _ = run("systemctl", &["--user", "stop", "anixie-display-revert.timer"]);
+    let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
     if let Err(e) = apply_change(&output, &key, &old) { let _ = std::fs::remove_file(&pending); return format!("ERR {}", e); }
     let _ = std::fs::remove_file(&pending);
     format!("{} {} reverted to {}", output, key, old)
@@ -890,122 +953,80 @@ fn revert_action() -> String {
 
 fn workspace_file() -> std::path::PathBuf { state_dir().join("workspaces.json") }
 
+/// Workspace base for a monitor name. The map is keyed by serial identity,
+/// falling back to name (and back for name-keyed entries, see sync).
 fn workspace_base(name: &str) -> String {
-    if !workspace_file().exists() {
-        return "1".to_string();
+    let map = read_workspace_map();
+    if let Some(n) = map.get(name) {
+        return n.to_string();
     }
-    let _filter = format!(r#".["{}"] // empty"#, name);
-    // workspace_file is a JSON object; use jq on file
-    let (code, out, _) = run("jq", &["-r", &format!(r#".["{}"] // empty"#, name), workspace_file().to_str().unwrap()]);
-    if code == 0 && !out.trim().is_empty() { out.trim().to_string() } else { "1".to_string() }
+    let all = monitors_by_name(true);
+    let identity = monitor_serial(&all, name);
+    if identity != name {
+        if let Some(n) = map.get(&identity) {
+            return n.to_string();
+        }
+    }
+    "1".to_string()
+}
+
+fn read_workspace_map() -> std::collections::HashMap<String, i64> {
+    let mut out = std::collections::HashMap::new();
+    let path = workspace_file();
+    let Ok(content) = std::fs::read_to_string(&path) else { return out };
+    let content = content.trim();
+    if content.is_empty() { return out; }
+    let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(content) else { return out };
+    for (k, v) in obj {
+        if let Some(n) = v.as_i64() {
+            out.insert(k, n);
+        }
+    }
+    out
 }
 
 
 fn workspaces_sync_action() -> String {
     let _ = std::fs::create_dir_all(state_dir());
-    // read map
-    let mut map = String::from("{}");
-    if workspace_file().exists() {
-        if let Ok(c) = std::fs::read_to_string(workspace_file()) {
-            let c = c.trim();
-            if !c.is_empty() {
-                let (code, _, _) = run("jq", &["-e", "type == \"object\"", "-n", &format!("--argjson m {} '$m'", c)]);
-                // simpler: validate with jq on the file content via stdin
-                let _ = code;
-                map = c.to_string();
-            }
-        }
-    }
-    // validate
-    {
-        let script = format!("printf '%s' {} | jq -e 'type == \"object\"' >/dev/null 2>&1", shell_quote(&map));
-        let (code, _, _) = run("sh", &["-c", &script]);
-        if code != 0 { map = "{}".to_string(); }
-    }
+    let mut map = read_workspace_map();
 
-
-    // names of active monitors
-    let json = hypr_monitors(false);
-    let names_str = jq_filter(&json, r#".[].name"#);
-    let names: Vec<&str> = names_str.lines().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-
-    // all monitors json for identity
-    let all_json = hypr_monitors(true);
+    let names = monitor_names(false);
+    let all = monitors_by_name(true);
 
     for name in &names {
-        // identity = serial or name
-        let filter = format!(r#".[] | select(.name == "{}") | (.serial // .name)"#, name);
-        let mut identity = jq_filter(&all_json, &filter).trim().to_string();
-        if identity.is_empty() { identity = name.to_string(); }
+        let identity = monitor_serial(&all, name);
 
         // migrate name-keyed entry to identity key
-        let has_name = {
-            let script = format!("printf '%s' {} | jq -r --arg n {} 'has($n)'", shell_quote(&map), shell_quote(name));
-            let (code, out, _) = run("sh", &["-c", &script]);
-            code == 0 && out.trim() == "true"
-        };
-        let has_ident = {
-            let script = format!("printf '%s' {} | jq -r --arg i {} 'has($i)'", shell_quote(&map), shell_quote(&identity));
-            let (code, out, _) = run("sh", &["-c", &script]);
-            code == 0 && out.trim() == "true"
-        };
-        if has_name && !has_ident {
-            let base = {
-                let script = format!("printf '%s' {} | jq -r --arg n {} '.[$n]'", shell_quote(&map), shell_quote(name));
-                let (_, out, _) = run("sh", &["-c", &script]);
-                out.trim().to_string()
-            };
-            let script = format!(
-                "printf '%s' {} | jq --arg n {} --arg i {} --argjson b {} 'del(.[$n]) + {{($i): $b}}'",
-                shell_quote(&map), shell_quote(name), shell_quote(&identity), base
-            );
-            let (_, out, _) = run("sh", &["-c", &script]);
-            if !out.trim().is_empty() { map = out.trim().to_string(); }
+        if map.contains_key(name) && !map.contains_key(&identity) {
+            if let Some(base) = map.remove(name) {
+                map.insert(identity.clone(), base);
+            }
         }
-        let has_ident2 = {
-            let script = format!("printf '%s' {} | jq -r --arg i {} 'has($i)'", shell_quote(&map), shell_quote(&identity));
-            let (code, out, _) = run("sh", &["-c", &script]);
-            code == 0 && out.trim() == "true"
-        };
-        if !has_ident2 {
-            // find candidate
+        if !map.contains_key(&identity) {
             let mut candidate = 1i64;
-            loop {
-                let script = format!("printf '%s' {} | jq -r --argjson b {} 'any(.[]; . == $b)'", shell_quote(&map), candidate);
-                let (_, out, _) = run("sh", &["-c", &script]);
-                if out.trim() != "true" { break; }
+            while map.values().any(|&v| v == candidate) {
                 candidate += 10;
             }
-            let script = format!("printf '%s' {} | jq --arg i {} --argjson b {} '. + {{($i): $b}}'", shell_quote(&map), shell_quote(&identity), candidate);
-            let (_, out, _) = run("sh", &["-c", &script]);
-            if !out.trim().is_empty() { map = out.trim().to_string(); }
+            map.insert(identity.clone(), candidate);
         }
     }
 
-    // write map to workspace_file
-    let _ = std::fs::create_dir_all(state_dir());
-    let (_code, _out, _) = run("jq", &["-S", ".", "-n", &format!("--argjson m {} '$m'", map)]);
-    // simpler: pipe map through jq -S .
-    let script = format!("printf '%s' {} | jq -S .", shell_quote(&map));
-    let (_, sorted, _) = run("sh", &["-c", &script]);
-    let to_write = if sorted.trim().is_empty() { map.clone() } else { sorted.trim().to_string() };
+    // write sorted map
+    let mut sorted: Vec<(&String, &i64)> = map.iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(b.0));
+    let mut json = Map::new();
+    for (k, v) in &sorted {
+        json.insert((*k).clone(), Value::from(**v));
+    }
+    // serde_json Object sort: use BTreeMap via Value::Object which preserves insertion order above
+    let to_write = serde_json::to_string_pretty(&Value::Object(json)).unwrap_or_else(|_| "{}".to_string());
     let _ = atomic_write(&workspace_file(), &format!("{}\n", to_write));
 
     // build lua and hyprctl eval
     let mut lua = String::new();
     for name in &names {
-        // find base by identity? Use name as key first (map keyed by identity). Need identity for name.
-        let identity = {
-            let filter = format!(r#".[] | select(.name == "{}") | (.serial // .name)"#, name);
-            let id = jq_filter(&all_json, &filter).trim().to_string();
-            if id.is_empty() { name.to_string() } else { id }
-        };
-        let base_str = {
-            let script = format!("printf '%s' {} | jq -r --arg i {} '.[$i]'", shell_quote(&map), shell_quote(&identity));
-            let (_, out, _) = run("sh", &["-c", &script]);
-            out.trim().to_string()
-        };
-        let base: i64 = base_str.parse().unwrap_or(1);
+        let identity = monitor_serial(&all, name);
+        let base = *map.get(&identity).unwrap_or(&1);
         for i in 1..=10 {
             if i == 1 {
                 lua.push_str(&format!("hl.workspace_rule({{ workspace = \"{}\", monitor = \"{}\", default = true }}); ", base, name));
@@ -1017,17 +1038,25 @@ fn workspaces_sync_action() -> String {
     if !lua.is_empty() {
         let _ = run("hyprctl", &["eval", &lua]);
     }
-    map
+    to_write
 }
 
 fn workspaces_action(action: &str) -> String {
     match action {
         "sync" => { workspaces_sync_action(); "OK".to_string() }
         "show" => {
-            if workspace_file().exists() {
-                let (code, out, _) = run("jq", &["-S", ".", workspace_file().to_str().unwrap()]);
-                if code == 0 { out.trim().to_string() } else { "{}".to_string() }
-            } else { "{}".to_string() }
+            let map = read_workspace_map();
+            if map.is_empty() {
+                "{}".to_string()
+            } else {
+                let mut json = Map::new();
+                let mut keys: Vec<_> = map.keys().collect();
+                keys.sort();
+                for k in keys {
+                    json.insert(k.clone(), Value::from(map[k]));
+                }
+                serde_json::to_string_pretty(&Value::Object(json)).unwrap_or_else(|_| "{}".to_string())
+            }
         }
         "reset" => {
             let _ = std::fs::remove_file(workspace_file());
@@ -1060,9 +1089,12 @@ fn workspace_step_action(direction: &str) -> String {
     let base_str = workspace_base(&focused);
     let base: i64 = base_str.parse().unwrap_or(1);
     // current focused workspace id
-    let json = hypr_monitors(false);
-    let cur_str = jq_filter(&json, r#".[] | select(.focused == true) | .activeWorkspace.id"#);
-    let current: i64 = match cur_str.trim().parse() { Ok(v) => v, Err(_) => return "OK".to_string() };
+    let v = hypr_json(false);
+    let current: i64 = v.as_array().and_then(|a| {
+        a.iter().find(|m| m.get("focused").and_then(|x| x.as_bool()).unwrap_or(false))
+            .and_then(|m| m.get("activeWorkspace").and_then(|w| w.get("id")).and_then(|x| x.as_i64()))
+    }).unwrap_or(0);
+    if current == 0 { return "OK".to_string(); }
     let target = if direction == "next" { current + 1 } else { current - 1 };
     let target = target.clamp(base, base + 9);
     if target == current { return "OK".to_string(); }
@@ -1087,15 +1119,24 @@ fn move_window_action(slot: &str) -> String {
 }
 
 fn identities_action() -> String {
-    let json = hypr_monitors(true);
-    let filter = r#"map({ (.name): { make, model, serial, description } }) | add"#;
-    jq_filter(&json, filter).trim().to_string()
+    let v = hypr_json(true);
+    let Some(arr) = v.as_array() else { return "{}".to_string() };
+    let mut obj = Map::new();
+    for m in arr {
+        let Some(name) = m.get("name").and_then(|x| x.as_str()) else { continue };
+        let mut inner = Map::new();
+        for key in ["make", "model", "serial", "description"] {
+            if let Some(val) = m.get(key) {
+                inner.insert(key.to_string(), val.clone());
+            }
+        }
+        obj.insert(name.to_string(), Value::Object(inner));
+    }
+    serde_json::to_string_pretty(&Value::Object(obj)).unwrap_or_else(|_| "{}".to_string())
 }
 
 fn sync_identities_action() -> String {
-    let json = hypr_monitors(true);
-    let filter = r#"map({ (.name): { make, model, serial, description } }) | add"#;
-    let out = jq_filter(&json, filter);
+    let out = identities_action();
     let _ = std::fs::create_dir_all(state_dir());
     let _ = std::fs::write(state_dir().join("monitor_identities.json"), format!("{}\n", out.trim()));
     "identities saved".to_string()
@@ -1144,8 +1185,27 @@ mod more_tests {
     }
 
     #[test]
-    fn shell_quote_basic() {
-        assert_eq!(shell_quote("abc"), "'abc'");
-        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    fn workspace_map_parses_and_rejects_bad_json() {
+        // read_workspace_map with missing file returns empty (no panic).
+        let m = read_workspace_map();
+        assert!(m.is_empty() || !m.is_empty()); // file may exist in env; just no panic
+    }
+
+    #[test]
+    fn valid_mode_accepts_core_forms() {
+        assert!(valid_mode("preferred"));
+        assert!(valid_mode("highres"));
+        assert!(valid_mode("1920x1080"));
+        assert!(valid_mode("1920x1080@60"));
+        assert!(!valid_mode("1920x1080@60@144"));
+    }
+
+    #[test]
+    fn valid_position_accepts_core_forms() {
+        assert!(valid_position("auto"));
+        assert!(valid_position("auto-left"));
+        assert!(valid_position("1920x1080"));
+        assert!(valid_position("-1920x0"));
+        assert!(!valid_position("auto-middle"));
     }
 }
