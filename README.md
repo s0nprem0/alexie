@@ -61,7 +61,7 @@ Over time, anixie's Hyprland binds and shell IPC would call `alexie <cmd>` inste
 - Port `wallpaper` (current done; heavy ops delegate).
 - Port `shot`/capture (freeze, region, window snap, swappy hand-off).
 - Port `menu` (fast, structured, no jq).
-- Port `clipboard`, `emoji`, `focus`, `screentime`, `toggle`, `power`, `snapshot`, `webapp`.
+- Generic fallback routes all unported tools through the daemon.
 - DBus interface (optional, for richer shell integration).
 - Tests (unit + property tests for parsers).
 
