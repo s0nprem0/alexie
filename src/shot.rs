@@ -186,7 +186,7 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
     }
 
     // grim to captured file (for save/preview) or scratch (for copy)
-    let tmp_scratch = format!("/tmp/anixie-shot-{}.png", std::process::id());
+    let tmp_scratch = crate::proc::tmp_file("shot", "png").to_string_lossy().to_string();
     let (code, _, err) = run(&grim(), &["-c", "-g", &geometry, &tmp_scratch]);
     if code != 0 {
         release_freeze();

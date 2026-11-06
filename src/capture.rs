@@ -78,7 +78,7 @@ fn capture_text() -> String {
     let langs = env::var("CAPTURE_TEXT_LANGS").unwrap_or_else(|_| "eng".to_string());
 
     // Run grim to temp file, then tesseract
-    let tmp = format!("/tmp/anixie-text-{}.png", std::process::id());
+    let tmp = crate::proc::tmp_file("text", "png").to_string_lossy().to_string();
     let (code, _, err) = run(&grim_bin, &["-g", &geom, &tmp]);
     if code != 0 {
         // release freeze
@@ -118,7 +118,7 @@ fn capture_qr() -> String {
 
     let grim_bin = grim();
     let zbar_bin = env::var("ZBAR").unwrap_or_else(|_| "zbarimg".to_string());
-    let tmp = format!("/tmp/anixie-qr-{}.png", std::process::id());
+    let tmp = crate::proc::tmp_file("qr", "png").to_string_lossy().to_string();
     let (code, _, err) = run(&grim_bin, &["-g", &geom, &tmp]);
     if code != 0 { release_freeze(&freeze_file); let _ = std::fs::remove_file(&tmp); return format!("ERR grim: {}", err.trim()); }
 

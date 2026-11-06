@@ -83,6 +83,29 @@ pub fn run_sh_status(script: &str) -> i32 {
         .unwrap_or(-1)
 }
 
+/// A unique temp file path under the system temp dir.
+///
+/// The old callers used `/tmp/anixie-<kind>-{pid}.png` — PID-only, so
+/// concurrent daemon calls (the daemon is now threaded per connection)
+/// or a stale file from a killed process collide and clobber each
+/// other. Mix in a monotonic counter and the current time so each
+/// call in a process gets a distinct name.
+pub fn tmp_file(prefix: &str, ext: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let name = if ext.is_empty() {
+        format!("anixie-{}-{}-{}-{}", prefix, std::process::id(), nanos, n)
+    } else {
+        format!("anixie-{}-{}-{}-{}.{}", prefix, std::process::id(), nanos, n, ext)
+    };
+    std::env::temp_dir().join(name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,5 +123,14 @@ mod tests {
     fn shell_quote_basic() {
         assert_eq!(shell_quote("abc"), "'abc'");
         assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
+
+    #[test]
+    fn tmp_file_unique_per_call() {
+        let a = tmp_file("test", "png");
+        let b = tmp_file("test", "png");
+        assert_ne!(a, b);
+        assert!(a.to_string_lossy().ends_with(".png"));
+        assert!(a.to_string_lossy().contains("anixie-test-"));
     }
 }

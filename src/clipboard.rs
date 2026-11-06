@@ -56,8 +56,7 @@ pub fn handle(args: &[String]) -> String {
             if args.len() < 2 { return "ERR usage: clipboard --copy ID".to_string(); }
             let id = &args[1];
             // decode to temp
-            let tmp = format!("/tmp/anixie-clip-{}", std::process::id());
-            let (_code, _, _err) = run(&cliphist(), &["decode", id]);
+            let tmp = crate::proc::tmp_file("clip", "").to_string_lossy().to_string();
             // cliphist decode writes to stdout; capture via sh
             let (code, _out, err) = run("sh", &["-c", &format!("{} decode {} > {}", cliphist(), id, tmp)]);
             if code != 0 { let _ = std::fs::remove_file(&tmp); return format!("ERR {}", err.trim()); }

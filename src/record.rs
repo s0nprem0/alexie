@@ -128,7 +128,7 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
     let od = out_dir();
     if fs::create_dir_all(&od).is_err() {
         notify_msg("critical", "Recording failed", &format!("Could not create {}.", od.display()));
-        return "ERR".to_string();
+        return format!("ERR could not create {}", od.display());
     }
 
     let tgt = match target {
@@ -164,7 +164,7 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
         }
         _ => {
             notify_msg("critical", "Recording failed", &format!("Unexpected picker result: {}", tgt));
-            return "ERR".to_string();
+            return format!("ERR unexpected picker result: {}", tgt);
         }
     }
 
@@ -172,7 +172,7 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
         let (code, _, _) = run(&webcam_overlay(), &["start", webcam_size, webcam_device, &tgt]);
         if code != 0 {
             notify_msg("critical", "Recording failed", "Could not start the webcam overlay.");
-            return "ERR".to_string();
+            return "ERR could not start the webcam overlay".to_string();
         }
     }
 
@@ -198,7 +198,7 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
         Ok(c) => c,
         Err(e) => {
             notify_msg("critical", "Recording failed", &format!("Could not start recorder: {}", e));
-            return "ERR".to_string();
+            return format!("ERR could not start recorder: {}", e);
         }
     };
     let pid = child.id();
@@ -235,7 +235,7 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
         let _ = fs::remove_file(&name);
         let _ = run(&webcam_overlay(), &["stop"]);
         notify_msg("critical", "Recording failed", "gpu-screen-recorder did not start.");
-        return "ERR".to_string();
+        return "ERR gpu-screen-recorder did not start".to_string();
     }
 
     // process alive?
@@ -243,7 +243,7 @@ fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_devi
         let _ = fs::remove_file(&name);
         let _ = run(&webcam_overlay(), &["stop"]);
         notify_msg("critical", "Recording failed", "gpu-screen-recorder exited before it started.");
-        return "ERR".to_string();
+        return "ERR gpu-screen-recorder exited before it started".to_string();
     }
 
     let _ = fs::write(pid_file(), pid.to_string());
