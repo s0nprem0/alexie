@@ -4,11 +4,21 @@ A Rust daemon + CLI that replaces anixie's shell-script tooling (`monitors`, `sh
 
 ## Status
 
-Proof of concept. Currently implements:
-- `ping`
-- `monitors` fully (status, list, set, scale, brightness, identify, wake, recover, internal, mirror, lid, try, keep, revert, workspaces, workspace, workspace-step, move-window, identities)
+Substantially complete. Native (no bash delegation):
+- `monitors` — fully ported (status, list, set, scale, brightness, identify, wake, recover, internal, mirror, lid, try, keep, revert, workspaces, workspace, workspace-step, move-window, identities).
+- `theme` — list/current/next/prev/state (set/wallpaper delegate to legacy bash).
+- `wallpaper` — current (heavy ops delegate).
+- `shot`/capture — core modes (region/windows/fullscreen/window + copy/save/preview), capture-text, capture-qr (smart/scroll/redact/text/annotate delegate).
+- `toggle` — nightlight/idle/dnd/stayawake.
+- `focus`, `screentime` — ported.
+- `snapshot`, `webapp` — ported.
+- `clipboard` — copy/list/text/image/delete/wipe/open.
+- `emoji`, `shortcuts`, `reminder`, `pick`, `menu` — thin wrappers.
+- `power` — show/apply/set/automation/charge (watch delegates to legacy bash).
 
-The daemon listens on `$XDG_RUNTIME_DIR/alexie/daemon.sock` and uses a newline-delimited text protocol. State files are read from `$XDG_STATE_HOME/anixie/` (shared with anixie).
+Delegated to legacy bash (complex process/systemd management): `record`, `transcode`, `webcam-overlay`, `power watch`, `share`.
+
+The daemon listens on `$XDG_RUNTIME_DIR/alexie/daemon.sock` and exposes a DBus service (`org.alexie.Daemon`, typed methods/properties/signals). It also ships an `anixie` front-door binary replacing the bash dispatcher.
 
 ## Build
 
@@ -24,55 +34,16 @@ cargo build --release
 alexie daemon &          # start the daemon
 alexie ping              # pong
 alexie monitors status
-alexie monitors set eDP-1 scale 1.5
+alexie theme list
 ```
 
-## Integration with anixie (planned)
+## Integration with anixie
 
-Add to anixie's `flake.nix` inputs:
-
-```nix
-alexie = {
-  url = "path:/home/son/alexie";   # or github:s0nprem0/alexie
-  inputs.nixpkgs.follows = "nixpkgs";
-};
-```
-
-Then a Home Manager module to install the package and run the daemon:
-
-```nix
-systemd.user.services.alexie = {
-  Unit.Description = "alexie daemon";
-  Service = {
-    ExecStart = "${pkgs.alexie}/bin/alexie daemon";
-    Restart = "on-failure";
-  };
-  Install.WantedBy = [ config.wayland.systemd.target ];
-};
-home.packages = [ pkgs.alexie ];
-```
-
-Over time, anixie's Hyprland binds and shell IPC would call `alexie <cmd>` instead of the bash scripts, migrating command-by-command. The daemon owns state (`display.conf`, theme, capture), so reloads are instant and consistent.
-
-## Roadmap
-
-- `monitors` fully ported (native, no bash delegation). Transparent cut-over via
-  a `monitors` shim when the daemon is enabled.
-- `menu` ported (native, quickshell IPC; no jq). Transparent cut-over via shim.
-- `theme` (list/current/next/prev/state native; set/wallpaper delegate to the
-  legacy bash tool).
-- `wallpaper` (current native; heavy ops delegate to the legacy bash tool).
-- `shot`/capture (text + QR native; freeze, region, window snap, swappy and the
-  rest delegate to the legacy bash tool).
-- Generic fallback routes all unported tools through the daemon; delegation
-  prefers a `*-legacy` binary when present so shims never recurse.
-- DBus interface (optional, richer: typed methods, properties and signals for
-  monitors/theme).
-- Tests (unit + property tests for parsers).
+Enabled via `anixie.daemon.enable = true;` (home-manager option). When enabled, bash tools are renamed to `*-legacy` and alexie provides shims (`monitors`, `theme`, `shot`, …) that exec `alexie <cmd>`. Delegation resolves to `*-legacy` binaries so unported features keep working.
 
 ## Design notes
 
-- std-only (no external crates) for now, to keep the build offline-friendly.
+- std-only (no external crates except zbus) to keep the build offline-friendly (cargo network used only for zbus).
 - Protocol is line-based text (`CMD args\n` → response lines + `__END__`).
-- State files are shared with anixie (same `XDG_STATE_HOME/anixie/`), so the daemon and the bash tools can coexist during migration.
-- No testing yet (per plan); add later.
+- State files shared with anixie (`XDG_STATE_HOME/anixie/`).
+- No test suite yet (planned).
