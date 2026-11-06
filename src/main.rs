@@ -87,7 +87,7 @@ fn help_text(cmd: Option<&str>) -> String {
 
 const COMMANDS: &[(&str, &str, &str)] = &[
     ("monitors", "display scaling, mode, position, mirroring, workspaces.", "  status, list, set OUTPUT KEY VALUE\n  scale set|up|down|reset\n  brightness up|down|max|min|set N\n  identify, wake, recover\n  internal on|off|toggle\n  mirror on|off|toggle\n  lid close|open|toggle|reconcile\n  try OUTPUT KEY VALUE, keep, revert\n  workspaces sync|show|reset\n  workspace N, workspace-step next|prev\n  move-window N, identities, sync-identities\n"),
-    ("theme", "palette listing and switching.", "  list, current, next, prev, state, list --json\n  switch THEME\n  export, doctor, vars, render\n"),
+    ("theme", "palette listing and switching.", "  list [--json], current, next, prev, state, migrate\n  set NAME, info [NAME], export, doctor, apply, auto\n  favorite add|remove|toggle NAME, pin, unpin\n  wallpaper [FILE] [auto|light|dark], wallpaper-mode, cursor-size N\n  switch WALLPAPER [auto|light|dark], presets, vars, render\n"),
     ("wallpaper", "wallpaper set/watch and library.", "  current, status, set FILE, list, library\n  next, prev, rotate, pause, resume\n  watch, watch-foreground\n"),
     ("power", "power profiles and charge limits.", "  show|status, apply, set ac|battery PROFILE\n  charge full|limit N\n  watch\n"),
     ("screentime", "screen time tracking.", "  show, json, reset, path, db-path, panel, watch\n"),
