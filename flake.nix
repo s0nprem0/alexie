@@ -16,7 +16,7 @@
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
-          doCheck = false;
+          doCheck = true;
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
         packages.anixie = pkgs.rustPlatform.buildRustPackage {
@@ -25,7 +25,7 @@
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
           cargoBuildFlags = [ "--bin" "anixie" ];
-          doCheck = false;
+          doCheck = true;
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
         devShells.default = pkgs.mkShell {

@@ -162,3 +162,25 @@ pub fn handle(args: &[String]) -> String {
         _ => delegate(args),
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn theme_names_non_empty_and_contains_known() {
+        let names = theme_names();
+        assert!(!names.is_empty());
+        assert!(names.contains(&"tokyo-night".to_string()));
+        assert!(names.contains(&"catppuccin-mocha".to_string()));
+        assert_eq!(names.len(), 16);
+    }
+
+    #[test]
+    fn theme_names_unique() {
+        let names = theme_names();
+        let mut sorted = names.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), names.len());
+    }
+}

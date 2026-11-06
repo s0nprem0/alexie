@@ -876,3 +876,21 @@ fn sync_identities_action() -> String {
     let _ = std::fs::write(state_dir().join("monitor_identities.json"), format!("{}\n", out.trim()));
     "identities saved".to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transform_index_known() {
+        assert_eq!(transform_index("normal"), Some(0));
+        assert_eq!(transform_index("90"), Some(1));
+        assert_eq!(transform_index("flipped-270"), Some(7));
+    }
+
+    #[test]
+    fn transform_index_unknown() {
+        assert_eq!(transform_index("foo"), None);
+        assert_eq!(transform_index(""), None);
+    }
+}
