@@ -10,6 +10,7 @@
 pub mod state;
 pub mod palette;
 pub mod vars;
+pub mod engine;
 
 use state::{current_theme, delegate, has_theme, mode_of, palette_entry, saved_wallpaper_mode, state_dir, state_ensure, state_file, theme_field, theme_names, wallpaper_mode_file, write_atomic};
 use crate::proc::run;
@@ -53,7 +54,7 @@ pub fn handle(args: &[String]) -> String {
                 if idx == 0 { names.len() - 1 } else { idx - 1 }
             };
             let name = &names[newidx];
-            delegate(&["set".to_string(), name.clone()])
+            engine::set_theme(name)
         }
         "state" => {
             match state_ensure() {
@@ -98,7 +99,25 @@ pub fn handle(args: &[String]) -> String {
             }
             cursor_size_command(&args[1])
         }
-        // heavy: delegate (set/wallpaper/auto/doctor/apply in engine)
+        "set" => {
+            if args.len() != 2 {
+                return "ERR usage: theme set NAME".to_string();
+            }
+            engine::set_theme(&args[1])
+        }
+        "wallpaper" => {
+            if args.len() > 3 {
+                return "ERR usage: theme wallpaper [FILE] [auto|light|dark]".to_string();
+            }
+            let wp = args.get(1).cloned().unwrap_or_default();
+            let mode = args.get(2).cloned().unwrap_or_default();
+            engine::wallpaper_theme(&wp, &mode)
+        }
+        "auto" => engine::apply_auto(),
+        "apply" => engine::apply_theme(),
+        "doctor" => engine::doctor(),
+        // Unknown subcommands fall back to legacy with a clear
+        // not-found message, instead of claiming native support.
         _ => delegate(args),
     }
 }
