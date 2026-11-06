@@ -390,9 +390,15 @@ fn list_action(snap: &Snapshot) -> String {
 }
 
 pub fn handle(args: &[String]) -> String {
-    if args.is_empty() {
-        return "ERR monitors: missing subcommand".to_string();
-    }
+    // Bare `alexie monitors` shows status — the read-only default,
+    // matching `power`/`screentime`/`toggle` — instead of erroring.
+    let default_args;
+    let args = if args.is_empty() {
+        default_args = vec!["status".to_string()];
+        default_args.as_slice()
+    } else {
+        args
+    };
     let snap = Snapshot::fetch();
     match args[0].as_str() {
         "status" => {

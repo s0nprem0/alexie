@@ -22,9 +22,16 @@ fn runtime_dir() -> std::path::PathBuf {
 }
 
 pub fn handle(args: &[String]) -> String {
-    if args.is_empty() {
-        return "ERR capture: missing subcommand".to_string();
-    }
+    // Bare `alexie capture` defaults to text capture (the hotkey path).
+    // main.rs already inserts "text", but keep this consistent for any
+    // other caller instead of erroring with "missing subcommand".
+    let default_args;
+    let args = if args.is_empty() {
+        default_args = vec!["text".to_string()];
+        default_args.as_slice()
+    } else {
+        args
+    };
     match args[0].as_str() {
         "text" => capture_text(),
         "qr" => capture_qr(),
