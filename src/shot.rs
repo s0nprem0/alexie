@@ -82,7 +82,8 @@ pub fn handle(args: &[String]) -> String {
         let a = args[i].as_str();
         if after_dash { post.push(a.to_string()); i += 1; continue; }
         match a {
-            "smart" | "region" | "windows" | "fullscreen" | "window" | "scroll" => { mode = a.to_string(); }
+            "smart" | "region" | "windows" | "fullscreen" | "window" | "scroll"
+            | "cancel" | "edit-last" | "copy-path" | "copy-uri" => { mode = a.to_string(); }
             "save" | "copy" | "annotate" | "preview" | "redact" | "text" => { dest = a.to_string(); }
             "cancel" | "edit-last" | "copy-path" | "copy-uri" => {
                 // delegate whole command
@@ -94,8 +95,60 @@ pub fn handle(args: &[String]) -> String {
         i += 1;
     }
 
-    // delegate complex modes/dests
-    if mode == "smart" || mode == "scroll" || dest == "redact" || dest == "text" || dest == "annotate" {
+    // delegate the most complex modes
+    if mode == "smart" || mode == "scroll" {
+        return delegate(args);
+    }
+
+    // cancel: dismiss preview, stop scrolling capture
+    if mode == "cancel" {
+        let runtime = runtime_dir();
+        let _ = std::fs::create_dir_all(&runtime);
+        let _ = std::fs::write(runtime.join("shot-scroll-cancel"), "");
+        let _ = run("quickshell", &["ipc", "call", "capture", "hide"]);
+        return "OK".to_string();
+    }
+
+    // edit-last: open last capture in satty
+    if mode == "edit-last" {
+        let last_file = runtime_dir().join("last-capture");
+        let last = std::fs::read_to_string(&last_file).unwrap_or_default().trim().to_string();
+        if last.is_empty() || !std::path::Path::new(&last).exists() {
+            return "ERR no previous capture".to_string();
+        }
+        let satty = env::var("SATTY").unwrap_or_else(|_| "satty".to_string());
+        let _ = Command::new(&satty).args(["--filename", &last, "--output-filename", &last, "--initial-tool", "crop"]).spawn();
+        return "OK".to_string();
+    }
+
+    // copy-path
+    if mode == "copy-path" {
+        let last_file = runtime_dir().join("last-capture");
+        let last = std::fs::read_to_string(&last_file).unwrap_or_default().trim().to_string();
+        if last.is_empty() || !std::path::Path::new(&last).exists() {
+            return "ERR no previous capture".to_string();
+        }
+        let _ = run("sh", &["-c", &format!("printf '%s' {} | {} --type text/plain", shell_quote(&last), wl_copy())]);
+        let _ = run("notify-send", &["-a", "capture", "-u", "low", "-t", "2000", "Copied path", &last]);
+        return last;
+    }
+
+    // copy-uri
+    if mode == "copy-uri" {
+        let last_file = runtime_dir().join("last-capture");
+        let last = std::fs::read_to_string(&last_file).unwrap_or_default().trim().to_string();
+        if last.is_empty() || !std::path::Path::new(&last).exists() {
+            return "ERR no previous capture".to_string();
+        }
+        let uri = format!("file://{}", last);
+        let _ = run("sh", &["-c", &format!("printf '%s' {} | {} --type text/uri-list", shell_quote(&uri), wl_copy())]);
+        let _ = run("notify-send", &["-a", "capture", "-u", "low", "-t", "2000", "Copied file URI", &uri]);
+        return uri;
+    }
+
+    // redact/text/annotate destinations: open satty with specific tool
+    if dest == "redact" || dest == "text" || dest == "annotate" {
+        // delegate to bash shot for these (satty hand-off with specific tool)
         return delegate(args);
     }
     if !post.is_empty() {
