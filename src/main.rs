@@ -1,4 +1,5 @@
 mod dbus;
+mod capture;
 mod monitors;
 mod theme;
 mod toggle;
@@ -44,6 +45,14 @@ pub fn handle_command(cmd: &str) -> String {
         Some("wallpaper") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             wallpaper::handle(&args)
+        }
+        Some("capture") | Some("capture-text") | Some("capture-qr") => {
+            let mut args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            // normalize capture-text / capture-qr into capture text/qr
+            if parts[0] == "capture-text" { args.insert(0, "text".to_string()); }
+            if parts[0] == "capture-qr" { args.insert(0, "qr".to_string()); }
+            if args.is_empty() && parts[0] == "capture" { args.push("text".to_string()); }
+            capture::handle(&args)
         }
         Some("toggle") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
