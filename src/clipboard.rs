@@ -97,6 +97,17 @@ pub fn handle(args: &[String]) -> String {
                 let _ = std::fs::remove_file(&tmp);
                 return format!("ERR entry {} is empty", id);
             }
+            // snapshot existing history ids so we can drop the duplicate that
+            // copying re-creates via the clipboard watcher.
+            let (code, before, _) = run(&cliphist(), &["list"]);
+            let mut before_ids = std::collections::HashSet::new();
+            if code == 0 {
+                for line in before.lines() {
+                    if let Some(id) = line.split('\t').next() {
+                        before_ids.insert(id.to_string());
+                    }
+                }
+            }
             // mime
             let (code, mime, _) = run(&file_bin(), &["-b", "--mime-type", "--", &tmp]);
             let mime = if code == 0 { mime.trim().to_string() } else { "application/octet-stream".to_string() };
@@ -108,6 +119,18 @@ pub fn handle(args: &[String]) -> String {
                 .stderr(std::process::Stdio::null())
                 .status();
             let _ = std::fs::remove_file(&tmp);
+            // Give the watcher a moment to store the new selection, then drop
+            // any entry that did not exist before so the history stays clean.
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            let (code, after, _) = run(&cliphist(), &["list"]);
+            if code == 0 {
+                for line in after.lines() {
+                    let mut parts = line.split('\t');
+                    let id = parts.next().unwrap_or("");
+                    if id.is_empty() || before_ids.contains(id) { continue; }
+                    let _ = run("sh", &["-c", &format!("printf '%s\\n' {} | {} delete", shell_quote(line), cliphist())]);
+                }
+            }
             "OK".to_string()
         }
         "--list" => {
