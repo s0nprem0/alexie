@@ -113,13 +113,24 @@ const COMMANDS: &[(&str, &str, &str)] = &[
     ("ping", "health check.", "  (no subcommands)\n"),
 ];
 
+/// Back-compat entry point for DBus `run(command: &str)` and any
+/// external caller that still sends a whitespace-joined string.
+/// Arguments containing spaces cannot survive this split — typed
+/// DBus interfaces (or the JSON socket protocol below) should be
+/// used for those. The socket protocol itself uses handle_args().
 pub fn handle_command(cmd: &str) -> String {
-    let parts: Vec<&str> = cmd.split_whitespace().collect();
-    match parts.first().copied() {
+    let parts: Vec<String> = cmd.split_whitespace().map(|s| s.to_string()).collect();
+    handle_args(parts, "")
+}
+
+/// Dispatch a parsed argument vector, with piped stdin data for
+/// commands that read entries from it (currently `pick`).
+pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
+    match parts.first().map(|s| s.as_str()) {
         None | Some("--help") | Some("-h") | Some("help") => {
-            return help_text(parts.get(1).copied());
+            return help_text(parts.get(1).map(|s| s.as_str()));
         }
-        Some(c) if parts.len() >= 2 && is_help_flag(parts[1]) => {
+        Some(c) if parts.len() >= 2 && is_help_flag(&parts[1]) => {
             return help_text(Some(c));
         }
         Some("ping") => "pong".to_string(),
@@ -181,7 +192,7 @@ pub fn handle_command(cmd: &str) -> String {
         }
         Some("pick") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
-            pick::handle(&args)
+            pick::handle_with_stdin(&args, stdin_data)
         }
         Some("reminder") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
@@ -213,11 +224,16 @@ pub fn handle_command(cmd: &str) -> String {
         }
         _ => {
             // Generic fallback: run the first token as a binary with the rest as
-            // args, so unported tools (clipboard, emoji, toggle, shot, ...) work
-            // through the daemon without individual ports.
-            let (code, out, err) = run_tool(parts[0], &parts[1..]);
+            // args, so unported tools work through the daemon without
+            // individual ports. Known alexie commands are handled above
+            // and never reach here, so this cannot re-enter alexie for
+            // a shimmed name — except for a name that is *only* a shim
+            // with no legacy, which the per-command handlers above now
+            // reject as unknown instead of delegating here.
+            let rest: Vec<&str> = parts[1..].iter().map(|s| s.as_str()).collect();
+            let (code, out, err) = run_tool(&parts[0], &rest);
             if code == 127 {
-                format!("ERR unknown command: {}", cmd)
+                format!("ERR unknown command: {}", parts.join(" "))
             } else if code == 0 {
                 if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
             } else {
@@ -227,12 +243,62 @@ pub fn handle_command(cmd: &str) -> String {
     }
 }
 
+/// Socket protocol: one JSON object per line,
+/// `{"args":[...],"stdin":"..."}`. Falls back to a whitespace-
+/// joined plain string for back-compat (e.g. `echo ping | socat -`).
+/// JSON preserves arguments containing spaces — the old
+/// whitespace split broke paths, webapp names/URLs, and menu names.
+#[derive(Debug, PartialEq)]
+struct WireRequest {
+    args: Vec<String>,
+    stdin: String,
+}
+
+fn encode_request(args: &[String], stdin_data: &str) -> String {
+    serde_json::json!({"args": args, "stdin": stdin_data}).to_string()
+}
+
+fn decode_request(line: &str) -> WireRequest {
+    let trimmed = line.trim();
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(args) = value.get("args").and_then(|a| a.as_array()) {
+            let argv: Vec<String> = args
+                .iter()
+                .filter_map(|a| a.as_str().map(|s| s.to_string()))
+                .collect();
+            let stdin = value
+                .get("stdin")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string();
+            return WireRequest { args: argv, stdin };
+        }
+    }
+    WireRequest {
+        args: trimmed.split_whitespace().map(|s| s.to_string()).collect(),
+        stdin: String::new(),
+    }
+}
+
 fn run_daemon() {
     let sock = socket_path();
     if let Some(parent) = sock.parent() {
         let _ = fs::create_dir_all(parent);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+        }
     }
-    let _ = fs::remove_file(&sock);
+    // Singleton check: if something already answers on the socket,
+    // do not steal it by deleting the file and binding anyway.
+    if sock.exists() {
+        if UnixStream::connect(&sock).is_ok() {
+            eprintln!("alexie daemon already running on {}", sock.display());
+            std::process::exit(1);
+        }
+        let _ = fs::remove_file(&sock);
+    }
     let listener = match UnixListener::bind(&sock) {
         Ok(l) => l,
         Err(e) => {
@@ -240,6 +306,11 @@ fn run_daemon() {
             std::process::exit(1);
         }
     };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&sock, fs::Permissions::from_mode(0o600));
+    }
     eprintln!("alexie daemon listening on {}", sock.display());
 
     // Start the optional DBus service in a background thread.
@@ -247,9 +318,14 @@ fn run_daemon() {
         dbus::run_dbus_server();
     });
 
+    // One thread per connection: the old single-threaded loop
+    // blocked every other client while a long command (a picker,
+    // a screenshot, a wallpaper scan) was running.
     for stream in listener.incoming() {
         match stream {
-            Ok(s) => handle_stream(s),
+            Ok(s) => {
+                std::thread::spawn(move || handle_stream(s));
+            }
             Err(e) => eprintln!("accept error: {}", e),
         }
     }
@@ -262,11 +338,11 @@ fn handle_stream(mut stream: UnixStream) {
             Ok(l) => l,
             Err(_) => break,
         };
-        let cmd = line.trim().to_string();
-        if cmd.is_empty() {
+        if line.trim().is_empty() {
             continue;
         }
-        let resp = handle_command(&cmd);
+        let req = decode_request(&line);
+        let resp = handle_args(req.args, &req.stdin);
         let _ = stream.write_all(resp.as_bytes());
         let _ = stream.write_all(b"\n__END__\n");
         let _ = stream.flush();
@@ -275,20 +351,31 @@ fn handle_stream(mut stream: UnixStream) {
 }
 
 fn run_client(args: &[String]) {
-    let cmd = args.join(" ");
+    use std::io::{IsTerminal, Read};
+    // Forward piped stdin (e.g. `printf … | alexie pick …`); a tty
+    // stdin is left alone so interactive commands are not blocked
+    // waiting for EOF. Pick --input mode does not read stdin at all.
+    let stdin_data = if std::io::stdin().is_terminal() {
+        String::new()
+    } else {
+        let mut buf = String::new();
+        let _ = std::io::stdin().read_to_string(&mut buf);
+        buf
+    };
     let sock = socket_path();
     let mut stream = match UnixStream::connect(&sock) {
         Ok(s) => s,
         Err(_) => {
             // Daemon not running: execute locally so timers and scripts still work.
-            let cmd = args.join(" ");
-            let resp = handle_command(&cmd);
-            if resp.starts_with("ERR") { println!("{}", color::red(&resp)); } else { println!("{}", resp); }
-            std::process::exit(0);
+            let resp = handle_args(args.to_vec(), &stdin_data);
+            let is_err = resp.starts_with("ERR");
+            if is_err { println!("{}", color::red(&resp)); } else { println!("{}", resp); }
+            std::process::exit(if is_err { 1 } else { 0 });
         }
     };
-    let _ = stream.write_all(format!("{}\n", cmd).as_bytes());
+    let _ = stream.write_all(format!("{}\n", encode_request(args, &stdin_data)).as_bytes());
     let _ = stream.flush();
+    let mut is_err = false;
     let reader = BufReader::new(stream);
     for line in reader.lines() {
         let line = match line {
@@ -299,10 +386,14 @@ fn run_client(args: &[String]) {
             break;
         }
         if line.starts_with("ERR") {
+            is_err = true;
             println!("{}", color::red(&line));
         } else {
             println!("{}", line);
         }
+    }
+    if is_err {
+        std::process::exit(1);
     }
 }
 
@@ -340,5 +431,64 @@ fn main() {
         run_daemon();
     } else {
         run_client(&args[1..]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wire_request_roundtrip_preserves_spaces() {
+        // Regression: the old whitespace protocol split
+        // `webapp add "My App" https://…` into separate args.
+        let args = vec![
+            "webapp".to_string(),
+            "add".to_string(),
+            "My App".to_string(),
+            "https://example.com/a b".to_string(),
+        ];
+        let encoded = encode_request(&args, "stdin data\n");
+        let decoded = decode_request(&encoded);
+        assert_eq!(decoded.args, args);
+        assert_eq!(decoded.stdin, "stdin data\n");
+    }
+
+    #[test]
+    fn wire_request_backcompat_plain_string() {
+        let decoded = decode_request("theme list");
+        assert_eq!(decoded.args, vec!["theme".to_string(), "list".to_string()]);
+        assert_eq!(decoded.stdin, "");
+    }
+
+    #[test]
+    fn handle_args_preserves_spacey_args() {
+        // `webapp add` with a spacey name must reach webapp::handle
+        // as one argument, not two. It will fail URL validation
+        // only if the split is wrong; here the URL is valid and the
+        // name is accepted, so we get the installed/generic path
+        // rather than a usage error from a split name. Use a name
+        // with a space and check the error is about the URL, proving
+        // the name arrived intact as args[1].
+        let out = handle_args(
+            vec![
+                "webapp".to_string(),
+                "add".to_string(),
+                "My App".to_string(),
+                "not-a-url".to_string(),
+            ],
+            "",
+        );
+        assert!(
+            out.contains("http://"),
+            "name with space must arrive intact, got: {out}"
+        );
+    }
+
+    #[test]
+    fn handle_command_backcompat_whitespace() {
+        // DBus run(command) still works for space-free commands.
+        assert_eq!(handle_command("ping"), "pong");
+        assert!(handle_command("theme list").contains("tokyo-night"));
     }
 }

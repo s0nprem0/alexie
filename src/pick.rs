@@ -17,6 +17,7 @@ pub fn handle_with_stdin(args: &[String], stdin_data: &str) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub fn handle(args: &[String]) -> String {
     // No stdin forwarded on the DBus/back-compat path; the socket
     // protocol forwards piped stdin via handle_with_stdin.
