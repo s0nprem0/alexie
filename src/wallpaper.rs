@@ -317,7 +317,39 @@ pub fn handle(args: &[String]) -> String {
             set_wallpaper(&args[1])
         }
         "pause" | "toggle-pause" | "resume" => pause_toggle(),
-        "watch" => watch_wallpapers(args),
+        "watch" => {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WATCHING: AtomicBool = AtomicBool::new(false);
+            if WATCHING.swap(true, Ordering::SeqCst) {
+                return "already watching".to_string();
+            }
+            let dirs = if args.len() > 1 { vec![PathBuf::from(&args[1])] } else { watch_dirs() };
+            let interval: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(2);
+            std::thread::spawn(move || {
+                loop {
+                    let _ = thumbs(&dirs);
+                    let files = scan(&dirs);
+                    let mut entries = Vec::new();
+                    for path in files {
+                        let tp = thumb_path(&cache_dir(), &path);
+                        let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        entries.push(serde_json::json!({
+                            "path": path.to_string_lossy(),
+                            "thumb": tp.to_string_lossy(),
+                            "stem": stem,
+                        }));
+                    }
+                    let index_path = cache_dir().join("search_index.json");
+                    let _ = fs::create_dir_all(cache_dir());
+                    if let Ok(json) = serde_json::to_string(&entries) {
+                        let _ = fs::write(&index_path, json);
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(interval));
+                }
+            });
+            "watching".to_string()
+        }
+        "watch-foreground" => watch_wallpapers(args),
         "list" | "library" => delegate(args),
         _ => delegate(args),
     }

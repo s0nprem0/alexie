@@ -1,4 +1,5 @@
 use crate::proc::{run, shell_quote};
+use serde_json::Value;
 use std::env;
 
 fn state_dir() -> std::path::PathBuf {
@@ -30,21 +31,34 @@ fn hypr_monitors(all: bool) -> String {
     out
 }
 
+fn hypr_json(all: bool) -> Value {
+    let out = hypr_monitors(all);
+    serde_json::from_str(&out).unwrap_or(Value::Array(vec![]))
+}
+
 pub fn focused_name() -> String {
-    let json = hypr_monitors(false);
-    jq_filter(&json, r#"[.[] | select(.focused == true)][0].name // empty"#).trim().to_string()
+    let v = hypr_json(false);
+    v.as_array().and_then(|a| a.iter().find(|m| m.get("focused").and_then(|x| x.as_bool()).unwrap_or(false)))
+        .and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
 }
 
 fn external_name() -> String {
-    let json = hypr_monitors(true);
-    jq_filter(&json, r#"[.[] | select(.disabled == false) | select(.name | test("^eDP|^LVDS|^DSI") | not)][0].name // empty"#).trim().to_string()
+    let v = hypr_json(true);
+    v.as_array().and_then(|a| a.iter().find(|m| {
+        !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false)
+            && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("eDP")
+            && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("LVDS")
+            && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("DSI")
+    })).and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
 }
 
 fn internal_name() -> String {
-    let json = hypr_monitors(true);
-    let name = jq_filter(&json, r#"[.[] | select(.name | test("^eDP"))][0].name // empty"#).trim().to_string();
+    let v = hypr_json(true);
+    let arr = v.as_array().cloned().unwrap_or_default();
+    let name = arr.iter().find(|m| m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("eDP"))
+        .and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string();
     if name.is_empty() {
-        jq_filter(&json, r#".[0].name // empty"#).trim().to_string()
+        arr.first().and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
     } else { name }
 }
 
@@ -164,19 +178,37 @@ pub fn handle(args: &[String]) -> String {
     }
     match args[0].as_str() {
         "status" => {
-            let json = hypr_monitors(true);
-            let filter = r#". as $all | ($all | map({ key: (.id | tostring), value: .name }) | from_entries) as $names | $all[] | "\(.name)\t\(.width)x\(.height)\t\(.scale)\t" + (if .disabled then "off" elif (.mirrorOf // "none") == "none" or (.mirrorOf // "") == "" then "extended" else "mirror of \($names[.mirrorOf] // .mirrorOf)" end) + (if .focused then "\tfocused" else "" end)"#;
-            let raw = jq_filter(&json, filter);
+            let v = hypr_json(true);
+            let arr = v.as_array().cloned().unwrap_or_default();
+            // map id -> name
+            let mut id_to_name = std::collections::HashMap::new();
+            for m in &arr {
+                if let (Some(id), Some(name)) = (m.get("id"), m.get("name")) {
+                    if let (Some(i), Some(n)) = (id.as_i64(), name.as_str()) {
+                        id_to_name.insert(i, n.to_string());
+                    }
+                }
+            }
             let mut rows: Vec<Vec<String>> = Vec::new();
-            for line in raw.lines() {
-                let t: Vec<&str> = line.split('\t').collect();
-                if t.is_empty() || t[0].trim().is_empty() { continue; }
-                let name = t[0].trim().to_string();
-                let res = t.get(1).unwrap_or(&"").trim().to_string();
-                let scale = t.get(2).unwrap_or(&"").trim().to_string();
-                let scale = if scale.is_empty() { "1".to_string() } else { scale };
-                let mode = t.get(3).unwrap_or(&"").trim().to_string();
-                let focus = if t.get(4).map(|s| s.trim()) == Some("focused") { "yes" } else { "" }.to_string();
+            for m in &arr {
+                let name = m.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                if name.is_empty() { continue; }
+                let w = m.get("width").and_then(|x| x.as_i64()).unwrap_or(0);
+                let h = m.get("height").and_then(|x| x.as_i64()).unwrap_or(0);
+                let res = format!("{}x{}", w, h);
+                let scale = m.get("scale").map(|x| x.to_string()).unwrap_or_else(|| "1".to_string());
+                let scale = if scale.is_empty() || scale == "null" { "1".to_string() } else { scale };
+                let disabled = m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false);
+                let mirror = m.get("mirrorOf").and_then(|x| x.as_str()).unwrap_or("none");
+                let mode = if disabled {
+                    "off".to_string()
+                } else if mirror == "none" || mirror.is_empty() {
+                    "extended".to_string()
+                } else {
+                    let mirror_name = mirror.parse::<i64>().ok().and_then(|id| id_to_name.get(&id).cloned()).unwrap_or_else(|| mirror.to_string());
+                    format!("mirror of {}", mirror_name)
+                };
+                let focus = if m.get("focused").and_then(|x| x.as_bool()).unwrap_or(false) { "yes" } else { "" }.to_string();
                 rows.push(vec![name, res, scale, mode, focus]);
             }
             if rows.is_empty() {
@@ -381,10 +413,8 @@ fn clear_disabled(output: &str) {
 }
 
 fn active_count_i() -> i64 {
-    // delegate count via jq
-    let json = hypr_monitors(true);
-    let filter = r#"[.[] | select(.disabled == false)] | length"#;
-    jq_filter(&json, filter).trim().parse().unwrap_or(0)
+    let v = hypr_json(true);
+    v.as_array().map(|a| a.iter().filter(|m| !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false)).count() as i64).unwrap_or(0)
 }
 
 fn internal_action(action: &str) -> String {
