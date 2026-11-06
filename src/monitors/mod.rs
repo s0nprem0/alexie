@@ -11,6 +11,7 @@
 //! `handle()` below is just the dispatcher over those.
 
 pub mod state;
+pub mod list;
 pub mod validate;
 pub mod pending;
 pub mod workspaces;
@@ -68,7 +69,7 @@ pub fn handle(args: &[String]) -> String {
                 crate::table::render(&["Monitor", "Resolution", "Scale", "Mode", "Focus"], &rows)
             }
         }
-        "list" => state::list_action(&snap),
+        "list" => list::list_action(&snap),
         "set" => {
             if args.len() < 4 {
                 return "ERR usage: monitors set OUTPUT KEY VALUE".to_string();
