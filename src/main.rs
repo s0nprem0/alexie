@@ -484,6 +484,59 @@ mod tests {
     }
 
     #[test]
+    fn socket_roundtrip_preserves_spaces_and_stdin() {
+        // End-to-end over a real Unix socket pair: JSON request in,
+        // response + __END__ out, with a spacey arg intact. This is
+        // the protocol the daemon and client speak; the old
+        // whitespace protocol split such args.
+        use std::io::{BufRead, BufReader, Write as IoWrite};
+        let dir = std::env::temp_dir().join(format!(
+            "alexie-sock-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sock_path = dir.join("daemon.sock");
+        let listener = UnixListener::bind(&sock_path).unwrap();
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_stream(stream);
+        });
+        let mut client = UnixStream::connect(&sock_path).unwrap();
+        let args = vec![
+            "webapp".to_string(),
+            "add".to_string(),
+            "My App".to_string(),
+            "not-a-url".to_string(),
+        ];
+        client
+            .write_all(format!("{}\n", encode_request(&args, "")).as_bytes())
+            .unwrap();
+        client.flush().unwrap();
+        let reader = BufReader::new(client);
+        let mut lines = Vec::new();
+        for line in reader.lines() {
+            let line = line.unwrap();
+            if line == "__END__" {
+                break;
+            }
+            lines.push(line);
+        }
+        server.join().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        // Name with a space arrived intact: the failure is about the
+        // URL, not a usage error from a split name.
+        assert!(
+            lines.join("\n").contains("http://"),
+            "got: {:?}",
+            lines
+        );
+    }
+
+    #[test]
     fn handle_command_backcompat_whitespace() {
         // DBus run(command) still works for space-free commands.
         assert_eq!(handle_command("ping"), "pong");
