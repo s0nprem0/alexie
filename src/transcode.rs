@@ -152,3 +152,14 @@ pub fn handle(args: &[String]) -> String {
 }
 
 fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn output_path_basic() {
+        assert_eq!(output_path("/tmp/demo.mp4", "mp4", "1080p"), "/tmp/demo-1080p.mp4");
+        assert_eq!(output_path("/tmp/demo.png", "jpg", "low"), "/tmp/demo-low.jpg");
+    }
+}

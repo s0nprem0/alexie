@@ -297,3 +297,14 @@ fn chrono_like_stamp() -> String {
     if code == 0 { out.trim().to_string() } else { "0".to_string() }
 }
 
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn shell_quote_basic() {
+        assert_eq!(shell_quote("abc"), "'abc'");
+        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
+}
