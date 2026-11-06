@@ -70,8 +70,11 @@ fn run_client(args: &[String]) {
     let mut stream = match UnixStream::connect(&sock) {
         Ok(s) => s,
         Err(_) => {
-            eprintln!("daemon not running ({}). Start with: alexie daemon", sock.display());
-            std::process::exit(1);
+            // Daemon not running: execute locally so timers and scripts still work.
+            let cmd = args.join(" ");
+            let resp = handle_command(&cmd);
+            println!("{}", resp);
+            std::process::exit(0);
         }
     };
     let _ = stream.write_all(format!("{}\n", cmd).as_bytes());
