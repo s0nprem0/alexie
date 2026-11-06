@@ -193,6 +193,13 @@ pub fn handle(args: &[String]) -> String {
         }
         _ => {}
     }
+    // Anything else must be a subcommand that uses the DB. Reject unknown
+    // words before opening it, so a typo neither creates the database nor
+    // depends on the state directory being writable.
+    match sub {
+        "" | "show" | "json" | "reset" => {}
+        _ => return format!("ERR unknown subcommand: {}", sub),
+    }
     let conn = match open_db() {
         Ok(c) => c,
         Err(e) => return format!("ERR db: {}", e),
