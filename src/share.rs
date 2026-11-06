@@ -39,12 +39,12 @@ pub fn handle(_args: &[String]) -> String {
         let _ = run("notify-send", &["-a", "capture", "-u", "normal", "-t", "3000", "Share", "No recent capture to share."]);
         return "ERR no recent capture".to_string();
     }
-    let last = std::fs::read_to_string(&last_capture_file).unwrap_or_default().trim().to_string();
+    let last = fs::read_to_string(&last_capture_file).unwrap_or_default().trim().to_string();
     if last.is_empty() || !std::path::Path::new(&last).exists() {
         let _ = run("notify-send", &["-a", "capture", "-u", "normal", "-t", "3000", "Share", "Recent capture not found."]);
         return "ERR recent capture not found".to_string();
     }
-    // delegate the interactive picker to bash share (complex pick menu)
+    // delegate interactive picker to bash share (complex pick menu)
     let tool = resolve_tool("share");
     let (code, out, err) = run(&tool, &[]);
     if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
