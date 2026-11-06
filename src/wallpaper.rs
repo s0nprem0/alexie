@@ -101,3 +101,20 @@ fn shell_quote(s: &str) -> String {
     out.push('\'');
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_quote_basic() {
+        assert_eq!(shell_quote("abc"), "'abc'");
+        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
+
+    #[test]
+    fn current_theme_no_panic() {
+        // Just ensure it doesn't panic in test env.
+        let _ = current_theme();
+    }
+}

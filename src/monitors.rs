@@ -523,7 +523,7 @@ fn try_action(args: &[String]) -> String {
     // args: [output, key, value]
     if args.len() < 3 { return "ERR try needs an output, a setting and a value".to_string(); }
     let output = &args[0]; let key = &args[1]; let value = &args[2];
-    if !output.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+    if output.is_empty() || !output.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
         return format!("ERR invalid output name: {}", output);
     }
     let pending = state_dir().join("display-pending");
@@ -892,5 +892,36 @@ mod tests {
     fn transform_index_unknown() {
         assert_eq!(transform_index("foo"), None);
         assert_eq!(transform_index(""), None);
+    }
+}
+
+#[cfg(test)]
+mod more_tests {
+    use super::*;
+
+    #[test]
+    fn parse_output_name_validation() {
+        // valid names
+        for n in ["eDP-1", "HDMI-A-1", "DP-2", "Virtual-1"] {
+            assert!(n.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.'));
+        }
+        // invalid
+        for n in ["", "eDP 1", "hdmi;rm", "a/b"] {
+            let valid = !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.');
+            assert!(!valid, "{} should be invalid", n);
+        }
+    }
+
+    #[test]
+    fn read_state_defaults_for_missing_file() {
+        // With no state file, read_state should still return live values (or None if no hyprland).
+        // In test env (no hyprland), returns None. Just ensure no panic.
+        let _ = read_state("NONEXISTENT");
+    }
+
+    #[test]
+    fn shell_quote_basic() {
+        assert_eq!(shell_quote("abc"), "'abc'");
+        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
     }
 }
