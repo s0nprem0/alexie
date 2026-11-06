@@ -1,6 +1,6 @@
 use crate::proc::{find_in_path, run, run_stdout_to_file, run_with_stdin};
 use std::env;
-
+use std::sync::Mutex;
 fn cliphist() -> String { env::var("CLIPHIST").unwrap_or_else(|_| "cliphist".to_string()) }
 fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
 fn file_bin() -> String { env::var("FILE").unwrap_or_else(|_| "file".to_string()) }
@@ -31,19 +31,31 @@ fn pid_alive(pid: i64) -> bool {
     code == 0
 }
 
+fn watcher_pid_alive() -> bool {
+    if let Ok(s) = std::fs::read_to_string(watcher_pid_file()) {
+        if let Ok(pid) = s.trim().parse::<i64>() {
+            return pid_alive(pid);
+        }
+    }
+    false
+}
+
+// The daemon is threaded (one thread per connection) and this runs at
+// the top of every clipboard call. Without a lock, two concurrent
+// calls can both see a missing/dead pid file and spawn two watchers
+// before either child writes the pid file; the legacy guard cannot
+// dedup watchers that both passed its check.
+static WATCHER_LOCK: Mutex<()> = Mutex::new(());
+
 fn ensure_watcher() {
+    let _guard = WATCHER_LOCK.lock().unwrap();
     // If the watcher recorded in the legacy pid file is still
     // alive, do nothing. This is more precise than
     // `pgrep -f clipboard-watch`, whose full-command-line match can
     // hit the pgrep process itself or unrelated shells mentioning
-    // the name, and it avoids spawning a second watcher racing the
-    // first to write the pid file (the daemon is threaded now).
-    if let Ok(s) = std::fs::read_to_string(watcher_pid_file()) {
-        if let Ok(pid) = s.trim().parse::<i64>() {
-            if pid_alive(pid) {
-                return;
-            }
-        }
+    // the name.
+    if watcher_pid_alive() {
+        return;
     }
     // Try to start it if the binary is available (PATH search, no sh).
     let path = env::var("PATH").unwrap_or_default();
@@ -55,6 +67,18 @@ fn ensure_watcher() {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
+    // The child records itself in the pid file just after its own
+    // single-instance check. Wait (briefly) for that, still holding
+    // the lock, so the next caller sees the live pid instead of
+    // spawning a second watcher racing the first. If the pid never
+    // appears (the watcher died on startup), the lock is released
+    // after ~1s and the next call retries.
+    for _ in 0..100 {
+        if watcher_pid_alive() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
 }
 
 fn cliphist_list() -> (i32, String, String) {
