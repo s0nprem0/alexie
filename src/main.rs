@@ -3,6 +3,7 @@ mod capture;
 mod focus;
 mod menu;
 mod monitors;
+mod power;
 mod screentime;
 mod shot;
 mod theme;
@@ -62,6 +63,10 @@ pub fn handle_command(cmd: &str) -> String {
         Some("focus") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             focus::handle(&args)
+        }
+        Some("power") | Some("powerprofile") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            power::handle(&args)
         }
         Some("screentime") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
