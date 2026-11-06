@@ -48,7 +48,7 @@ fn hypr_monitors(all: bool) -> String {
     out
 }
 
-fn focused_name() -> String {
+pub fn focused_name() -> String {
     let json = hypr_monitors(false);
     jq_filter(&json, r#"[.[] | select(.focused == true)][0].name // empty"#).trim().to_string()
 }

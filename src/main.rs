@@ -48,7 +48,6 @@ pub fn handle_command(cmd: &str) -> String {
                         "webcam-overlay", "clipboard", "emoji", "focus", "screentime",
                         "toggle", "power", "snapshot", "webapp", "menu"].contains(&tool) => {
             // Delegate to the installed bash tool until ported.
-            let a: Vec<&str> = parts.iter().map(|s| *s).collect();
             let (code, out, err) = run_tool(parts[0], &parts[1..]);
             if code == 0 {
                 if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
