@@ -1,3 +1,5 @@
+mod monitors;
+
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
@@ -9,104 +11,13 @@ fn socket_path() -> PathBuf {
     PathBuf::from(runtime).join("alexie").join("daemon.sock")
 }
 
-fn state_dir() -> PathBuf {
-    let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-        let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        format!("{}/.local/state", home)
-    });
-    PathBuf::from(state).join("anixie")
-}
-
-fn display_conf_path() -> PathBuf {
-    state_dir().join("display.conf")
-}
-
 fn handle_command(cmd: &str) -> String {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
-    match parts.as_slice() {
-        ["ping"] => "pong".to_string(),
-        ["monitors", "status"] => {
-            let path = display_conf_path();
-            match fs::read_to_string(&path) {
-                Ok(s) => if s.trim().is_empty() {
-                    "no display.conf".to_string()
-                } else {
-                    s.trim_end().to_string()
-                },
-                Err(_) => "no display.conf".to_string(),
-            }
-        }
-        ["monitors", "set", output, key, value] => {
-            if !output.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
-                return format!("ERR invalid output name: {}", output);
-            }
-            let field_idx: usize = match *key {
-                "scale" => 1,
-                "transform" => 2,
-                "disabled" => 3,
-                "mirror" => 4,
-                "position" => 5,
-                "mode" => 6,
-                _ => return format!("ERR unknown monitor setting: {}", key),
-            };
-            if *key == "scale" {
-                let scale: f64 = match value.parse() {
-                    Ok(v) => v,
-                    Err(_) => return format!("ERR invalid scale: {}", value),
-                };
-                if scale <= 0.0 {
-                    return "ERR scale must be > 0".to_string();
-                }
-            }
-            if *key == "disabled" && *value != "0" && *value != "1" {
-                return "ERR disabled must be 0 or 1".to_string();
-            }
-
-            let path = display_conf_path();
-            let mut lines: Vec<String> = fs::read_to_string(&path)
-                .unwrap_or_default()
-                .lines()
-                .map(|s| s.to_string())
-                .collect();
-
-            let mut found = false;
-            for line in lines.iter_mut() {
-                let toks: Vec<&str> = line.split_whitespace().collect();
-                if !toks.is_empty() && toks[0] == *output {
-                    let mut fields: Vec<String> = toks.iter().map(|s| s.to_string()).collect();
-                    while fields.len() < 9 {
-                        let defaults = ["", "1", "0", "0", "none", "auto", "preferred", "", ""];
-                        fields.push(defaults[fields.len()].to_string());
-                    }
-                    if field_idx < fields.len() {
-                        fields[field_idx] = value.to_string();
-                    }
-                    *line = fields.join(" ");
-                    found = true;
-                }
-            }
-            if !found {
-                let mut fields = vec![
-                    output.to_string(),
-                    "1".to_string(),
-                    "0".to_string(),
-                    "0".to_string(),
-                    "none".to_string(),
-                    "auto".to_string(),
-                    "preferred".to_string(),
-                    "".to_string(),
-                    "".to_string(),
-                ];
-                if field_idx < fields.len() {
-                    fields[field_idx] = value.to_string();
-                }
-                lines.push(fields.join(" "));
-            }
-            let _ = fs::create_dir_all(state_dir());
-            match fs::write(&path, lines.join("\n") + "\n") {
-                Ok(_) => format!("OK set {} {} {}", output, key, value),
-                Err(e) => format!("ERR write failed: {}", e),
-            }
+    match parts.first().copied() {
+        Some("ping") => "pong".to_string(),
+        Some("monitors") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            monitors::handle(&args)
         }
         _ => format!("ERR unknown command: {}", cmd),
     }
