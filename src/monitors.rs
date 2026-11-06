@@ -15,6 +15,23 @@ type MonitorState = (String, String, String, String, String, String, String, Str
 fn state_file() -> std::path::PathBuf { state_dir().join("display.conf") }
 fn lid_file() -> std::path::PathBuf { state_dir().join("lid") }
 
+// Write `content` to `dest` atomically via a temp file in the same
+// directory. `/tmp` may be on a different filesystem than the state dir,
+// where `std::fs::rename` fails with EXDEV; the bash original used `mv`
+// which copies across devices, so do the same here.
+fn atomic_write(dest: &std::path::Path, content: &str) -> std::io::Result<()> {
+    let dir = dest.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let tmp = dir.join(format!(".monitors.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, content)?;
+    if std::fs::rename(&tmp, dest).is_err() {
+        // cross-device fallback (e.g. tmpfs → home): copy then remove
+        let r = std::fs::copy(&tmp, dest);
+        let _ = std::fs::remove_file(&tmp);
+        r?;
+    }
+    Ok(())
+}
+
 
 fn jq_filter(json: &str, filter: &str) -> String {
     let script = format!("printf '%s' {} | jq -r {}", shell_quote(json), shell_quote(filter));
@@ -102,10 +119,12 @@ fn read_state(name: &str) -> Option<MonitorState> {
             if !t.is_empty() && t[0] == name {
                 if t.len() >= 2 && !t[1].is_empty() { scale = t[1].to_string(); }
                 if t.len() >= 3 && !t[2].is_empty() { transform = t[2].to_string(); }
-                if t.len() >= 4 && !t[3].is_empty() { disabled = t[3].to_string(); }
+                if t.len() >= 4 && !t[3].is_empty() {
+                    disabled = if t[3] == "true" || t[3] == "1" || t[3] == "yes" { "1".to_string() } else { "0".to_string() };
+                }
                 if t.len() >= 5 && !t[4].is_empty() { mirror = t[4].to_string(); }
                 if t.len() >= 6 && !t[5].is_empty() { position = t[5].to_string(); }
-                if t.len() >= 7 && !t[6].is_empty() { mode = t[6].to_string(); }
+                if t.len() >= 7 && !t[6].is_empty() { mode = t[6].strip_suffix("Hz").unwrap_or(t[6]).to_string(); }
                 if t.len() >= 8 && !t[7].is_empty() { sdrb = t[7].to_string(); }
                 if t.len() >= 9 && !t[8].is_empty() { sdrr = t[8].to_string(); }
             }
@@ -172,6 +191,93 @@ fn save_field(output: &str, key: &str, value: &str) -> Result<(), String> {
     std::fs::write(&path, lines.join("\n") + "\n").map_err(|e| e.to_string())
 }
 
+fn read_saved_map() -> std::collections::HashMap<String, (String, String)> {
+    let mut map = std::collections::HashMap::new();
+    if let Ok(content) = std::fs::read_to_string(state_file()) {
+        for line in content.lines() {
+            let t: Vec<&str> = line.split_whitespace().collect();
+            if t.is_empty() { continue; }
+            let name = t[0].to_string();
+            let position = t.get(5).filter(|s| !s.is_empty()).unwrap_or(&"auto").to_string();
+            let mode = t.get(6).filter(|s| !s.is_empty()).unwrap_or(&"preferred").to_string();
+            // normalize a saved disabled/mode that an older or broken port left
+            let mode = mode.strip_suffix("Hz").unwrap_or(&mode).to_string();
+            map.insert(name, (position, mode));
+        }
+    }
+    map
+}
+
+fn list_action() -> String {
+    let json = hypr_monitors(true);
+    let mut v: Value = match serde_json::from_str(&json) {
+        Ok(v) => v,
+        Err(_) => return json.trim().to_string(),
+    };
+    let arr = match v.as_array_mut() {
+        Some(a) => a,
+        None => return json.trim().to_string(),
+    };
+
+    // id -> name
+    let mut id_to_name = std::collections::HashMap::new();
+    for m in arr.iter() {
+        if let (Some(id), Some(name)) = (m.get("id"), m.get("name")) {
+            if let (Some(i), Some(n)) = (id.as_i64(), name.as_str()) {
+                id_to_name.insert(i, n.to_string());
+            }
+        }
+    }
+
+    let saved = read_saved_map();
+
+    for m in arr.iter_mut() {
+        let name = m.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+
+        // resolve mirrorOf (id -> name)
+        let mirror_raw = m.get("mirrorOf").cloned().unwrap_or(Value::Null);
+        let mut mirror = match mirror_raw {
+            Value::String(s) => s,
+            Value::Number(n) => n.to_string(),
+            Value::Bool(b) => if b { "true".to_string() } else { "none".to_string() },
+            _ => "none".to_string(),
+        };
+        if mirror.is_empty() { mirror = "none".to_string(); }
+        if mirror != "none" {
+            if let Ok(id) = mirror.parse::<i64>() {
+                if let Some(n) = id_to_name.get(&id) {
+                    mirror = n.clone();
+                }
+            }
+        }
+
+        let (pos, mode) = saved.get(&name).cloned().unwrap_or_else(|| ("auto".to_string(), "preferred".to_string()));
+
+        // availableModes: strip trailing Hz, unique
+        let mut seen = std::collections::HashSet::new();
+        let mut modes_out: Vec<Value> = Vec::new();
+        if let Some(arr_modes) = m.get("availableModes").and_then(|x| x.as_array()) {
+            for x in arr_modes {
+                if let Some(s) = x.as_str() {
+                    let s = s.strip_suffix("Hz").unwrap_or(s);
+                    if seen.insert(s.to_string()) {
+                        modes_out.push(Value::String(s.to_string()));
+                    }
+                }
+            }
+        }
+
+        if let Some(obj) = m.as_object_mut() {
+            obj.insert("mirrorOf".to_string(), Value::String(mirror));
+            obj.insert("savedPosition".to_string(), Value::String(pos));
+            obj.insert("savedMode".to_string(), Value::String(mode));
+            obj.insert("availableModes".to_string(), Value::Array(modes_out));
+        }
+    }
+
+    serde_json::to_string(&v).unwrap_or_else(|_| json.trim().to_string())
+}
+
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
         return "ERR monitors: missing subcommand".to_string();
@@ -217,15 +323,12 @@ pub fn handle(args: &[String]) -> String {
                 crate::table::render(&["Monitor", "Resolution", "Scale", "Mode", "Focus"], &rows)
             }
         }
-        "list" => hypr_monitors(true).trim().to_string(),
+        "list" => list_action(),
         "set" => {
             if args.len() < 4 {
                 return "ERR usage: monitors set OUTPUT KEY VALUE".to_string();
             }
-            let output = &args[1]; let key = &args[2]; let value = &args[3];
-            if let Err(e) = apply_change(output, key, value) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, key, value) { return format!("ERR {}", e); }
-            format!("OK set {} {} {}", output, key, value)
+            set_action(&args[1], &args[2], &args[3])
         }
         "scale" => {
             let focused = focused_name();
@@ -370,6 +473,230 @@ pub fn handle(args: &[String]) -> String {
     }
 }
 // ---------- helpers ----------
+
+fn parse_transform(v: &str) -> Option<usize> {
+    if let Some(i) = transform_index(v) { return Some(i); }
+    if let Ok(i) = v.parse::<usize>() {
+        if i < 8 { return Some(i); }
+    }
+    None
+}
+
+fn valid_int(s: &str) -> bool {
+    let s = s.strip_prefix('-').unwrap_or(s);
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_digit())
+}
+
+fn valid_mode(v: &str) -> bool {
+    if matches!(v, "preferred" | "highres" | "highrr" | "maxwidth") { return true; }
+    let mut at = v.splitn(2, '@');
+    let base = at.next().unwrap_or("");
+    let rate = at.next();
+    if at.count() > 0 { return false; }
+    let mut xb = base.splitn(2, 'x');
+    let w = xb.next().unwrap_or("");
+    let h = xb.next().unwrap_or("");
+    if xb.count() > 0 { return false; }
+    if w.is_empty() || !w.chars().all(|c| c.is_ascii_digit()) { return false; }
+    if h.is_empty() || !h.chars().all(|c| c.is_ascii_digit()) { return false; }
+    if let Some(r) = rate {
+        if r.is_empty() || !r.chars().all(|c| c.is_ascii_digit() || c == '.') { return false; }
+    }
+    // ensure at most one '@'
+    if v.matches('@').count() > 1 { return false; }
+    true
+}
+
+fn valid_position(v: &str) -> bool {
+    if matches!(v, "auto" | "auto-left" | "auto-right" | "auto-up" | "auto-down") { return true; }
+    let mut xb = v.splitn(2, 'x');
+    let x = xb.next().unwrap_or("");
+    let y = xb.next().unwrap_or("");
+    if xb.count() > 0 { return false; }
+    if !v.contains('x') { return false; }
+    valid_int(x) && valid_int(y)
+}
+
+fn set_action(output: &str, key: &str, value: &str) -> String {
+    // refuse unknown output
+    if field_of(output, "name").is_empty() {
+        return format!("ERR no output called \"{}\"", output);
+    }
+
+    match key {
+        "scale" => {
+            let ladder = ["1", "1.25", "1.5", "1.6", "2", "3", "4"];
+            if !ladder.contains(&value) {
+                return "ERR scale must be one of: 1 1.25 1.5 1.6 2 3 4".to_string();
+            }
+            if let Err(e) = apply_change(output, "scale", value) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "scale", value) { return format!("ERR {}", e); }
+            format!("{} scale {}", output, value)
+        }
+        "transform" => {
+            let idx = match parse_transform(value) {
+                Some(i) => i,
+                None => return "ERR transform must be one of: normal 90 180 270 flipped flipped-90 flipped-180 flipped-270".to_string(),
+            };
+            let idx_s = idx.to_string();
+            if let Err(e) = apply_change(output, "transform", &idx_s) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "transform", &idx_s) { return format!("ERR {}", e); }
+            format!("{} transform {}", output, value)
+        }
+        "disabled" => {
+            let (index, disabled) = match value {
+                "yes" | "true" | "on" => (1, "true"),
+                "no" | "false" | "off" => (0, "false"),
+                _ => return "ERR disabled takes yes or no".to_string(),
+            };
+            if index == 1 && field_of(output, "disabled") != "true" && active_count_i() <= 1 {
+                return "ERR refusing to disable the only active output".to_string();
+            }
+            if let Err(e) = apply_change(output, "disabled", disabled) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "disabled", &index.to_string()) { return format!("ERR {}", e); }
+            if index == 0 {
+                let _ = run("sh", &["-c", "monitors workspaces sync >/dev/null 2>&1 || true"]);
+            }
+            format!("{} disabled {}", output, value)
+        }
+        "position" => {
+            if !valid_position(value) {
+                return "ERR position must be auto, auto-left/right/up/down, or XxY".to_string();
+            }
+            if let Err(e) = apply_change(output, "position", value) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "position", value) { return format!("ERR {}", e); }
+            format!("{} position {}", output, value)
+        }
+        "mode" => {
+            let v = value.strip_suffix("Hz").unwrap_or(value).trim();
+            if !valid_mode(v) {
+                return "ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string();
+            }
+            if let Err(e) = apply_change(output, "mode", v) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "mode", v) { return format!("ERR {}", e); }
+            format!("{} mode {}", output, v)
+        }
+        "sdrbrightness" => {
+            if !value.chars().all(|c| c.is_ascii_digit() || c == '.') || value.is_empty() {
+                return "ERR sdrbrightness must be a number".to_string();
+            }
+            if let Err(e) = apply_change(output, "sdrbrightness", value) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "sdrbrightness", value) { return format!("ERR {}", e); }
+            format!("{} sdrbrightness {}", output, value)
+        }
+        "sdrsaturation" => {
+            if !value.chars().all(|c| c.is_ascii_digit() || c == '.') || value.is_empty() {
+                return "ERR sdrsaturation must be a number".to_string();
+            }
+            if let Err(e) = apply_change(output, "sdrsaturation", value) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "sdrsaturation", value) { return format!("ERR {}", e); }
+            format!("{} sdrsaturation {}", output, value)
+        }
+        "mirror" => {
+            let mut v = value.to_string();
+            if v == "off" || v.is_empty() { v = "none".to_string(); }
+            if v != "none" {
+                if v == output { return "ERR an output cannot mirror itself".to_string(); }
+                if field_of(&v, "name").is_empty() { return format!("ERR no output called \"{}\" to mirror", v); }
+                if field_of(&v, "disabled") == "true" { return format!("ERR {} is off; turn it on before mirroring", v); }
+                // target must not already be mirroring
+                let st = read_state(&v);
+                if let Some(s) = st {
+                    if s.3 != "none" { return format!("ERR {} is mirroring another screen; extend it first", v); }
+                }
+            }
+            if v != "none" {
+                if field_of(output, "disabled") == "true" {
+                    return format!("ERR {} is off; turn it on before mirroring", output);
+                }
+            } else {
+                if field_of(output, "disabled") == "true" {
+                    return format!("ERR {} is off; turn it on before mirroring", output);
+                }
+            }
+            if let Err(e) = apply_change(output, "mirror", &v) { return format!("ERR {}", e); }
+            if let Err(e) = save_field(output, "mirror", &v) { return format!("ERR {}", e); }
+            if v == "none" {
+                let _ = run("sh", &["-c", "monitors workspaces sync >/dev/null 2>&1 || true"]);
+            }
+            if v == "none" { format!("{} extended again", output) } else { format!("{} now mirrors {}", output, v) }
+        }
+        _ => "ERR set takes scale, transform, disabled, position, mode, mirror, sdrbrightness or sdrsaturation".to_string(),
+    }
+}
+
+fn try_action(args: &[String]) -> String {
+    if args.len() < 3 { return "ERR try needs an output, a setting and a value".to_string(); }
+    let output = &args[0]; let key = &args[1]; let value = &args[2];
+    if output.is_empty() || !output.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        return format!("ERR invalid output name: {}", output);
+    }
+    let pending = state_dir().join("display-pending");
+    if pending.exists() { return "ERR a display change is already pending; run keep or revert first".to_string(); }
+    if field_of(output, "name").is_empty() { return format!("ERR no output called \"{}\"", output); }
+    if field_of(output, "disabled") == "true" { return format!("ERR {} is off; turn it on first", output); }
+
+    let st = match read_state(output) { Some(s) => s, None => return format!("ERR no output called \"{}\"", output) };
+
+    let mut value = value.clone();
+    let old = match key.as_str() {
+        "scale" => {
+            let ladder = ["1", "1.25", "1.5", "1.6", "2", "3", "4"];
+            if !ladder.contains(&value.as_str()) { return "ERR scale must be one of: 1 1.25 1.5 1.6 2 3 4".to_string(); }
+            st.0.clone()
+        }
+        "transform" => {
+            let idx = match parse_transform(&value) {
+                Some(i) => i,
+                None => return "ERR transform must be one of: normal 90 180 270 flipped flipped-90 flipped-180 flipped-270".to_string(),
+            };
+            value = idx.to_string();
+            st.1.clone()
+        }
+        "mode" => {
+            let v = value.strip_suffix("Hz").unwrap_or(&value).trim().to_string();
+            if !valid_mode(&v) { return "ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string(); }
+            value = v;
+            st.5.clone()
+        }
+        "position" => {
+            if !valid_position(&value) { return "ERR position must be auto, auto-left/right/up/down, or XxY".to_string(); }
+            st.4.clone()
+        }
+        _ => return "ERR try takes scale, transform, mode or position".to_string(),
+    };
+
+    let _ = std::fs::create_dir_all(state_dir());
+    let content = format!("{}\t{}\t{}\t{}\n", output, key, old, value);
+    if atomic_write(&pending, &content).is_err() { return "ERR could not write pending".to_string(); }
+
+    // arm timer
+    let _ = run("systemctl", &["--user", "stop", "anixie-display-revert.timer"]);
+    let mut args: Vec<String> = vec![
+        "--user".to_string(), "--quiet".to_string(), "--collect".to_string(),
+        "--unit=anixie-display-revert".to_string(),
+        "--on-active=15".to_string(),
+    ];
+    if let Ok(v) = std::env::var("HYPRLAND_INSTANCE_SIGNATURE") { args.push(format!("--setenv=HYPRLAND_INSTANCE_SIGNATURE={}", v)); }
+    if let Ok(v) = std::env::var("XDG_RUNTIME_DIR") { args.push(format!("--setenv=XDG_RUNTIME_DIR={}", v)); }
+    if let Ok(v) = std::env::var("XDG_STATE_HOME") { args.push(format!("--setenv=XDG_STATE_HOME={}", v)); }
+    if let Ok(v) = std::env::var("HOME") { args.push(format!("--setenv=HOME={}", v)); }
+    args.push("--".to_string());
+    args.push("alexie".to_string());
+    args.push("monitors".to_string());
+    args.push("revert".to_string());
+    let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let (code, _, err) = run("systemd-run", &a);
+    if code != 0 {
+        let _ = std::fs::remove_file(&pending);
+        return format!("ERR could not schedule the automatic revert: {}", err.trim());
+    }
+
+    let apply_val = value.clone();
+    if let Err(e) = apply_change(output, key, &apply_val) { return format!("ERR {}", e); }
+
+    format!("{} {} {} (reverting in 15s unless kept)", output, key, value)
+}
 
 fn transform_index(name: &str) -> Option<usize> {
     let names = ["normal","90","180","270","flipped","flipped-90","flipped-180","flipped-270"];
@@ -521,99 +848,6 @@ fn recover_action() -> String {
     }
     "OK".to_string()
 }
-
-fn try_action(args: &[String]) -> String {
-    // args: [output, key, value]
-    if args.len() < 3 { return "ERR try needs an output, a setting and a value".to_string(); }
-    let output = &args[0]; let key = &args[1]; let value = &args[2];
-    if output.is_empty() || !output.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
-        return format!("ERR invalid output name: {}", output);
-    }
-    let pending = state_dir().join("display-pending");
-    if pending.exists() { return "ERR a display change is already pending; run keep or revert first".to_string(); }
-    if field_of(output, "name").is_empty() { return format!("ERR no output called \"{}\"", output); }
-    if field_of(output, "disabled") == "true" { return format!("ERR {} is off; turn it on first", output); }
-
-    let st = match read_state(output) { Some(s) => s, None => return format!("ERR no output called \"{}\"", output) };
-    let old = match key.as_str() {
-        "scale" => {
-            // validate
-            let n: f64 = match value.parse() { Ok(v) => v, Err(_) => return "ERR scale must be one of ladder".to_string() };
-            if n <= 0.0 { return "ERR scale must be > 0".to_string(); }
-            // check ladder
-            let ladder = ["1","1.25","1.5","1.6","2","3","4"];
-            if !ladder.contains(&value.as_str()) { return "ERR scale must be one of: 1 1.25 1.5 1.6 2 3 4".to_string(); }
-            st.0.clone()
-        }
-        "transform" => {
-            match transform_index(value) { Some(_) => {}, None => return "ERR transform must be one of: normal 90 180 270 flipped flipped-90 flipped-180 flipped-270".to_string() }
-            st.1.clone()
-        }
-        "mode" => {
-            let v = value.trim_end_matches("Hz");
-            match v {
-                "preferred" | "highres" | "highrr" | "maxwidth" => {}
-                _ => {
-                    // check WxH[@R]
-                    if !v.chars().all(|c| c.is_ascii_digit() || c=='x' || c=='@' || c=='.') { return "ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string(); }
-                }
-            }
-            st.5.clone()
-        }
-        "position" => {
-            match value.as_str() {
-                "auto" | "auto-left" | "auto-right" | "auto-up" | "auto-down" => {}
-                _ => {
-                    if !value.chars().all(|c| c.is_ascii_digit() || c=='x' || c=='-') { return "ERR position must be auto, auto-left/right/up/down, or XxY".to_string(); }
-                }
-            }
-            st.4.clone()
-        }
-        _ => return "ERR try takes scale, transform, mode or position".to_string(),
-    };
-
-    // write pending file: output \t key \t old \t value
-    let _ = std::fs::create_dir_all(state_dir());
-    let tmp = format!("/tmp/monitors.{}", std::process::id());
-    let content = format!("{}\t{}\t{}\t{}\n", output, key, old, value);
-    if std::fs::write(&tmp, &content).is_err() { return "ERR could not write pending".to_string(); }
-    if std::fs::rename(&tmp, &pending).is_err() { let _ = std::fs::remove_file(&tmp); return "ERR could not write pending".to_string(); }
-
-    // arm timer: systemd-run --user --on-active=15s alexie monitors revert
-    let _ = run("systemctl", &["--user", "stop", "anixie-display-revert.timer"]);
-    let mut args: Vec<String> = vec![
-        "--user".to_string(), "--quiet".to_string(), "--collect".to_string(),
-        "--unit=anixie-display-revert".to_string(),
-        "--on-active=15".to_string(),
-    ];
-    if let Ok(v) = std::env::var("HYPRLAND_INSTANCE_SIGNATURE") { args.push(format!("--setenv=HYPRLAND_INSTANCE_SIGNATURE={}", v)); }
-    if let Ok(v) = std::env::var("XDG_RUNTIME_DIR") { args.push(format!("--setenv=XDG_RUNTIME_DIR={}", v)); }
-    if let Ok(v) = std::env::var("XDG_STATE_HOME") { args.push(format!("--setenv=XDG_STATE_HOME={}", v)); }
-    if let Ok(v) = std::env::var("HOME") { args.push(format!("--setenv=HOME={}", v)); }
-    args.push("--".to_string());
-    args.push("alexie".to_string());
-    args.push("monitors".to_string());
-    args.push("revert".to_string());
-    let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, _, err) = run("systemd-run", &a);
-    if code != 0 {
-        let _ = std::fs::remove_file(&pending);
-        return format!("ERR could not schedule the automatic revert: {}", err.trim());
-    }
-
-    // apply change
-    let apply_val = if key == "transform" {
-        transform_index(value).unwrap().to_string()
-    } else if key == "mode" {
-        value.trim_end_matches("Hz").to_string()
-    } else {
-        value.clone()
-    };
-    if let Err(e) = apply_change(output, key, &apply_val) { return format!("ERR {}", e); }
-
-    format!("{} {} {} (reverting in 15s unless kept)", output, key, value)
-}
-
 fn keep_action() -> String {
     let pending = state_dir().join("display-pending");
     if !pending.exists() { return "no display change to keep".to_string(); }
@@ -622,7 +856,8 @@ fn keep_action() -> String {
     let output = parts.next().unwrap_or("").to_string();
     let key = parts.next().unwrap_or("").to_string();
     let _old = parts.next().unwrap_or("").to_string();
-    let new = parts.next().unwrap_or("").to_string();
+    let mut new = parts.next().unwrap_or("").to_string();
+    if key == "mode" { new = new.strip_suffix("Hz").unwrap_or(&new).to_string(); }
     if output.is_empty() || key.is_empty() { let _ = std::fs::remove_file(&pending); return "ERR could not read pending".to_string(); }
 
     let _ = run("systemctl", &["--user", "stop", "anixie-display-revert.timer"]);
@@ -638,7 +873,8 @@ fn revert_action() -> String {
     let mut parts = content.trim().split('\t');
     let output = parts.next().unwrap_or("").to_string();
     let key = parts.next().unwrap_or("").to_string();
-    let old = parts.next().unwrap_or("").to_string();
+    let mut old = parts.next().unwrap_or("").to_string();
+    if key == "mode" { old = old.strip_suffix("Hz").unwrap_or(&old).to_string(); }
     let _new = parts.next().unwrap_or("").to_string();
 
     if field_of(&output, "name").is_empty() {
@@ -748,14 +984,12 @@ fn workspaces_sync_action() -> String {
 
     // write map to workspace_file
     let _ = std::fs::create_dir_all(state_dir());
-    let tmp = format!("/tmp/monitors.{}", std::process::id());
     let (_code, _out, _) = run("jq", &["-S", ".", "-n", &format!("--argjson m {} '$m'", map)]);
     // simpler: pipe map through jq -S .
     let script = format!("printf '%s' {} | jq -S .", shell_quote(&map));
     let (_, sorted, _) = run("sh", &["-c", &script]);
     let to_write = if sorted.trim().is_empty() { map.clone() } else { sorted.trim().to_string() };
-    let _ = std::fs::write(&tmp, format!("{}\n", to_write));
-    let _ = std::fs::rename(&tmp, workspace_file());
+    let _ = atomic_write(&workspace_file(), &format!("{}\n", to_write));
 
     // build lua and hyprctl eval
     let mut lua = String::new();
