@@ -128,7 +128,12 @@ fn capture_text() -> String {
     }
 
     // copy to clipboard
-    let _ = run("sh", &["-c", &format!("printf '%s' {} | {}", shell_quote(&text), wl_copy())]);
+    let _ = std::process::Command::new("sh")
+        .args(["-c", &format!("printf '%s' {} | {}", shell_quote(&text), wl_copy())])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
     let first = text.lines().next().unwrap_or("").chars().take(60).collect::<String>();
     let _ = run(&notify(), &["-a", "capture", "-G", "f0c5", "Text copied", &first]);
     "OK".to_string()
@@ -158,7 +163,12 @@ fn capture_qr() -> String {
         return "ERR no qr".to_string();
     }
 
-    let _ = run("sh", &["-c", &format!("printf '%s' {} | {} --sensitive", shell_quote(&result), wl_copy())]);
+    let _ = std::process::Command::new("sh")
+        .args(["-c", &format!("printf '%s' {} | {} --sensitive", shell_quote(&result), wl_copy())])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
     let _ = run(&notify(), &["-a", "capture", "-G", "f0c5", "QR code copied", "The decoded value is on the clipboard."]);
     "OK".to_string()
 }

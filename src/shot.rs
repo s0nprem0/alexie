@@ -238,7 +238,12 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
     match dest {
         "copy" => {
             // Try to put it on the clipboard; on failure, save instead.
-            let (code, _, _) = run("sh", &["-c", &format!("{} --type image/png < {}", wl_copy(), tmp_scratch)]);
+            let code = std::process::Command::new("sh")
+                .args(["-c", &format!("{} --type image/png < {}", wl_copy(), tmp_scratch)])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
             if code == 0 {
                 let _ = std::fs::write(&last_capture_file, format!("{}\n", tmp_scratch));
                 release_freeze();
@@ -264,7 +269,12 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
             let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
             release_freeze();
             let mut copied = true;
-            let (code, _, _) = run("sh", &["-c", &format!("{} --type image/png < {}", wl_copy(), candidate)]);
+            let code = std::process::Command::new("sh")
+                .args(["-c", &format!("{} --type image/png < {}", wl_copy(), candidate)])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
             if code != 0 { copied = false; }
             let ipc_action = if copied { "preview" } else { "previewCopyFailed" };
             let (ipc_code, _, _) = run("quickshell", &["ipc", "call", "capture", ipc_action, &candidate]);
