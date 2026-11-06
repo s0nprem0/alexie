@@ -6,8 +6,7 @@ A Rust daemon + CLI that replaces anixie's shell-script tooling (`monitors`, `sh
 
 Proof of concept. Currently implements:
 - `ping`
-- `monitors status`
-- `monitors set <output> <key> <value>` (scale, transform, disabled, mirror, position, mode)
+- `monitors` fully (status, list, set, scale, brightness, identify, wake, recover, internal, mirror, lid, try, keep, revert; workspaces sync/show/reset delegated)
 
 The daemon listens on `$XDG_RUNTIME_DIR/alexie/daemon.sock` and uses a newline-delimited text protocol. State files are read from `$XDG_STATE_HOME/anixie/` (shared with anixie).
 
@@ -57,7 +56,7 @@ Over time, anixie's Hyprland binds and shell IPC would call `alexie <cmd>` inste
 
 ## Roadmap
 
-- Port `monitors` fully (lid, brightness, workspaces sync).
+- Port `monitors` fully (workspaces sync/show/reset still delegated to bash).
 - Port `theme`/`wallpaper` (palette math, matugen, caching).
 - Port `shot`/capture (freeze, region, window snap, swappy hand-off).
 - Port `menu` (fast, structured, no jq).
