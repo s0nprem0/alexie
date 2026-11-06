@@ -52,7 +52,36 @@ fn uid() -> String {
     if code == 0 { out.trim().to_string() } else { "1000".to_string() }
 }
 
+fn ensure_watcher() {
+    // If a clipboard-watch process is already running, do nothing.
+    let running = std::process::Command::new("pgrep")
+        .args(["-f", "clipboard-watch"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if running {
+        return;
+    }
+    // Try to start it if the binary is available.
+    let bin = resolve_tool("clipboard-watch");
+    if bin == "clipboard-watch" {
+        // verify it exists
+        let exists = std::process::Command::new("sh")
+            .args(["-c", "command -v clipboard-watch >/dev/null 2>&1"])
+            .status().map(|s| s.success()).unwrap_or(false);
+        if !exists { return; }
+    }
+    let _ = std::process::Command::new(&bin)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+}
+
 pub fn handle(args: &[String]) -> String {
+    ensure_watcher();
     let sub = args.get(0).map(|s| s.as_str()).unwrap_or("");
     match sub {
         "--copy" => {
@@ -172,5 +201,42 @@ pub fn handle(args: &[String]) -> String {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn make_fake(dir: &str, name: &str, body: &str) {
+        let path = format!("{}/{}", dir, name);
+        fs::write(&path, body).unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+    }
+
+    #[test]
+    fn list_returns_cliphist_output() {
+        let dir = "/tmp/opencode/clip-test-bin";
+        let _ = fs::remove_dir_all(dir);
+        fs::create_dir_all(dir).unwrap();
+        make_fake(dir, "cliphist", "#!/bin/sh\ncase \"$1\" in list) printf '1\\thello\\n2\\tworld\\n';; esac\n");
+        make_fake(dir, "wl-copy", "#!/bin/sh\ncat >/dev/null\n");
+        make_fake(dir, "file", "#!/bin/sh\nprintf 'text/plain\\n'\n");
+        make_fake(dir, "quickshell", "#!/bin/sh\nprintf 'ok\\n'\n");
+
+        std::env::set_var("CLIPHIST", format!("{}/cliphist", dir));
+        std::env::set_var("WL_COPY", format!("{}/wl-copy", dir));
+        std::env::set_var("FILE", format!("{}/file", dir));
+        std::env::set_var("QUICKSHELL", format!("{}/quickshell", dir));
+        let old_path = std::env::var("PATH").unwrap_or_default();
+        std::env::set_var("PATH", format!("{}:{}", dir, old_path));
+
+        let out = handle(&["--list".to_string()]);
+        assert!(out.contains("hello"), "got: {}", out);
+        assert!(out.contains("world"), "got: {}", out);
     }
 }
