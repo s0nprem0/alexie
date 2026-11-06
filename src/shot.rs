@@ -1,4 +1,4 @@
-use crate::proc::{run, shell_quote};
+use crate::proc::run;
 use std::env;
 use std::fs;
 use std::process::Command;
@@ -96,7 +96,7 @@ pub fn handle(args: &[String]) -> String {
         if last.is_empty() || !std::path::Path::new(&last).exists() {
             return "ERR no previous capture".to_string();
         }
-        let _ = run("sh", &["-c", &format!("printf '%s' {} | {} --type text/plain", shell_quote(&last), wl_copy())]);
+        let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &last, &[]);
         let _ = run("notify-send", &["-a", "capture", "-u", "low", "-t", "2000", "Copied path", &last]);
         return last;
     }
@@ -109,7 +109,7 @@ pub fn handle(args: &[String]) -> String {
             return "ERR no previous capture".to_string();
         }
         let uri = format!("file://{}", last);
-        let _ = run("sh", &["-c", &format!("printf '%s' {} | {} --type text/uri-list", shell_quote(&uri), wl_copy())]);
+        let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/uri-list", &uri, &[]);
         let _ = run("notify-send", &["-a", "capture", "-u", "low", "-t", "2000", "Copied file URI", &uri]);
         return uri;
     }
@@ -257,14 +257,13 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
             let _ = fs::write(&last_capture_file, format!("{}\n", output));
             release_freeze();
             let _ = fs::remove_file(&tmp_scratch);
-            let cmd = format!("{} --type image/png < {}", wl_copy(), output);
-            let _ = run("sh", &["-c", &cmd]);
+            let _ = crate::proc::copy_file_to_clipboard(&wl_copy(), "image/png", std::path::Path::new(&output));
             let _ = run("quickshell", &["ipc", "call", "capture", "preview", &output]);
             format!("Saved {}", output)
         }
         "copy" => {
             // Try to put it on the clipboard; on failure, save instead.
-            let code = crate::proc::run_sh_status(&format!("{} --type image/png < {}", wl_copy(), tmp_scratch));
+            let code = crate::proc::copy_file_to_clipboard(&wl_copy(), "image/png", std::path::Path::new(&tmp_scratch));
             if code == 0 {
                 let _ = std::fs::write(&last_capture_file, format!("{}\n", tmp_scratch));
                 release_freeze();
@@ -290,7 +289,7 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
             let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
             release_freeze();
             let mut copied = true;
-            let code = crate::proc::run_sh_status(&format!("{} --type image/png < {}", wl_copy(), candidate));
+            let code = crate::proc::copy_file_to_clipboard(&wl_copy(), "image/png", std::path::Path::new(&candidate));
             if code != 0 { copied = false; }
             let ipc_action = if copied { "preview" } else { "previewCopyFailed" };
             let (ipc_code, _, _) = run("quickshell", &["ipc", "call", "capture", ipc_action, &candidate]);
@@ -356,6 +355,7 @@ mod tests {
     use super::*;
     #[test]
     fn shell_quote_basic() {
+        use crate::proc::shell_quote;
         assert_eq!(shell_quote("abc"), "'abc'");
         assert_eq!(shell_quote("a'b"), "'a'\\''b'");
     }

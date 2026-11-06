@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{find_in_path, run, run_stdout_to_file, run_with_stdin};
 use std::env;
 
 fn cliphist() -> String { env::var("CLIPHIST").unwrap_or_else(|_| "cliphist".to_string()) }
@@ -12,40 +12,69 @@ fn runtime_dir() -> std::path::PathBuf {
 }
 
 fn preview_dir() -> std::path::PathBuf {
-    runtime_dir().join(format!("anixie-clipboard-{}", uid()))
+    // XDG_RUNTIME_DIR is already per-user (tmpfs, 0700), so the old
+    // `anixie-clipboard-{uid}` suffix via a shell-out to `id -u`
+    // added nothing. Keep a fixed name; old uid-suffixed previews
+    // are orphaned and recreated on demand.
+    runtime_dir().join("anixie-clipboard")
 }
 
-fn uid() -> String {
-    let (code, out, _) = run("id", &["-u"]);
-    if code == 0 { out.trim().to_string() } else { "1000".to_string() }
+fn watcher_pid_file() -> std::path::PathBuf {
+    // Matches legacy clipboard-watch.sh's pid file, which already
+    // implements the single-instance guard (kill -0 + trap).
+    runtime_dir().join("clipboard-watch.pid")
+}
+
+fn pid_alive(pid: i64) -> bool {
+    // kill -0 is the portable alive check the legacy script uses.
+    let (code, _, _) = run("kill", &["-0", &pid.to_string()]);
+    code == 0
 }
 
 fn ensure_watcher() {
-    // If a clipboard-watch process is already running, do nothing.
-    let running = std::process::Command::new("pgrep")
-        .args(["-f", "clipboard-watch"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    if running {
+    // If the watcher recorded in the legacy pid file is still
+    // alive, do nothing. This is more precise than
+    // `pgrep -f clipboard-watch`, whose full-command-line match can
+    // hit the pgrep process itself or unrelated shells mentioning
+    // the name, and it avoids spawning a second watcher racing the
+    // first to write the pid file (the daemon is threaded now).
+    if let Ok(s) = std::fs::read_to_string(watcher_pid_file()) {
+        if let Ok(pid) = s.trim().parse::<i64>() {
+            if pid_alive(pid) {
+                return;
+            }
+        }
+    }
+    // Try to start it if the binary is available (PATH search, no sh).
+    let path = env::var("PATH").unwrap_or_default();
+    if find_in_path("clipboard-watch", &path).is_none() {
         return;
     }
-    // Try to start it if the binary is available.
-    let bin = resolve_tool("clipboard-watch");
-    if bin == "clipboard-watch" {
-        // verify it exists
-        let exists = std::process::Command::new("sh")
-            .args(["-c", "command -v clipboard-watch >/dev/null 2>&1"])
-            .status().map(|s| s.success()).unwrap_or(false);
-        if !exists { return; }
-    }
-    let _ = std::process::Command::new(&bin)
+    let _ = std::process::Command::new("clipboard-watch")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
+}
+
+fn cliphist_list() -> (i32, String, String) {
+    run(&cliphist(), &["list"])
+}
+
+fn cliphist_delete_line(line: &str) -> (i32, String, String) {
+    // cliphist delete reads the full list line on stdin. Feeding it
+    // via run_with_stdin avoids `printf … | cliphist delete` shell
+    // quoting for lines containing quotes or $.
+    run_with_stdin(&cliphist(), &["delete"], &format!("{}\n", line))
+}
+
+fn list_ids(list: &str) -> Vec<(String, String)> {
+    list.lines()
+        .filter_map(|line| {
+            let tab = line.find('\t')?;
+            Some((line[..tab].to_string(), line.to_string()))
+        })
+        .collect()
 }
 
 pub fn handle(args: &[String]) -> String {
@@ -55,48 +84,53 @@ pub fn handle(args: &[String]) -> String {
         "--copy" => {
             if args.len() < 2 { return "ERR usage: clipboard --copy ID".to_string(); }
             let id = &args[1];
-            // decode to temp
-            let tmp = crate::proc::tmp_file("clip", "").to_string_lossy().to_string();
-            // cliphist decode writes to stdout; capture via sh
-            let (code, _out, err) = run("sh", &["-c", &format!("{} decode {} > {}", cliphist(), id, tmp)]);
+            // Decode binary-safely to a temp file (no shell redirect,
+            // no lossy UTF-8 conversion of image data).
+            let tmp = crate::proc::tmp_file("clip", "");
+            let (code, err) = run_stdout_to_file(&cliphist(), &["decode", id], &tmp);
             if code != 0 { let _ = std::fs::remove_file(&tmp); return format!("ERR {}", err.trim()); }
             if std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) == 0 {
                 let _ = std::fs::remove_file(&tmp);
                 return format!("ERR entry {} is empty", id);
             }
-            // snapshot existing history ids so we can drop the duplicate that
-            // copying re-creates via the clipboard watcher.
-            let (code, before, _) = run(&cliphist(), &["list"]);
+            // Snapshot existing history ids so we can drop the duplicate
+            // that copying re-creates via the clipboard watcher.
+            let (code, before, _) = cliphist_list();
             let mut before_ids = std::collections::HashSet::new();
             if code == 0 {
-                for line in before.lines() {
-                    if let Some(id) = line.split('\t').next() {
-                        before_ids.insert(id.to_string());
-                    }
+                for (bid, _) in list_ids(&before) {
+                    before_ids.insert(bid);
                 }
             }
             // mime
-            let (code, mime, _) = run(&file_bin(), &["-b", "--mime-type", "--", &tmp]);
+            let tmp_str = tmp.to_string_lossy().to_string();
+            let (code, mime, _) = run(&file_bin(), &["-b", "--mime-type", "--", &tmp_str]);
             let mime = if code == 0 { mime.trim().to_string() } else { "application/octet-stream".to_string() };
-            // copy
-            let _ = crate::proc::run_sh_status(&format!("{} --type {} < {}", wl_copy(), mime, tmp));
+            // copy, binary-safe, no shell redirection
+            let _ = crate::proc::copy_file_to_clipboard(&wl_copy(), &mime, &tmp);
             let _ = std::fs::remove_file(&tmp);
-            // Give the watcher a moment to store the new selection, then drop
-            // any entry that did not exist before so the history stays clean.
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            let (code, after, _) = run(&cliphist(), &["list"]);
-            if code == 0 {
-                for line in after.lines() {
-                    let mut parts = line.split('\t');
-                    let id = parts.next().unwrap_or("");
-                    if id.is_empty() || before_ids.contains(id) { continue; }
-                    let _ = run("sh", &["-c", &format!("printf '%s\\n' {} | {} delete", shell_quote(line), cliphist())]);
+            // Poll for the watcher-created duplicate instead of a
+            // fixed sleep(300ms) followed by deleting *every* new
+            // entry: a slower watcher left the duplicate behind, and
+            // a user copy inside the window was deleted as if it were
+            // ours. Poll up to ~2s, delete only the first new entry.
+            for _ in 0..20 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let (code, after, _) = cliphist_list();
+                if code != 0 { break; }
+                let mut found = false;
+                for (aid, line) in list_ids(&after) {
+                    if before_ids.contains(&aid) { continue; }
+                    let _ = cliphist_delete_line(&line);
+                    found = true;
+                    break;
                 }
+                if found { break; }
             }
             "OK".to_string()
         }
         "--list" => {
-            let (code, out, err) = run(&cliphist(), &["list"]);
+            let (code, out, err) = cliphist_list();
             if code != 0 { format!("ERR {}", err.trim()) } else { out.trim_end().to_string() }
         }
         "--text" => {
@@ -114,7 +148,7 @@ pub fn handle(args: &[String]) -> String {
                 use std::os::unix::fs::PermissionsExt;
                 let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
             }
-            let (code, list, _) = run(&cliphist(), &["list"]);
+            let (code, list, _) = cliphist_list();
             if code != 0 { return "ERR cliphist list failed".to_string(); }
             let mut out = String::new();
             let mut count = 0;
@@ -125,10 +159,8 @@ pub fn handle(args: &[String]) -> String {
                 let preview = &line[tab+1..];
                 if !preview.starts_with("[[ binary data ") { continue; }
                 let path = dir.join(id);
-                // decode
-                let (dcode, _, _) = run("sh", &["-c", &format!("{} decode {} > {} 2>/dev/null", cliphist(), id, path.display())]);
+                let (dcode, _) = run_stdout_to_file(&cliphist(), &["decode", id], &path);
                 if dcode == 0 {
-                    // check non-empty
                     if std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) > 0 {
                         out.push_str(&format!("{}\t{}\n", id, path.display()));
                         count += 1;
@@ -144,7 +176,7 @@ pub fn handle(args: &[String]) -> String {
             let dir = preview_dir().join("previews");
             let _ = std::fs::create_dir_all(&dir);
             let path = dir.join(format!("preview-{}", args[1]));
-            let (code, _, err) = run("sh", &["-c", &format!("{} decode {} > {} 2>/dev/null", cliphist(), args[1], path.display())]);
+            let (code, err) = run_stdout_to_file(&cliphist(), &["decode", &args[1]], &path);
             if code != 0 { let _ = std::fs::remove_file(&path); return format!("ERR {}", err.trim()); }
             if std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) == 0 {
                 let _ = std::fs::remove_file(&path);
@@ -155,19 +187,15 @@ pub fn handle(args: &[String]) -> String {
         "--delete" => {
             if args.len() < 2 { return "ERR usage: clipboard --delete ID".to_string(); }
             let id = &args[1];
-            let (code, list, _) = run(&cliphist(), &["list"]);
+            let (code, list, _) = cliphist_list();
             if code != 0 { return "ERR cliphist list failed".to_string(); }
-            // find the line
-            let mut found_line = String::new();
-            for line in list.lines() {
-                let tab = match line.find('\t') { Some(t) => t, None => continue };
-                if &line[..tab] == id {
-                    found_line = line.to_string();
-                    break;
-                }
-            }
+            let found_line = list_ids(&list)
+                .into_iter()
+                .find(|(lid, _)| lid == id)
+                .map(|(_, line)| line)
+                .unwrap_or_default();
             if found_line.is_empty() { return "OK".to_string(); }
-            let (code, _, err) = run("sh", &["-c", &format!("printf '%s\\n' {} | {} delete", shell_quote(&found_line), cliphist())]);
+            let (code, _, err) = cliphist_delete_line(&found_line);
             if code != 0 { format!("ERR {}", err.trim()) } else { "OK".to_string() }
         }
         "--wipe" => {
@@ -194,6 +222,12 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::Mutex;
+
+    // Env-mutating tests in this module race with each other if run
+    // in parallel (Rust runs tests on threads by default). Serialize
+    // them on a shared lock.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn make_fake(dir: &str, name: &str, body: &str) {
         let path = format!("{}/{}", dir, name);
@@ -204,7 +238,17 @@ mod tests {
     }
 
     #[test]
+    fn list_ids_parses_tab_separated() {
+        let ids = list_ids("1\thello\n2\tworld\nno-tab-line\n");
+        assert_eq!(ids, vec![
+            ("1".to_string(), "1\thello".to_string()),
+            ("2".to_string(), "2\tworld".to_string()),
+        ]);
+    }
+
+    #[test]
     fn list_returns_cliphist_output() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let dir = "/tmp/opencode/clip-test-bin";
         let _ = fs::remove_dir_all(dir);
         fs::create_dir_all(dir).unwrap();
@@ -223,5 +267,27 @@ mod tests {
         let out = handle(&["--list".to_string()]);
         assert!(out.contains("hello"), "got: {}", out);
         assert!(out.contains("world"), "got: {}", out);
+    }
+
+    #[test]
+    fn delete_uses_stdin_not_shell() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        // cliphist delete reads the full line on stdin; a line with
+        // shell metacharacters must arrive intact, not be executed.
+        let dir = "/tmp/opencode/clip-delete-test";
+        let _ = fs::remove_dir_all(dir);
+        fs::create_dir_all(dir).unwrap();
+        let log = format!("{}/delete-stdin.log", dir);
+        make_fake(dir, "cliphist", &format!(
+            "#!/bin/sh\ncase \"$1\" in list) printf '9\\t$(touch {}/pwned)\\n';; delete) cat > {};; esac\n",
+            dir, log
+        ));
+        std::env::set_var("CLIPHIST", format!("{}/cliphist", dir));
+        let out = handle(&["--delete".to_string(), "9".to_string()]);
+        assert_eq!(out, "OK", "got: {out}");
+        assert!(!std::path::Path::new(&format!("{}/pwned", dir)).exists(), "shell injection via delete line");
+        let fed = std::fs::read_to_string(&log).unwrap_or_default();
+        assert!(fed.contains("9\t"), "got: {fed}");
+        let _ = fs::remove_dir_all(dir);
     }
 }

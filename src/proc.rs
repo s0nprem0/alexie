@@ -100,6 +100,7 @@ pub fn run_with_stdin(cmd: &str, args: &[&str], stdin_data: &str) -> (i32, Strin
     }
 }
 
+#[allow(dead_code)]
 pub fn shell_quote(s: &str) -> String {
     let mut out = String::from("'");
     for c in s.chars() {
@@ -111,6 +112,7 @@ pub fn shell_quote(s: &str) -> String {
 
 
 /// Run a shell snippet for its exit status only, with stdio nulled.
+#[allow(dead_code)]
 pub fn run_sh_status(script: &str) -> i32 {
     use std::process::Stdio;
     Command::new("sh")
@@ -146,6 +148,68 @@ pub fn tmp_file(prefix: &str, ext: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(name)
 }
 
+/// Copy `data` to the clipboard via wl-copy, without a shell.
+/// `extra` carries flags like `--sensitive`.
+pub fn copy_text_to_clipboard(wl_bin: &str, mime: &str, data: &str, extra: &[&str]) -> i32 {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut cmd = Command::new(wl_bin);
+    cmd.args(extra);
+    cmd.args(["--type", mime]);
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(_) => return -1,
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(data.as_bytes());
+    }
+    child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1)
+}
+
+/// Copy a file's bytes to the clipboard via wl-copy, binary-safe
+/// and without shell redirection (`wl-copy --type T < file`).
+pub fn copy_file_to_clipboard(wl_bin: &str, mime: &str, path: &std::path::Path) -> i32 {
+    use std::process::Stdio;
+    let file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return -1,
+    };
+    Command::new(wl_bin)
+        .args(["--type", mime])
+        .stdin(Stdio::from(file))
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.code().unwrap_or(-1))
+        .unwrap_or(-1)
+}
+
+/// Run `cmd args`, writing its (binary) stdout to `dest`.
+/// Used for `cliphist decode`, where `run()`'s lossy UTF-8
+/// conversion would corrupt image data and shell redirection
+/// (`cmd decode ID > path`) left `id`/`path` unquoted.
+pub fn run_stdout_to_file(cmd: &str, args: &[&str], dest: &std::path::Path) -> (i32, String) {
+    let file = match std::fs::File::create(dest) {
+        Ok(f) => f,
+        Err(e) => return (-1, e.to_string()),
+    };
+    match Command::new(resolve_tool(cmd))
+        .args(args)
+        .stdout(std::process::Stdio::from(file))
+        .stderr(std::process::Stdio::piped())
+        .output()
+    {
+        Ok(o) => (
+            o.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&o.stderr).to_string(),
+        ),
+        Err(e) => (-1, e.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +227,69 @@ mod tests {
     fn shell_quote_basic() {
         assert_eq!(shell_quote("abc"), "'abc'");
         assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
+
+    #[test]
+    fn copy_text_and_file_to_clipboard() {
+        // A fake wl-copy that ignores --type and discards stdin,
+        // proving both helpers feed stdin without a shell. (`cat`
+        // itself rejects --type, so it cannot stand in here.)
+        let dir0 = std::env::temp_dir().join(format!(
+            "alexie-copy-wl-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir0).unwrap();
+        let wl = dir0.join("wl-copy");
+        std::fs::write(&wl, "#!/bin/sh\ncat >/dev/null\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&wl, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let wl = wl.to_string_lossy().to_string();
+        // Retry a spawn failure: under full-suite parallelism the
+        // process table can transiently refuse a fork (EMFILE), which
+        // surfaces as -1 from the helper. Production callers treat
+        // -1 as "clipboard unavailable" and fall back to saving.
+        let mut code = -1;
+        for _ in 0..5 {
+            code = copy_text_to_clipboard(&wl, "text/plain", "hello", &[]);
+            if code == 0 { break; }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert_eq!(code, 0);
+        let _ = std::fs::remove_dir_all(&dir0);
+        let dir = std::env::temp_dir().join(format!(
+            "alexie-copy-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("data.bin");
+        std::fs::write(&f, b"\x89PNG\r\n\x1a\n").unwrap();
+        // recreate the fake wl-copy (dir0 was the bindir; rebuild
+        // a fresh one here for the file-copy case)
+        let dir1 = dir.join("bin");
+        std::fs::create_dir_all(&dir1).unwrap();
+        let wl1 = dir1.join("wl-copy");
+        std::fs::write(&wl1, "#!/bin/sh\ncat >/dev/null\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&wl1, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut code = -1;
+        for _ in 0..5 {
+            code = copy_file_to_clipboard(&wl1.to_string_lossy(), "image/png", &f);
+            if code == 0 { break; }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert_eq!(code, 0);
+        let (code, _err) = run_stdout_to_file("cat", &[&f.to_string_lossy().to_string()], &dir.join("out.bin"));
+        assert_eq!(code, 0);
+        assert_eq!(std::fs::read(dir.join("out.bin")).unwrap(), b"\x89PNG\r\n\x1a\n");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

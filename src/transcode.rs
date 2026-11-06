@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, run_with_stdin, shell_quote};
+use crate::proc::{resolve_tool, run, run_with_stdin};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -211,8 +211,7 @@ pub fn handle(args: &[String]) -> String {
     if !std::path::Path::new(&output).exists() { return "ERR conversion produced nothing".to_string(); }
 
     let uri = format!("file://{}", output);
-    let cmd = format!("printf '%s\\n' {} | {} --type text/uri-list", shell_quote(&uri), wl_copy());
-    let _ = run("sh", &["-c", &cmd]);
+    let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/uri-list", &format!("{}\n", uri), &[]);
     format!("Saved {}", output)
 }
 

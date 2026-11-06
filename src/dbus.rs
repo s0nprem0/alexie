@@ -205,7 +205,7 @@ impl ScreentimeIface {
     fn show(&self) -> String { crate::screentime::handle(&["show".to_string()]) }
     fn json(&self) -> String { crate::screentime::handle(&["json".to_string()]) }
     fn reset(&self) -> String { crate::screentime::handle(&["reset".to_string()]) }
-    fn path(&self) -> String { crate::screentime::handle(&["path".to_string()]) }
+    fn path(&self) -> String { crate::screentime::db_path().to_string_lossy().to_string() }
 }
 
 // ---------- helpers ----------

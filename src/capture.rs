@@ -1,4 +1,4 @@
-use crate::proc::{run, shell_quote};
+use crate::proc::run;
 use std::env;
 
 
@@ -102,7 +102,7 @@ fn capture_text() -> String {
     }
 
     // copy to clipboard
-    let _ = crate::proc::run_sh_status(&format!("printf '%s' {} | {}", shell_quote(&text), wl_copy()));
+    let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &text, &[]);
     let first = text.lines().next().unwrap_or("").chars().take(60).collect::<String>();
     let _ = run(&notify(), &["-a", "capture", "-G", "f0c5", "Text copied", &first]);
     "OK".to_string()
@@ -122,7 +122,22 @@ fn capture_qr() -> String {
     let (code, _, err) = run(&grim_bin, &["-g", &geom, &tmp]);
     if code != 0 { release_freeze(&freeze_file); let _ = std::fs::remove_file(&tmp); return format!("ERR grim: {}", err.trim()); }
 
-    let (_code, result, _) = run("sh", &["-c", &format!("{} -q --raw -Sdisable -Sqrcode.enable - < {}", zbar_bin, tmp)]);
+    let (_code, result, _) = {
+        // zbarimg reads the image on stdin; feed the temp file
+        // directly instead of `zbarimg … - < tmp` via a shell.
+        use std::process::Stdio;
+        let res = std::fs::File::open(&tmp).ok().and_then(|f| {
+            std::process::Command::new(&zbar_bin)
+                .args(["-q", "--raw", "-Sdisable", "-Sqrcode.enable", "-"])
+                .stdin(Stdio::from(f))
+                .output()
+                .ok()
+        });
+        match res {
+            Some(o) => (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).to_string(), String::from_utf8_lossy(&o.stderr).to_string()),
+            None => (-1, String::new(), String::new()),
+        }
+    };
     let _ = std::fs::remove_file(&tmp);
     release_freeze(&freeze_file);
 
@@ -132,7 +147,7 @@ fn capture_qr() -> String {
         return "ERR no qr".to_string();
     }
 
-    let _ = crate::proc::run_sh_status(&format!("printf '%s' {} | {} --sensitive", shell_quote(&result), wl_copy()));
+    let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &result, &["--sensitive"]);
     let _ = run(&notify(), &["-a", "capture", "-G", "f0c5", "QR code copied", "The decoded value is on the clipboard."]);
     "OK".to_string()
 }

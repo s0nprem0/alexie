@@ -275,8 +275,11 @@ fn set_wallpaper(raw: &str) -> String {
         }
     } else {
         // image: try swww
-        let swww = Command::new("sh").args(["-c", "command -v swww"]).output();
-        let has_swww = swww.map(|o| o.status.success()).unwrap_or(false);
+        let has_swww = crate::proc::find_in_path(
+            "swww",
+            &std::env::var("PATH").unwrap_or_default(),
+        )
+        .is_some();
         if has_swww {
             let status = Command::new("swww").args(["img", &path_str]).status();
             match status {
@@ -427,6 +430,11 @@ pub fn handle(args: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Both env-mutating tests below set XDG_STATE_HOME; running in
+    // parallel they race and read each other's temp state dir.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn current_theme_no_panic() {
@@ -461,6 +469,7 @@ mod tests {
 
     #[test]
     fn pause_resume_are_idempotent_not_toggle() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // Regression: the old pause_toggle() flipped on every call,
         // so `resume` when not paused would pause, and `pause`
         // twice would resume. Exercise the file flag via handle()
@@ -520,6 +529,7 @@ mod tests {
 
     #[test]
     fn wallpaper_current_parses_wallpapers_json() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // Exercises the serde_json path in handle("current") without
         // a jq shell-out: with a temp state dir containing a theme
         // and wallpapers.json, current returns the fallback path.

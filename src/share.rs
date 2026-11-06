@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{resolve_tool, run};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -39,17 +39,15 @@ pub fn handle(args: &[String]) -> String {
         "uri" => {
             let last = match last_capture() { Ok(l) => l, Err(e) => { let _ = run("notify-send", &["-a", "capture", "-u", "normal", "-t", "3000", "Share", &e]); return format!("ERR {}", e); } };
             let uri = format!("file://{}", last);
-            let cmd = format!("printf '%s\\n' {} | {} --type text/uri-list", shell_quote(&uri), wl_copy());
-            let (code, _, err) = run("sh", &["-c", &cmd]);
-            if code != 0 { return format!("ERR (exit {}) {}", code, err.trim()); }
+            let code = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/uri-list", &format!("{}\n", uri), &[]);
+            if code != 0 { return format!("ERR (exit {}) wl-copy failed", code); }
             notify("Copied file URI");
             uri
         }
         "path" => {
             let last = match last_capture() { Ok(l) => l, Err(e) => { let _ = run("notify-send", &["-a", "capture", "-u", "normal", "-t", "3000", "Share", &e]); return format!("ERR {}", e); } };
-            let cmd = format!("printf '%s' {} | {} --type text/plain", shell_quote(&last), wl_copy());
-            let (code, _, err) = run("sh", &["-c", &cmd]);
-            if code != 0 { return format!("ERR (exit {}) {}", code, err.trim()); }
+            let code = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &last, &[]);
+            if code != 0 { return format!("ERR (exit {}) wl-copy failed", code); }
             notify("Copied path");
             last
         }

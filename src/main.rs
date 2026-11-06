@@ -90,7 +90,7 @@ const COMMANDS: &[(&str, &str, &str)] = &[
     ("theme", "palette listing and switching.", "  list, current, next, prev, state, list --json\n  switch THEME\n  export, doctor, vars, render\n"),
     ("wallpaper", "wallpaper set/watch and library.", "  current, status, set FILE, list, library\n  next, prev, rotate, pause, resume\n  watch, watch-foreground\n"),
     ("power", "power profiles and charge limits.", "  show|status, apply, set ac|battery PROFILE\n  charge full|limit N\n  watch\n"),
-    ("screentime", "screen time tracking.", "  show, json, reset, path, panel, watch\n"),
+    ("screentime", "screen time tracking.", "  show, json, reset, path, db-path, panel, watch\n"),
     ("focus", "focus mode.", "  start, stop, extend, status\n"),
     ("snapshot", "btrfs snapshots.", "  create, list, restore, prune\n"),
     ("webapp", "websites as apps.", "  add, list, remove\n"),

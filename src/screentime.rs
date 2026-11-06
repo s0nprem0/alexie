@@ -19,6 +19,13 @@ pub fn db_path() -> std::path::PathBuf {
     state_dir().join("screentime.db")
 }
 
+/// Today's daily JSON file, as legacy `screentime path` reports
+/// ($state/YYYY-MM-DD.json). The shell (ScreentimeStore) reads this
+/// file; the DB is the tracker's private store.
+pub fn daily_file_path() -> std::path::PathBuf {
+    state_dir().join("screentime").join(format!("{}.json", today_string()))
+}
+
 fn now_secs() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
@@ -165,7 +172,8 @@ pub fn handle(args: &[String]) -> String {
     // query like `path` or the shell's `panel` click does not create
     // (and migrate) the database as a side effect.
     match sub {
-        "path" => return db_path().to_string_lossy().to_string(),
+        "path" => return daily_file_path().to_string_lossy().to_string(),
+        "db-path" => return db_path().to_string_lossy().to_string(),
         "watch" => return "Run `alexie screentime watch` directly (it blocks).".to_string(),
         "panel" => {
             // Match legacy screentime.sh panel: enable the bar widget
@@ -266,10 +274,13 @@ mod tests {
 
     #[test]
     fn path_does_not_need_db() {
-        // `path` returns the DB path without opening the DB; it is
-        // handled before open_db() so it cannot fail with a DB error.
+        // `path` returns today's daily JSON file (legacy semantics)
+        // without opening the DB; `db-path` returns the DB file.
         let out = handle(&["path".to_string()]);
-        assert!(out.ends_with("screentime.db"), "got: {out}");
+        assert!(out.ends_with(".json"), "got: {out}");
+        assert!(out.contains("screentime"), "got: {out}");
+        let db = handle(&["db-path".to_string()]);
+        assert!(db.ends_with("screentime.db"), "got: {db}");
     }
 
     #[test]
