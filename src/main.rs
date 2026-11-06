@@ -2,6 +2,7 @@ mod dbus;
 mod capture;
 mod menu;
 mod monitors;
+mod shot;
 mod theme;
 mod toggle;
 mod wallpaper;
@@ -55,6 +56,10 @@ pub fn handle_command(cmd: &str) -> String {
         Some("wallpaper") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             wallpaper::handle(&args)
+        }
+        Some("shot") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            shot::handle(&args)
         }
         Some("capture") | Some("capture-text") | Some("capture-qr") => {
             let mut args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();

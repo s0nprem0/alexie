@@ -128,7 +128,8 @@ pub fn handle(args: &[String]) -> String {
         _ => {
             // delegate to bash toggle for unknown
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let (code, out, err) = run("toggle", &a);
+            let tool = crate::resolve_tool("toggle");
+            let (code, out, err) = run(&tool, &a);
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }
         }
