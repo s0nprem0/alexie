@@ -2,6 +2,14 @@ use crate::proc::run;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+
+/// Shared lock for tests that mutate XDG_STATE_HOME. Tests in
+/// `wallpaper::tests` and `wallpaper::playback::tests` used to
+/// declare separate ENV_LOCK statics, so they ran in parallel
+/// and stomped on each other's env (pause flag wrote to the
+/// wrong tmp dir).
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub(crate) fn state_dir() -> PathBuf {
     // Legacy wallpaper/theme state is $XDG_STATE_HOME/anixie/theme
     // (anixie.theme.stateDir), e.g. wallpapers.json, wallpaper.$theme

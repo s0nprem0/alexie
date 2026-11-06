@@ -157,9 +157,7 @@ pub(crate) fn watch_wallpapers(args: &[String]) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use crate::wallpaper::state::ENV_LOCK;
 
     #[test]
     fn video_status_logic() {

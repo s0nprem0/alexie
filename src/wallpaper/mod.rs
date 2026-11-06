@@ -116,9 +116,7 @@ pub fn handle(args: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use state::ENV_LOCK;
 
     #[test]
     fn wallpaper_current_parses_wallpapers_json() {
