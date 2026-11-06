@@ -41,16 +41,35 @@ fn read_pid() -> Option<i32> {
     fs::read_to_string(pid_file()).ok()?.trim().parse().ok()
 }
 
-fn is_recording() -> bool {
+/// Arguments selecting the recorder to act on, like legacy
+/// record.sh: `--pid N` when the saved pid is still a recorder
+/// (checked via record-process, which verifies /proc/<pid>/exe),
+/// otherwise empty (any recorder of ours). This avoids the old
+/// `kill -0 $pid` / `pgrep -f gpu-screen-recorder` checks, which
+/// false-positive on a reused pid or any process mentioning the
+/// recorder name in its full command line.
+fn recorder_args() -> Vec<String> {
     if let Some(pid) = read_pid() {
-        // check process alive
-        if Command::new("kill").args(["-0", &pid.to_string()]).status().map(|s| s.success()).unwrap_or(false) {
-            return true;
+        let rp = resolve_tool("record-process");
+        if Command::new(&rp)
+            .args(["--pid", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            return vec!["--pid".to_string(), pid.to_string()];
         }
     }
-    // fallback: any gsr recorder running
-    let (code, _, _) = run("pgrep", &["-f", "gpu-screen-recorder"]);
-    code == 0
+    vec![]
+}
+
+fn is_recording() -> bool {
+    let rp = resolve_tool("record-process");
+    Command::new(&rp)
+        .args(recorder_args())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 fn shell_recording(state: &str) {
@@ -67,14 +86,7 @@ fn record_status() -> String {
 
 fn stop_recording() -> String {
     let _ = fs::write(cancel_file(), "");
-    // find recorder pid
-    let pid = read_pid();
-    let mut rec_args: Vec<String> = Vec::new();
-    if let Some(p) = pid {
-        if Command::new(resolve_tool("record-process")).args(["--pid", &p.to_string()]).status().map(|s| s.success()).unwrap_or(false) {
-            rec_args = vec!["--pid".to_string(), p.to_string()];
-        }
-    }
+    let rec_args = recorder_args();
     let rp = resolve_tool("record-process");
     // signal INT
     let mut args: Vec<String> = rec_args.clone();
@@ -309,5 +321,22 @@ pub fn handle(args: &[String]) -> String {
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_is_recording_or_stopped() {
+        let out = handle(&["--status".to_string()]);
+        assert!(matches!(out.as_str(), "recording" | "stopped"), "got: {out}");
+    }
+
+    #[test]
+    fn unknown_argument_is_err() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown argument:"), "got: {out}");
     }
 }

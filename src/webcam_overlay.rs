@@ -70,6 +70,9 @@ fn overlay_address() -> String {
 }
 
 fn start_overlay(size: &str, device: &str, target: &str) -> String {
+    if !matches!(size, "small" | "medium" | "large") {
+        return format!("ERR unknown size: {} (try: small, medium, large)", size);
+    }
     let mut dev = device.to_string();
     if dev.is_empty() {
         let devs = list_devices();
@@ -180,24 +183,17 @@ fn resize(action: &str) -> String {
     let large_h = (scale_h * 27 + 40) / 80;
     let large_w = (large_h * 8 + 4) / 9;
 
-    let mut target_w = cur_w;
-    let mut target_h = cur_h;
-    match action {
-        "small" => { target_w = small_w; target_h = small_h; }
-        "medium" | "reset" => { target_w = medium_w; target_h = medium_h; }
-        "large" => { target_w = large_w; target_h = large_h; }
-        "smaller" => {
-            if large_w < cur_w { target_w = large_w; target_h = large_h; }
-            else if medium_w < cur_w { target_w = medium_w; target_h = medium_h; }
-            else if small_w < cur_w { target_w = small_w; target_h = small_h; }
-        }
-        "larger" => {
-            if small_w > cur_w { target_w = small_w; target_h = small_h; }
-            else if medium_w > cur_w { target_w = medium_w; target_h = medium_h; }
-            else if large_w > cur_w { target_w = large_w; target_h = large_h; }
-        }
-        _ => {}
-    }
+    let (target_w, target_h) = match resize_target(
+        action,
+        cur_w,
+        cur_h,
+        (small_w, small_h),
+        (medium_w, medium_h),
+        (large_w, large_h),
+    ) {
+        Some(v) => v,
+        None => (cur_w, cur_h),
+    };
 
     let mut target_x = anchor_x + anchor_w - target_w - MARGIN;
     let mut target_y = anchor_y + anchor_h - target_h - MARGIN;
@@ -205,9 +201,41 @@ fn resize(action: &str) -> String {
     if target_y < anchor_y + MARGIN { target_y = anchor_y + MARGIN; }
 
     let window = format!("address:{}", address);
-    let _ = run(&hyprctl(), &["dispatch", &format!("hl.dsp.window.resize({{ window = \"{}\", x = {}, y = {} }})", window, target_w, target_h)]);
-    let _ = run(&hyprctl(), &["dispatch", &format!("hl.dsp.window.move({{ window = \"{}\", x = {}, y = {} }})", window, target_x, target_y)]);
+    // Lua dispatcher first, classic dispatcher fallback, like legacy.
+    let (code, _, _) = run(&hyprctl(), &["dispatch", &format!("hl.dsp.window.resize({{ window = \"{}\", x = {}, y = {} }})", window, target_w, target_h)]);
+    if code != 0 {
+        let _ = run(&hyprctl(), &["dispatch", &format!("resizewindowpixel exact {} {},{}", target_w, target_h, window)]);
+    }
+    let (code, _, _) = run(&hyprctl(), &["dispatch", &format!("hl.dsp.window.move({{ window = \"{}\", x = {}, y = {} }})", window, target_x, target_y)]);
+    if code != 0 {
+        let _ = run(&hyprctl(), &["dispatch", &format!("movewindowpixel exact {} {},{}", target_x, target_y, window)]);
+    }
     "OK".to_string()
+}
+
+/// Pure resize-target calculation, mirroring legacy resize():
+/// ladder heights are rounded to nearest (not truncated) so the
+/// three steps stay even. Returns (w, h) for an action, or None
+/// for an unknown action.
+fn resize_target(action: &str, cur_w: i64, cur_h: i64, small: (i64, i64), medium: (i64, i64), large: (i64, i64)) -> Option<(i64, i64)> {
+    match action {
+        "small" => Some(small),
+        "medium" | "reset" => Some(medium),
+        "large" => Some(large),
+        "smaller" => {
+            if large.0 < cur_w { Some(large) }
+            else if medium.0 < cur_w { Some(medium) }
+            else if small.0 < cur_w { Some(small) }
+            else { Some((cur_w, cur_h)) }
+        }
+        "larger" => {
+            if small.0 > cur_w { Some(small) }
+            else if medium.0 > cur_w { Some(medium) }
+            else if large.0 > cur_w { Some(large) }
+            else { Some((cur_w, cur_h)) }
+        }
+        _ => None,
+    }
 }
 
 pub fn handle(args: &[String]) -> String {
@@ -223,6 +251,9 @@ pub fn handle(args: &[String]) -> String {
         "stop" => stop_overlay(),
         "resize" => {
             let action = args.get(1).cloned().unwrap_or_else(|| "reset".to_string());
+            if !matches!(action.as_str(), "small" | "medium" | "large" | "smaller" | "larger" | "reset") {
+                return format!("ERR unknown resize action: {} (try: small, medium, large, smaller, larger, reset)", action);
+            }
             resize(&action)
         }
         _ => {
@@ -232,5 +263,37 @@ pub fn handle(args: &[String]) -> String {
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resize_target_ladder() {
+        let small = (100, 90);
+        let medium = (200, 180);
+        let large = (300, 270);
+        assert_eq!(resize_target("small", 0, 0, small, medium, large), Some(small));
+        assert_eq!(resize_target("reset", 999, 999, small, medium, large), Some(medium));
+        assert_eq!(resize_target("bogus", 0, 0, small, medium, large), None);
+        // smaller/larger step by width, skipping the current size
+        assert_eq!(resize_target("smaller", 250, 225, small, medium, large), Some(medium));
+        assert_eq!(resize_target("larger", 150, 135, small, medium, large), Some(medium));
+        // already smallest/largest: unchanged
+        assert_eq!(resize_target("smaller", 100, 90, small, medium, large), Some((100, 90)));
+    }
+
+    #[test]
+    fn resize_unknown_action_is_err() {
+        let out = handle(&["resize".to_string(), "bogus".to_string()]);
+        assert!(out.starts_with("ERR unknown resize action:"), "got: {out}");
+    }
+
+    #[test]
+    fn start_unknown_size_is_err() {
+        let out = handle(&["start".to_string(), "huge".to_string()]);
+        assert!(out.starts_with("ERR unknown size:"), "got: {out}");
     }
 }
