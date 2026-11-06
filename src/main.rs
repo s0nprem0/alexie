@@ -1,6 +1,8 @@
 mod dbus;
 mod capture;
 mod focus;
+mod snapshot;
+mod webapp;
 mod menu;
 mod monitors;
 mod power;
@@ -68,6 +70,14 @@ pub fn handle_command(cmd: &str) -> String {
         Some("focus") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             focus::handle(&args)
+        }
+        Some("snapshot") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            snapshot::handle(&args)
+        }
+        Some("webapp") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            webapp::handle(&args)
         }
         Some("power") | Some("powerprofile") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
