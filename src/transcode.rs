@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::{resolve_tool, run, run_with_stdin, shell_quote};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -16,10 +16,37 @@ fn quote(s: &str) -> String {
 fn media_type(path: &str) -> Option<&'static str> {
     let (code, out, _) = run("file", &["-b", "--mime-type", path]);
     if code != 0 { return None; }
-    let mime = out.trim();
+    media_type_from_mime(out.trim())
+}
+
+fn media_type_from_mime(mime: &str) -> Option<&'static str> {
     if mime.starts_with("image/") { Some("picture") }
     else if mime.starts_with("video/") { Some("video") }
     else { None }
+}
+
+/// Validate format/resolution for a media type, mirroring legacy
+/// transcode_picture/transcode_video `die` messages. Pure, so it
+/// can be tested without faking a `file` binary on PATH.
+fn validate_format_resolution(mtype: &str, format: &str, resolution: &str) -> Result<(), String> {
+    let (formats, sizes) = format_size_options(mtype);
+    if !formats.contains(&format) {
+        return Err(format!(
+            "ERR unknown {} format: {} (try: {})",
+            mtype,
+            format,
+            formats.join(", ")
+        ));
+    }
+    if !sizes.contains(&resolution) {
+        return Err(format!(
+            "ERR unknown {} size: {} (try: {})",
+            mtype,
+            resolution,
+            sizes.join(", ")
+        ));
+    }
+    Ok(())
 }
 
 fn output_path(input: &str, format: &str, resolution: &str) -> String {
@@ -27,6 +54,39 @@ fn output_path(input: &str, format: &str, resolution: &str) -> String {
     let base = std::path::Path::new(input).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let stem = base.rsplit_once('.').map(|(s, _)| s).unwrap_or(&base);
     format!("{}/{}-{}.{}", dir, stem, resolution, format)
+}
+
+/// Formats/sizes offered in the picker, mirroring legacy transcode.sh.
+fn format_size_options(mtype: &str) -> (&'static [&'static str], &'static [&'static str]) {
+    if mtype == "picture" {
+        (&["jpg", "png"], &["high", "medium", "low"])
+    } else {
+        (&["mp4", "gif"], &["4k", "1080p", "720p"])
+    }
+}
+
+/// Hand a list to the picker and return its result.
+///
+/// Legacy flow: pick reads stdin, exits immediately, and the shell
+/// later runs `--on-select` in a *new* transcode process which
+/// prompts for the next answer. There is no synchronous selection
+/// to read back — the old code waited on pick's stdout (always
+/// empty) and returned "OK" without ever converting, and it never
+/// fed the candidates to pick at all.
+fn prompt_pick(title: &str, options: &[&str], on_select: &str) -> String {
+    prompt_pick_with("pick", title, options, on_select)
+}
+
+/// Same as prompt_pick, with an explicit picker binary — the test
+/// passes a fake absolute path instead of mutating PATH, which
+/// races with other tests that also mutate PATH.
+fn prompt_pick_with(pick_bin: &str, title: &str, options: &[&str], on_select: &str) -> String {
+    let entries = options.join("\n") + "\n";
+    let (code, _out, err) = run_with_stdin(pick_bin, &["--title", title, "--on-select", on_select], &entries);
+    if code != 0 {
+        return format!("ERR (exit {}) {}", code, err.trim());
+    }
+    "OK".to_string()
 }
 
 fn transcode_picture(input: &str, format: &str, resolution: &str, output: &str) -> bool {
@@ -102,8 +162,7 @@ pub fn handle(args: &[String]) -> String {
         candidates.sort();
         candidates.dedup();
         if candidates.is_empty() { return "ERR no pictures or videos found".to_string(); }
-        let _ = run("pick", &["--title", "transcode", "--on-select", &format!("transcode {}", quote("{}"))]);
-        return candidates.join("\n");
+        return prompt_pick("transcode", &candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>(), &format!("transcode {}", quote("{}")));
     }
 
     if !std::path::Path::new(&input).is_file() {
@@ -114,25 +173,31 @@ pub fn handle(args: &[String]) -> String {
         None => return format!("ERR not a picture or a video: {}", input),
     };
 
-    let mut format = format;
-    let mut resolution = resolution;
+    let (formats, sizes) = format_size_options(mtype);
 
     if format.is_empty() {
-        let (code, out, _) = run("pick", &["--title", "format", "--on-select", &format!("transcode {} {}", quote(&input), "{}")]);
-        if code == 0 {
-            let sel = out.trim().to_string();
-            if !sel.is_empty() { format = sel; }
-        }
-        if format.is_empty() { return "OK".to_string(); }
+        return prompt_pick(
+            "format",
+            formats,
+            &format!("transcode {} {{}}", quote(&input)),
+        );
     }
 
     if resolution.is_empty() {
-        let (code, out, _) = run("pick", &["--title", "size", "--on-select", &format!("transcode {} {} {}", quote(&input), quote(&format), "{}")]);
-        if code == 0 {
-            let sel = out.trim().to_string();
-            if !sel.is_empty() { resolution = sel; }
+        // Validate format before offering sizes, like legacy's
+        // transcode_picture/transcode_video die on unknown format.
+        if !formats.contains(&format.as_str()) {
+            return format!("ERR unknown {} format: {} (try: {})", mtype, format, formats.join(", "));
         }
-        if resolution.is_empty() { return "OK".to_string(); }
+        return prompt_pick(
+            "size",
+            sizes,
+            &format!("transcode {} {} {{}}", quote(&input), quote(&format)),
+        );
+    }
+
+    if let Err(e) = validate_format_resolution(mtype, &format, &resolution) {
+        return e;
     }
 
     let output = output_path(&input, &format, &resolution);
@@ -161,5 +226,73 @@ mod tests {
     fn output_path_basic() {
         assert_eq!(output_path("/tmp/demo.mp4", "mp4", "1080p"), "/tmp/demo-1080p.mp4");
         assert_eq!(output_path("/tmp/demo.png", "jpg", "low"), "/tmp/demo-low.jpg");
+    }
+
+    #[test]
+    fn format_size_options_match_legacy() {
+        assert_eq!(format_size_options("picture").0, ["jpg", "png"]);
+        assert_eq!(format_size_options("picture").1, ["high", "medium", "low"]);
+        assert_eq!(format_size_options("video").0, ["mp4", "gif"]);
+        assert_eq!(format_size_options("video").1, ["4k", "1080p", "720p"]);
+    }
+
+    #[test]
+    fn prompt_pick_feeds_stdin_and_returns_ok() {
+        // Regression: the old code ran pick without stdin and waited
+        // for a selection on stdout, so it never converted anything.
+        // With a fake `pick` binary (absolute path, no PATH mutation
+        // which would race other tests) that records its stdin, the
+        // entries must arrive and the result must be OK (the shell
+        // runs --on-select later, in a new process).
+        let dir = std::env::temp_dir().join(format!(
+            "alexie-transcode-pick-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("pick-stdin.log");
+        let pick = dir.join("pick");
+        std::fs::write(
+            &pick,
+            format!("#!/bin/sh\ncat > {}\n", log.display()),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&pick, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let out = prompt_pick_with(
+            &pick.to_string_lossy(),
+            "format",
+            &["jpg", "png"],
+            "transcode '/tmp/x.png' {}",
+        );
+        assert_eq!(out, "OK", "got: {out}");
+        let fed = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(fed, "jpg\npng\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn transcode_unknown_format_is_usage() {
+        // Pure validation, no PATH faking needed.
+        assert_eq!(
+            validate_format_resolution("picture", "bogusfmt", "low"),
+            Err("ERR unknown picture format: bogusfmt (try: jpg, png)".to_string())
+        );
+        assert_eq!(
+            validate_format_resolution("video", "mp4", "bogus"),
+            Err("ERR unknown video size: bogus (try: 4k, 1080p, 720p)".to_string())
+        );
+        assert!(validate_format_resolution("picture", "jpg", "low").is_ok());
+        assert_eq!(media_type_from_mime("image/png"), Some("picture"));
+        assert_eq!(media_type_from_mime("video/mp4"), Some("video"));
+        assert_eq!(media_type_from_mime("application/octet-stream"), None);
     }
 }

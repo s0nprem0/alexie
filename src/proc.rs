@@ -25,6 +25,41 @@ pub fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
     }
 }
 
+/// Run a command with `stdin_data` fed to its stdin.
+///
+/// Legacy `pick` reads its entries from stdin and exits as soon as
+/// the shell has taken the request — the shell, not this process,
+/// runs `--on-select` later. Callers must not wait for a selection
+/// on stdout. `Command::output()` (used by `run`) discards stdin,
+/// so piped entries were lost.
+pub fn run_with_stdin(cmd: &str, args: &[&str], stdin_data: &str) -> (i32, String, String) {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = match Command::new(resolve_tool(cmd))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return (-1, String::new(), e.to_string()),
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(stdin_data.as_bytes());
+        // stdin drops here, signalling EOF to the child
+    }
+    match child.wait_with_output() {
+        Ok(o) => {
+            let code = o.status.code().unwrap_or(-1);
+            let out = String::from_utf8_lossy(&o.stdout).to_string();
+            let err = String::from_utf8_lossy(&o.stderr).to_string();
+            (code, out, err)
+        }
+        Err(e) => (-1, String::new(), e.to_string()),
+    }
+}
+
 pub fn shell_quote(s: &str) -> String {
     let mut out = String::from("'");
     for c in s.chars() {
@@ -46,4 +81,24 @@ pub fn run_sh_status(script: &str) -> i32 {
         .status()
         .map(|s| s.code().unwrap_or(-1))
         .unwrap_or(-1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_with_stdin_feeds_input() {
+        // `cat` echoes its stdin, proving the data actually reaches
+        // the child (the old `run` discards stdin).
+        let (code, out, _err) = run_with_stdin("cat", &[], "hello\nworld\n");
+        assert_eq!(code, 0);
+        assert_eq!(out, "hello\nworld\n");
+    }
+
+    #[test]
+    fn shell_quote_basic() {
+        assert_eq!(shell_quote("abc"), "'abc'");
+        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
+    }
 }
