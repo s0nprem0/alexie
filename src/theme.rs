@@ -7,11 +7,15 @@ use std::path::PathBuf;
 const THEMES_JSON: &str = include_str!("../themes.json");
 
 fn state_dir() -> PathBuf {
+    // Legacy theme state lives in $XDG_STATE_HOME/anixie/theme
+    // (anixie.theme.stateDir), not directly in .../anixie. Reading
+    // .../anixie/current always missed, so `theme current` returned
+    // "none" even with a theme set.
     let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
         let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         format!("{}/.local/state", home)
     });
-    PathBuf::from(state).join("anixie")
+    PathBuf::from(state).join("anixie").join("theme")
 }
 
 /// Theme names from the embedded palette file, sorted.
@@ -660,5 +664,17 @@ mod tests {
         // the result is an ERR string, not a hang / stack overflow.
         let out = delegate(&s(&["__bogus_subcommand__"]));
         assert!(out.starts_with("ERR"), "got: {out}");
+    }
+
+    #[test]
+    fn state_dir_is_anixie_theme() {
+        // Legacy anixie.theme.stateDir is $XDG_STATE_HOME/anixie/theme;
+        // reading .../anixie/current always missed.
+        let dir = state_dir();
+        assert!(
+            dir.ends_with(std::path::Path::new("anixie").join("theme")),
+            "got: {}",
+            dir.display()
+        );
     }
 }
