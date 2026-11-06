@@ -105,7 +105,8 @@ fn current_theme() -> String {
 
 fn delegate(args: &[String]) -> String {
     let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) = run("theme", &a);
+    let tool = crate::resolve_tool("theme");
+    let (code, out, err) = run(&tool, &a);
     if code == 0 {
         if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
     } else {

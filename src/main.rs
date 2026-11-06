@@ -1,5 +1,6 @@
 mod dbus;
 mod capture;
+mod menu;
 mod monitors;
 mod theme;
 mod toggle;
@@ -23,6 +24,15 @@ fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
         }
         Err(e) => (-1, String::new(), e.to_string()),
     }
+}
+
+
+pub fn resolve_tool(name: &str) -> String {
+    // Prefer a "*-legacy" binary when present (installed alongside the alexie
+    // shim) so delegation does not recurse through the shim.
+    let legacy = format!("{}-legacy", name);
+    let (code, _, _) = run_tool("sh", &["-c", &format!("command -v {} >/dev/null 2>&1", legacy)]);
+    if code == 0 { legacy } else { name.to_string() }
 }
 
 fn socket_path() -> PathBuf {
@@ -58,11 +68,15 @@ pub fn handle_command(cmd: &str) -> String {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             toggle::handle(&args)
         }
+        Some("menu") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            menu::handle(&args)
+        }
         Some(tool) if ["shot", "record", "transcode", "capture-text", "capture-qr", "share",
                         "webcam-overlay", "clipboard", "emoji", "focus", "screentime",
-                        "toggle", "power", "snapshot", "webapp", "menu"].contains(&tool) => {
+                        "toggle", "power", "snapshot", "webapp"].contains(&tool) => {
             // Delegate to the installed bash tool until ported.
-            let (code, out, err) = run_tool(parts[0], &parts[1..]);
+            let (code, out, err) = run_tool(&resolve_tool(parts[0]), &parts[1..]);
             if code == 0 {
                 if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
             } else {

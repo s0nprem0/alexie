@@ -34,7 +34,8 @@ fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
 
 fn delegate(args: &[String]) -> String {
     let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) = run("wallpaper", &a);
+    let tool = crate::resolve_tool("wallpaper");
+    let (code, out, err) = run(&tool, &a);
     if code == 0 {
         if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
     } else {
