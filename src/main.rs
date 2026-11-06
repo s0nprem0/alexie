@@ -8,6 +8,20 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 
+use std::process::Command;
+
+fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
+    match Command::new(cmd).args(args).output() {
+        Ok(o) => {
+            let code = o.status.code().unwrap_or(-1);
+            let out = String::from_utf8_lossy(&o.stdout).to_string();
+            let err = String::from_utf8_lossy(&o.stderr).to_string();
+            (code, out, err)
+        }
+        Err(e) => (-1, String::new(), e.to_string()),
+    }
+}
+
 fn socket_path() -> PathBuf {
     let runtime = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
     PathBuf::from(runtime).join("alexie").join("daemon.sock")
@@ -28,6 +42,18 @@ fn handle_command(cmd: &str) -> String {
         Some("wallpaper") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             wallpaper::handle(&args)
+        }
+        Some(tool) if ["shot", "record", "transcode", "capture-text", "capture-qr", "share",
+                        "webcam-overlay", "clipboard", "emoji", "focus", "screentime",
+                        "toggle", "power", "snapshot", "webapp", "menu"].contains(&tool) => {
+            // Delegate to the installed bash tool until ported.
+            let a: Vec<&str> = parts.iter().map(|s| *s).collect();
+            let (code, out, err) = run_tool(parts[0], &parts[1..]);
+            if code == 0 {
+                if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
+            } else {
+                format!("ERR (exit {}) {}", code, err.trim())
+            }
         }
         _ => format!("ERR unknown command: {}", cmd),
     }
