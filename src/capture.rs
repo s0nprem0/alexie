@@ -1,34 +1,8 @@
+use crate::proc::{resolve_tool, run, shell_quote};
 use std::env;
 use std::fs;
 use std::process::Command;
 
-
-fn resolve_tool(name: &str) -> String {
-    // Prefer *-legacy (bash impl) when daemon is enabled, so delegation never
-    // recurses through the alexie shim.
-    let legacy = format!("{}-legacy", name);
-    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
-    if std::process::Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
-        return legacy;
-    }
-    let check = format!("command -v {} >/dev/null 2>&1", name);
-    if std::process::Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
-        return name.to_string();
-    }
-    name.to_string()
-}
-
-fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
-    match Command::new(resolve_tool(cmd)).args(args).output() {
-        Ok(o) => {
-            let code = o.status.code().unwrap_or(-1);
-            let out = String::from_utf8_lossy(&o.stdout).to_string();
-            let err = String::from_utf8_lossy(&o.stderr).to_string();
-            (code, out, err)
-        }
-        Err(e) => (-1, String::new(), e.to_string()),
-    }
-}
 
 fn shot_pick() -> String {
     env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string())
@@ -183,11 +157,3 @@ fn release_freeze(path: &std::path::Path) {
     let _ = std::fs::remove_file(path);
 }
 
-fn shell_quote(s: &str) -> String {
-    let mut out = String::from("'");
-    for c in s.chars() {
-        if c == '\'' { out.push_str("'\\''"); } else { out.push(c); }
-    }
-    out.push('\'');
-    out
-}

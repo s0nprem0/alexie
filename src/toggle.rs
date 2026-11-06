@@ -1,33 +1,6 @@
+use crate::proc::{resolve_tool, run, shell_quote};
 use std::env;
-use std::process::Command;
 
-
-fn resolve_tool(name: &str) -> String {
-    // Prefer *-legacy (bash impl) when daemon is enabled, so delegation never
-    // recurses through the alexie shim.
-    let legacy = format!("{}-legacy", name);
-    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
-    if std::process::Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
-        return legacy;
-    }
-    let check = format!("command -v {} >/dev/null 2>&1", name);
-    if std::process::Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
-        return name.to_string();
-    }
-    name.to_string()
-}
-
-fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
-    match Command::new(resolve_tool(cmd)).args(args).output() {
-        Ok(o) => {
-            let code = o.status.code().unwrap_or(-1);
-            let out = String::from_utf8_lossy(&o.stdout).to_string();
-            let err = String::from_utf8_lossy(&o.stderr).to_string();
-            (code, out, err)
-        }
-        Err(e) => (-1, String::new(), e.to_string()),
-    }
-}
 
 fn hyprctl_temp() -> String {
     let (code, out, _) = run("hyprctl", &["hyprsunset", "temperature"]);
@@ -144,7 +117,7 @@ pub fn handle(args: &[String]) -> String {
         _ => {
             // delegate to bash toggle for unknown
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = crate::resolve_tool("toggle");
+            let tool = resolve_tool("toggle");
             let (code, out, err) = run(&tool, &a);
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }

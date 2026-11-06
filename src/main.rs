@@ -10,6 +10,7 @@ mod shortcuts;
 mod snapshot;
 mod webapp;
 mod menu;
+mod proc;
 mod monitors;
 mod power;
 mod power_watch;
@@ -27,23 +28,9 @@ use std::path::PathBuf;
 
 use std::process::Command;
 
-fn resolve_tool(name: &str) -> String {
-    // When the daemon is enabled, bash tools are renamed to *-legacy. Prefer the
-    // legacy binary so delegation never recurses through the alexie shim.
-    let legacy = format!("{}-legacy", name);
-    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
-    if Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
-        return legacy;
-    }
-    let check = format!("command -v {} >/dev/null 2>&1", name);
-    if Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
-        return name.to_string();
-    }
-    name.to_string()
-}
 
 fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
-    match Command::new(resolve_tool(cmd)).args(args).output() {
+    match Command::new(proc::resolve_tool(cmd)).args(args).output() {
         Ok(o) => {
             let code = o.status.code().unwrap_or(-1);
             let out = String::from_utf8_lossy(&o.stdout).to_string();
@@ -156,7 +143,7 @@ pub fn handle_command(cmd: &str) -> String {
                         "webcam-overlay", "clipboard", "emoji", "focus", "screentime",
                         "toggle", "power", "snapshot", "webapp"].contains(&tool) => {
             // Delegate to the installed bash tool until ported.
-            let (code, out, err) = run_tool(&resolve_tool(parts[0]), &parts[1..]);
+            let (code, out, err) = run_tool(&proc::resolve_tool(parts[0]), &parts[1..]);
             if code == 0 {
                 if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
             } else {

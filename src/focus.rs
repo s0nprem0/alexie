@@ -1,30 +1,8 @@
+use crate::proc::{resolve_tool, run, shell_quote};
 use std::env;
-use std::process::Command;
 
 fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
 
-
-fn resolve_tool(name: &str) -> String {
-    // Prefer *-legacy (bash impl) when daemon is enabled, so delegation never
-    // recurses through the alexie shim.
-    let legacy = format!("{}-legacy", name);
-    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
-    if std::process::Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
-        return legacy;
-    }
-    let check = format!("command -v {} >/dev/null 2>&1", name);
-    if std::process::Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
-        return name.to_string();
-    }
-    name.to_string()
-}
-
-fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
-    match Command::new(resolve_tool(cmd)).args(args).output() {
-        Ok(o) => (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).to_string(), String::from_utf8_lossy(&o.stderr).to_string()),
-        Err(e) => (-1, String::new(), e.to_string()),
-    }
-}
 
 pub fn handle(args: &[String]) -> String {
     let sub = args.get(0).map(|s| s.as_str()).unwrap_or("status");
