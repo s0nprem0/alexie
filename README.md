@@ -14,9 +14,9 @@ Substantially complete. Native (no bash delegation):
 - `snapshot`, `webapp` — ported.
 - `clipboard` — copy/list/text/image/delete/wipe/open.
 - `emoji`, `shortcuts`, `reminder`, `pick`, `menu` — thin wrappers.
-- `power` — show/apply/set/automation/charge (watch delegates to legacy bash).
+- `power` — fully ported including udev watcher (no bash delegation).
 
-Delegated to legacy bash (complex process/systemd management): `record`, `transcode`, `webcam-overlay`, `power watch`, `share`.
+Delegated to legacy bash (complex process/systemd management): `record`, `transcode`, `webcam-overlay`, `share`.
 
 The daemon listens on `$XDG_RUNTIME_DIR/alexie/daemon.sock` and exposes a DBus service (`org.alexie.Daemon`, typed methods/properties/signals). It also ships an `anixie` front-door binary replacing the bash dispatcher.
 
