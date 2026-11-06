@@ -71,6 +71,32 @@ fn format_seconds(total: i64) -> String {
     if hours > 0 { format!("{}h {}m", hours, mins) } else { format!("{}m", mins) }
 }
 
+fn write_daily_json(conn: &Connection) {
+    let day = {
+        let (code, out, _) = run("date", &["+%F"]);
+        if code == 0 { out.trim().to_string() } else { String::new() }
+    };
+    if day.is_empty() { return; }
+    let dir = state_dir().join("screentime");
+    let _ = fs::create_dir_all(&dir);
+    let file = dir.join(format!("{}.json", day));
+    let ts = today_start();
+    let mut apps = serde_json::Map::new();
+    let mut total: i64 = 0;
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT app_class, SUM(duration) FROM sessions WHERE start_time >= ?1 GROUP BY app_class",
+    ) {
+        if let Ok(iter) = stmt.query_map(params![ts], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
+            for (k, v) in iter.filter_map(|r| r.ok()) {
+                apps.insert(k, serde_json::json!(v));
+                total += v;
+            }
+        }
+    }
+    let obj = serde_json::json!({"date": day, "apps": apps, "idle": 0, "active": total});
+    let _ = fs::write(&file, obj.to_string());
+}
+
 pub fn watch() {
     let conn = match open_db() {
         Ok(c) => c,
@@ -126,6 +152,7 @@ pub fn watch() {
                 current = None;
             }
         }
+        write_daily_json(&conn);
         thread::sleep(Duration::from_secs(2));
     }
 }

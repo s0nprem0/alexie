@@ -154,7 +154,7 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
         let filter = r#"if .at == null or .size == null then empty else "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])" end"#;
         let script = format!("printf '%s' {} | jq -r '{}'", shell_quote(&out), filter);
         let (code, g, _) = run("sh", &["-c", &script]);
-        if code != 0 || g.trim().is_empty() { return "ERR no focused window to capture".to_string(); }
+        if code != 0 || g.trim().is_empty() { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No focused window."]); return "ERR no focused window to capture".to_string(); }
         g.trim().to_string()
     } else if mode == "fullscreen" {
         // focused monitor geometry: 0,0 WxH
@@ -163,16 +163,16 @@ fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
         let filter = r#"[.[] | select(.focused == true)][0] | "\(.x),\(.y) \(.width)x\(.height)""#;
         let script = format!("printf '%s' {} | jq -r '{}'", shell_quote(&out), filter);
         let (code, g, _) = run("sh", &["-c", &script]);
-        if code != 0 || g.trim().is_empty() { return "ERR no focused monitor".to_string(); }
+        if code != 0 || g.trim().is_empty() { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No focused monitor."]); return "ERR no focused monitor".to_string(); }
         g.trim().to_string()
     } else {
         // region / windows: use shot-pick
         let picker_mode = if mode == "windows" { "windows" } else { "region" };
         let sp = shot_pick();
         let (code, g, err) = run(&sp, &[picker_mode, "--keep-freeze"]);
-        if code != 0 { return format!("ERR pick: {}", err.trim()); }
+        if code != 0 { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", &format!("Could not pick region: {}", err.trim())]); return format!("ERR pick: {}", err.trim()); }
         let g = g.trim().to_string();
-        if g.is_empty() { return "ERR no region".to_string(); }
+        if g.is_empty() { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No region selected."]); return "ERR no region".to_string(); }
         g
     };
 
