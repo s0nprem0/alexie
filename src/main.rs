@@ -3,6 +3,7 @@ mod anixie;
 mod capture;
 mod clipboard;
 mod color;
+mod config;
 mod emoji;
 mod focus;
 mod fmt;

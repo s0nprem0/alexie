@@ -135,6 +135,31 @@ impl ThemeIface {
     async fn changed(ctxt: &zbus::SignalContext<'_>, name: &str) -> zbus::Result<()>;
 }
 
+// ---------- Power interface ----------
+pub struct PowerIface;
+
+#[interface(name = "org.alexie.Power1")]
+impl PowerIface {
+    fn show(&self) -> String {
+        crate::power::handle(&["show".to_string()])
+    }
+    fn apply(&self) -> String {
+        crate::power::handle(&["apply".to_string()])
+    }
+    fn set(&self, source: &str, profile: &str) -> String {
+        crate::power::handle(&["set".to_string(), source.to_string(), profile.to_string()])
+    }
+    fn charge(&self) -> String {
+        crate::power::handle(&["charge".to_string()])
+    }
+    #[zbus(property)]
+    fn source(&self) -> String {
+        // parse first line of show
+        crate::power::handle(&["show".to_string()])
+            .lines().next().unwrap_or("").to_string()
+    }
+}
+
 // ---------- helpers ----------
 
 fn theme_current() -> String {
@@ -191,6 +216,9 @@ pub fn run_dbus_server() {
     }
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ThemeIface) {
         eprintln!("dbus: register ThemeIface failed: {}", e);
+    }
+    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", PowerIface) {
+        eprintln!("dbus: register PowerIface failed: {}", e);
     }
     let _ = CONN.set(conn.clone());
     eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme interfaces");

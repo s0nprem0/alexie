@@ -110,6 +110,8 @@ fn home_dir() -> PathBuf {
 
 fn presets_dir() -> PathBuf {
     if let Ok(v) = env::var("THEME_PRESETS_DIR") { return PathBuf::from(v); }
+    let cfg = crate::config::get_str(&["theme", "presets_dir"], "");
+    if !cfg.is_empty() { return PathBuf::from(cfg); }
     home_dir().join(".config/alexie/presets")
 }
 

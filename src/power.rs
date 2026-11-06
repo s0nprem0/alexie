@@ -17,14 +17,14 @@ fn ppd() -> String { env::var("PPD").unwrap_or_else(|_| "powerprofilesctl".to_st
 fn brightnessctl() -> String { env::var("BRIGHTNESSCTL").unwrap_or_else(|_| "brightnessctl".to_string()) }
 fn charge_limit_bin() -> String { env::var("CHARGE_LIMIT").unwrap_or_else(|_| "charge-limit".to_string()) }
 fn sudo() -> String { env::var("SUDO").unwrap_or_else(|_| "sudo".to_string()) }
-fn ac_profile_default() -> String { env::var("AC_PROFILE").unwrap_or_else(|_| "performance".to_string()) }
-fn battery_profile_default() -> String { env::var("BATTERY_PROFILE").unwrap_or_else(|_| "power-saver".to_string()) }
+fn ac_profile_default() -> String { env::var("AC_PROFILE").unwrap_or_else(|_| crate::config::get_str(&["power", "ac_profile"], "performance")) }
+fn battery_profile_default() -> String { env::var("BATTERY_PROFILE").unwrap_or_else(|_| crate::config::get_str(&["power", "battery_profile"], "power-saver")) }
 fn low_profile() -> String { env::var("LOW_PROFILE").unwrap_or_else(|_| "balanced".to_string()) }
 fn critical_profile() -> String { env::var("CRITICAL_PROFILE").unwrap_or_else(|_| "power-saver".to_string()) }
-fn low_pct() -> i64 { env::var("LOW").ok().and_then(|s| s.parse().ok()).unwrap_or(20) }
-fn critical_pct() -> i64 { env::var("CRITICAL").ok().and_then(|s| s.parse().ok()).unwrap_or(8) }
-fn low_brightness() -> i64 { env::var("LOW_BRIGHTNESS").ok().and_then(|s| s.parse().ok()).unwrap_or(30) }
-fn critical_brightness() -> i64 { env::var("CRITICAL_BRIGHTNESS").ok().and_then(|s| s.parse().ok()).unwrap_or(10) }
+fn low_pct() -> i64 { env::var("LOW").ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| crate::config::get_i64(&["power", "low"], 20)) }
+fn critical_pct() -> i64 { env::var("CRITICAL").ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| crate::config::get_i64(&["power", "critical"], 8)) }
+fn low_brightness() -> i64 { env::var("LOW_BRIGHTNESS").ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| crate::config::get_i64(&["power", "low_brightness"], 30)) }
+fn critical_brightness() -> i64 { env::var("CRITICAL_BRIGHTNESS").ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| crate::config::get_i64(&["power", "critical_brightness"], 10)) }
 fn auto_default() -> bool { env::var("AUTO").map(|s| s == "1").unwrap_or(true) }
 
 fn on_mains() -> bool {
