@@ -115,9 +115,6 @@ impl Snapshot {
         self.all.iter().filter(|m| !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false)).count() as i64
     }
 
-    fn read_state(&self, name: &str) -> Option<MonitorState> {
-        read_state_from(self, name)
-    }
 }
 
 fn monitors_by_name(all: bool) -> std::collections::HashMap<String, Value> {
@@ -157,18 +154,6 @@ fn hypr_json(all: bool) -> Value {
 
 pub fn focused_name() -> String {
     Snapshot::fetch().focused_name()
-}
-
-fn external_name() -> String {
-    Snapshot::fetch().external_name()
-}
-
-fn internal_name() -> String {
-    Snapshot::fetch().internal_name()
-}
-
-fn field_of(name: &str, key: &str) -> String {
-    Snapshot::fetch().field(name, key)
 }
 
 fn read_state_from(snap: &Snapshot, name: &str) -> Option<MonitorState> {
@@ -238,14 +223,6 @@ fn read_state_from(snap: &Snapshot, name: &str) -> Option<MonitorState> {
     Some((scale, transform, disabled, mirror, position, mode, sdrb, sdrr))
 }
 
-fn read_state(name: &str) -> Option<MonitorState> {
-    read_state_from(&Snapshot::fetch(), name)
-}
-
-fn apply_change(output: &str, key: &str, value: &str) -> Result<(), String> {
-    apply_change_snap(&Snapshot::fetch(), output, key, value)
-}
-
 fn apply_change_snap(snap: &Snapshot, output: &str, key: &str, value: &str) -> Result<(), String> {
     let (scale, transform, disabled, mirror, position, mode, sdrb, sdrr) =
         read_state_from(snap, output).ok_or_else(|| format!("no output called \"{}\"", output))?;
@@ -272,10 +249,6 @@ fn apply_change_snap(snap: &Snapshot, output: &str, key: &str, value: &str) -> R
     let (code, _, err) = run("hyprctl", &["eval", &rule]);
     if code != 0 { return Err(format!("hyprctl eval failed: {}", err)); }
     Ok(())
-}
-
-fn save_field(output: &str, key: &str, value: &str) -> Result<(), String> {
-    save_field_snap(&Snapshot::fetch(), output, key, value)
 }
 
 fn save_field_snap(snap: &Snapshot, output: &str, key: &str, value: &str) -> Result<(), String> {
@@ -895,10 +868,6 @@ fn clear_disabled(output: &str) {
     }
 }
 
-fn active_count_i() -> i64 {
-    Snapshot::fetch().active_count()
-}
-
 fn internal_action(snap: &Snapshot, action: &str) -> String {
     let name = snap.internal_name();
     if name.is_empty() { return "ERR no monitor found".to_string(); }
@@ -1439,9 +1408,11 @@ mod more_tests {
 
     #[test]
     fn read_state_defaults_for_missing_file() {
-        // With no state file, read_state should still return live values (or None if no hyprland).
-        // In test env (no hyprland), returns None. Just ensure no panic.
-        let _ = read_state("NONEXISTENT");
+        // With no live monitor by that name, read_state_from
+        // returns None and does not panic (test env has no hyprland,
+        // or the name simply does not exist).
+        let snap = Snapshot::fetch();
+        let _ = read_state_from(&snap, "NONEXISTENT");
     }
 
     #[test]

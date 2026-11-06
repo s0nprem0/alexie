@@ -5,8 +5,6 @@ mod color;
 mod config;
 mod emoji;
 mod focus;
-mod fmt;
-mod format;
 mod pick;
 mod reminder;
 mod share;
@@ -128,10 +126,10 @@ pub fn handle_command(cmd: &str) -> String {
 pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
     match parts.first().map(|s| s.as_str()) {
         None | Some("--help") | Some("-h") | Some("help") => {
-            return help_text(parts.get(1).map(|s| s.as_str()));
+            help_text(parts.get(1).map(|s| s.as_str()))
         }
         Some(c) if parts.len() >= 2 && is_help_flag(&parts[1]) => {
-            return help_text(Some(c));
+            help_text(Some(c))
         }
         Some("ping") => "pong".to_string(),
         Some("monitors") => {

@@ -291,7 +291,7 @@ fn set_wallpaper(raw: &str) -> String {
             if code == 0 {
                 if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
             } else if code == -1 {
-                format!("ERR wallpaper-legacy not found: set needs the legacy bash wallpaper (enable anixie.daemon, which renames it to wallpaper-legacy)")
+                "ERR wallpaper-legacy not found: set needs the legacy bash wallpaper (enable anixie.daemon, which renames it to wallpaper-legacy)".to_string()
             } else {
                 format!("ERR (exit {}) {}", code, err.trim())
             }
