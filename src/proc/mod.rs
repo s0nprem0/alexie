@@ -12,6 +12,7 @@ mod tool;
 mod exec;
 mod file;
 
+#[allow(unused_imports)]
 pub use exec::{run, run_bytes_with_stdin, run_sh_status, run_with_stdin, shell_quote};
 pub use tool::{find_in_path, resolve_tool};
 pub use file::{copy_file_to_clipboard, copy_text_to_clipboard, run_stdout_to_file, tmp_file};

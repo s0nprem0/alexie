@@ -146,8 +146,8 @@ pub fn watch() {
         return;
     }
     unsafe {
-        libc::signal(libc::SIGTERM, on_stop as usize);
-        libc::signal(libc::SIGINT, on_stop as usize);
+        libc::signal(libc::SIGTERM, on_stop as *const () as usize);
+        libc::signal(libc::SIGINT, on_stop as *const () as usize);
     }
     let me = exe();
     let mut children: Vec<std::process::Child> = Vec::new();
