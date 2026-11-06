@@ -46,6 +46,12 @@ pub(crate) fn info_command(args: &[String]) -> String {
 }
 
 pub(crate) fn favorite_command(action: &str, name: &str) -> String {
+    // Usage errors first: they must not depend on the state
+    // directory being readable (the Nix sandbox has no writable
+    // HOME, and a typo should fail the same everywhere).
+    if !matches!(action, "add" | "remove" | "toggle") {
+        return "ERR favorite must be add, remove or toggle".to_string();
+    }
     if !has_theme(name) {
         return format!("ERR no theme called \"{}\" (try: theme list)", name);
     }
