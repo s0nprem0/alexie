@@ -1,5 +1,6 @@
 mod dbus;
 mod capture;
+mod clipboard;
 mod focus;
 mod snapshot;
 mod webapp;
@@ -90,6 +91,10 @@ pub fn handle_command(cmd: &str) -> String {
         Some("shot") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             shot::handle(&args)
+        }
+        Some("clipboard") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            clipboard::handle(&args)
         }
         Some("capture") | Some("capture-text") | Some("capture-qr") => {
             let mut args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
