@@ -68,6 +68,12 @@ fn label(name: &str) -> &'static str {
     }
 }
 
+pub fn label_pub(name: &str) -> &'static str { label(name) }
+
+pub fn is_toggle(name: &str) -> bool {
+    matches!(name, "nightlight" | "idle" | "dnd" | "stayawake")
+}
+
 fn state_of(name: &str) -> String {
     match name {
         "nightlight" => nightlight_state().to_string(),
@@ -77,6 +83,8 @@ fn state_of(name: &str) -> String {
         _ => "ERR no toggle".to_string(),
     }
 }
+
+pub fn state_pub(name: &str) -> String { state_of(name) }
 
 fn toggle_one(name: &str) {
     match name {

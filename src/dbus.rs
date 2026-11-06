@@ -154,9 +154,9 @@ impl PowerIface {
     }
     #[zbus(property)]
     fn source(&self) -> String {
-        // parse first line of show
-        crate::power::handle(&["show".to_string()])
-            .lines().next().unwrap_or("").to_string()
+        // show() is a rendered table; its first line is a border,
+        // not the source. Ask power directly.
+        crate::power::source_pub()
     }
 }
 
@@ -179,9 +179,22 @@ impl ToggleIface {
     }
     fn list(&self) -> String { crate::toggle::handle(&["list".to_string()]) }
     fn set(&self, name: &str, state: &str) -> String {
-        // toggle if needed: just call toggle to flip; for explicit set, read current
-        let cur = crate::toggle::handle(&[name.to_string()]);
-        if cur == state { cur } else { crate::toggle::handle(&[name.to_string()]) }
+        // Explicit set, not blind toggle: validate, read the current
+        // state via state_pub(), and only toggle when it differs.
+        // The old code compared the toggle *output* ("Night light: on")
+        // with `state` ("on"), which never matched, so it toggled
+        // (or toggled twice) regardless of the requested state.
+        if !crate::toggle::is_toggle(name) {
+            return format!("ERR unknown toggle: {}", name);
+        }
+        if state != "on" && state != "off" {
+            return format!("ERR state must be on or off, got: {}", state);
+        }
+        let cur = crate::toggle::state_pub(name);
+        if cur == state {
+            return format!("{}: {}", crate::toggle::label_pub(name), cur);
+        }
+        crate::toggle::handle(&[name.to_string()])
     }
 }
 
@@ -198,12 +211,13 @@ impl ScreentimeIface {
 // ---------- helpers ----------
 
 fn theme_current() -> String {
-    // read current file
+    // Theme state is $XDG_STATE_HOME/anixie/theme/current, matching
+    // theme.rs state_dir() (was .../anixie/current, which missed).
     let state = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         format!("{}/.local/state", home)
     });
-    let p = std::path::PathBuf::from(state).join("anixie").join("current");
+    let p = std::path::PathBuf::from(state).join("anixie").join("theme").join("current");
     if let Ok(s) = std::fs::read_to_string(&p) {
         let s = s.trim().to_string();
         if !s.is_empty() { return s; }

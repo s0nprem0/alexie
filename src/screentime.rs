@@ -23,6 +23,11 @@ fn now_secs() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
 
+fn today_string() -> String {
+    let (code, out, _) = run("date", &["+%F"]);
+    if code == 0 { out.trim().to_string() } else { String::new() }
+}
+
 fn today_start() -> i64 {
     // local midnight as epoch seconds
     let (code, out, _) = run("date", &["-d", "today 00:00:00", "+%s"]);
@@ -72,10 +77,7 @@ fn format_seconds(total: i64) -> String {
 }
 
 fn write_daily_json(conn: &Connection) {
-    let day = {
-        let (code, out, _) = run("date", &["+%F"]);
-        if code == 0 { out.trim().to_string() } else { String::new() }
-    };
+    let day = today_string();
     if day.is_empty() { return; }
     let dir = state_dir().join("screentime");
     let _ = fs::create_dir_all(&dir);
@@ -159,6 +161,30 @@ pub fn watch() {
 
 pub fn handle(args: &[String]) -> String {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("show");
+    // Subcommands that do not need the DB come first, so a read-only
+    // query like `path` or the shell's `panel` click does not create
+    // (and migrate) the database as a side effect.
+    match sub {
+        "path" => return db_path().to_string_lossy().to_string(),
+        "watch" => return "Run `alexie screentime watch` directly (it blocks).".to_string(),
+        "panel" => {
+            // Match legacy screentime.sh panel: enable the bar widget
+            // (idempotent, so layouts predating it gain it), then
+            // toggle the screentime panel. The QML ScreenLayers /
+            // Indicators call `alexie screentime panel` via runAlexie,
+            // and this previously returned ERR unknown subcommand.
+            let qs = env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string());
+            let _ = run(&qs, &["ipc", "call", "bar", "enable", "bar.screentime"]);
+            thread::sleep(Duration::from_millis(200));
+            let (code, out, err) = run(&qs, &["ipc", "call", "panel", "toggle", "screentime"]);
+            if code != 0 {
+                return format!("ERR (exit {}) {}", code, err.trim());
+            }
+            let reply = out.trim();
+            return if reply.is_empty() || reply == "ok" { "OK".to_string() } else { reply.to_string() };
+        }
+        _ => {}
+    }
     let conn = match open_db() {
         Ok(c) => c,
         Err(e) => return format!("ERR db: {}", e),
@@ -202,7 +228,7 @@ pub fn handle(args: &[String]) -> String {
                 }
             }
             let total: i64 = apps.values().filter_map(|v| v.as_i64()).sum();
-            let obj = serde_json::json!({"date": "", "apps": apps, "active": total, "idle": 0});
+            let obj = serde_json::json!({"date": today_string(), "apps": apps, "active": total, "idle": 0});
             obj.to_string()
         }
         "reset" => {
@@ -210,8 +236,45 @@ pub fn handle(args: &[String]) -> String {
             let _ = conn.execute("DELETE FROM sessions WHERE start_time >= ?1", params![ts]);
             "Screen time reset for today.".to_string()
         }
-        "path" => db_path().to_string_lossy().to_string(),
-        "watch" => "Run `alexie screentime watch` directly (it blocks).".to_string(),
         _ => format!("ERR unknown subcommand: {}", sub),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn today_string_is_iso_date() {
+        let day = today_string();
+        // YYYY-MM-DD, 10 chars, dashes in the right places. Falls
+        // back to empty only if `date` is missing (CI sandbox has it).
+        if day.is_empty() {
+            return;
+        }
+        assert_eq!(day.len(), 10, "got: {day}");
+        assert_eq!(&day[4..5], "-");
+        assert_eq!(&day[7..8], "-");
+    }
+
+    #[test]
+    fn format_seconds_basic() {
+        assert_eq!(format_seconds(0), "0m");
+        assert_eq!(format_seconds(90), "1m");
+        assert_eq!(format_seconds(3660), "1h 1m");
+    }
+
+    #[test]
+    fn path_does_not_need_db() {
+        // `path` returns the DB path without opening the DB; it is
+        // handled before open_db() so it cannot fail with a DB error.
+        let out = handle(&["path".to_string()]);
+        assert!(out.ends_with("screentime.db"), "got: {out}");
+    }
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
     }
 }

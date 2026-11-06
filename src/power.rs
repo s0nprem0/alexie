@@ -46,6 +46,8 @@ fn on_mains() -> bool {
 
 fn source_name() -> &'static str { if on_mains() { "ac" } else { "battery" } }
 
+pub fn source_pub() -> String { source_name().to_string() }
+
 fn battery_percent() -> Option<i64> {
     if let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") {
         for e in entries.flatten() {
