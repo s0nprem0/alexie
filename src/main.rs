@@ -1,7 +1,9 @@
 mod dbus;
 mod capture;
+mod focus;
 mod menu;
 mod monitors;
+mod screentime;
 mod shot;
 mod theme;
 mod toggle;
@@ -56,6 +58,14 @@ pub fn handle_command(cmd: &str) -> String {
         Some("wallpaper") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             wallpaper::handle(&args)
+        }
+        Some("focus") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            focus::handle(&args)
+        }
+        Some("screentime") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            screentime::handle(&args)
         }
         Some("shot") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
