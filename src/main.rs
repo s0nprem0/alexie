@@ -248,6 +248,11 @@ fn main() {
         power_watch::run();
         return;
     }
+    // screentime watch: run the tracker (blocks).
+    if args.len() >= 3 && args[1] == "screentime" && args[2] == "watch" {
+        screentime::watch();
+        return;
+    }
     if args.len() < 2 {
         eprintln!("usage: alexie <command...> | alexie daemon");
         std::process::exit(2);

@@ -1,9 +1,11 @@
-use crate::proc::{resolve_tool, run, shell_quote};
+use crate::proc::run;
+use rusqlite::{Connection, params};
+use serde_json::Value;
 use std::env;
 use std::fs;
-
-fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
-fn jq() -> String { "jq".to_string() }
+use std::process::Command;
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn state_dir() -> std::path::PathBuf {
     let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
@@ -13,6 +15,55 @@ fn state_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(state).join("anixie")
 }
 
+pub fn db_path() -> std::path::PathBuf {
+    state_dir().join("screentime.db")
+}
+
+fn now_secs() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+fn today_start() -> i64 {
+    // local midnight as epoch seconds
+    let (code, out, _) = run("date", &["-d", "today 00:00:00", "+%s"]);
+    if code == 0 { out.trim().parse().unwrap_or(0) } else {
+        let n = now_secs();
+        n - (n % 86400)
+    }
+}
+
+fn open_db() -> Result<Connection, rusqlite::Error> {
+    let path = db_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let conn = Connection::open(&path)?;
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            app_class TEXT NOT NULL,
+            title TEXT NOT NULL,
+            start_time INTEGER NOT NULL,
+            end_time INTEGER NOT NULL,
+            duration INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_start ON sessions(start_time);
+        CREATE INDEX IF NOT EXISTS idx_sessions_end ON sessions(end_time);",
+    )?;
+    // finalize any dangling sessions from a previous (killed) run
+    let _ = conn.execute("UPDATE sessions SET end_time = start_time, duration = 0 WHERE end_time = 0", []);
+    Ok(conn)
+}
+
+fn active_window() -> Option<(String, String)> {
+    let out = Command::new("hyprctl").args(["activewindow", "-j"]).output().ok()?;
+    if !out.status.success() { return None; }
+    let v: Value = serde_json::from_slice(&out.stdout).ok()?;
+    let class = v.get("class")?.as_str()?.to_string();
+    let title = v.get("title").and_then(|t| t.as_str()).unwrap_or("").to_string();
+    if class.is_empty() { None } else { Some((class, title)) }
+}
 
 fn format_seconds(total: i64) -> String {
     let hours = total / 3600;
@@ -20,87 +71,121 @@ fn format_seconds(total: i64) -> String {
     if hours > 0 { format!("{}h {}m", hours, mins) } else { format!("{}m", mins) }
 }
 
+pub fn watch() {
+    let conn = match open_db() {
+        Ok(c) => c,
+        Err(e) => { eprintln!("screentime: cannot open db: {}", e); return; }
+    };
+    let mut current: Option<(i64, String, String)> = None; // (session_id, class, title)
+    loop {
+        let aw = active_window();
+        let aw2 = aw.clone();
+        match (current.take(), aw) {
+            (Some((id, cls, _)), Some((new_cls, new_title))) if cls == new_cls => {
+                // same window: update end_time/duration
+                let now = now_secs();
+                let _ = conn.execute(
+                    "UPDATE sessions SET end_time = ?1, duration = ?1 - start_time WHERE id = ?2",
+                    params![now, id],
+                );
+                current = Some((id, new_cls, new_title));
+            }
+            (Some((id, _, _)), _) => {
+                // finalize previous
+                let now = now_secs();
+                let _ = conn.execute(
+                    "UPDATE sessions SET end_time = CASE WHEN end_time = 0 THEN ?1 ELSE end_time END, duration = CASE WHEN end_time = 0 THEN ?1 - start_time ELSE duration END WHERE id = ?2",
+                    params![now, id],
+                );
+                // start new if present
+                if let Some((cls, title)) = aw2 {
+                    let now = now_secs();
+                    if let Ok(id) = conn.execute(
+                        "INSERT INTO sessions (app_class, title, start_time, end_time, duration) VALUES (?1, ?2, ?3, 0, 0)",
+                        params![cls, title, now],
+                    ) {
+                        let _ = id;
+                    }
+                    // retrieve last id
+                    let last = conn.last_insert_rowid();
+                    current = Some((last, cls, title));
+                } else {
+                    current = None;
+                }
+            }
+            (None, Some((cls, title))) => {
+                let now = now_secs();
+                let _ = conn.execute(
+                    "INSERT INTO sessions (app_class, title, start_time, end_time, duration) VALUES (?1, ?2, ?3, 0, 0)",
+                    params![cls, title, now],
+                );
+                let last = conn.last_insert_rowid();
+                current = Some((last, cls, title));
+            }
+            (None, None) => {
+                current = None;
+            }
+        }
+        thread::sleep(Duration::from_secs(2));
+    }
+}
+
 pub fn handle(args: &[String]) -> String {
     let sub = args.get(0).map(|s| s.as_str()).unwrap_or("show");
-    let day = {
-        let (code, out, _) = run("date", &["+%F"]);
-        if code == 0 { out.trim().to_string() } else { String::new() }
+    let conn = match open_db() {
+        Ok(c) => c,
+        Err(e) => return format!("ERR db: {}", e),
     };
-    let state = state_dir();
-    let file = state.join(format!("{}.json", day));
-
     match sub {
         "" | "show" => {
-            // try live IPC
-            let (code, live, _) = run(&qs(), &["ipc", "call", "screentime", "status"]);
-            let payload = if code == 0 && !live.trim().is_empty() {
-                // validate json object via jq
-                let (vc, _, _) = run("sh", &["-c", &format!("printf '%s' {} | jq -e 'type == \"object\"' >/dev/null 2>&1", shell_quote(&live))]);
-                if vc == 0 { live.trim().to_string() } else if file.exists() { std::fs::read_to_string(&file).unwrap_or_default() } else { String::new() }
-            } else if file.exists() { std::fs::read_to_string(&file).unwrap_or_default() } else { String::new() };
-
-            if payload.is_empty() {
-                return "No screen time recorded today.".to_string();
+            let ts = today_start();
+            let mut stmt = match conn.prepare(
+                "SELECT app_class, SUM(duration) FROM sessions WHERE start_time >= ?1 GROUP BY app_class ORDER BY SUM(duration) DESC LIMIT 8",
+            ) {
+                Ok(s) => s,
+                Err(e) => return format!("ERR: {}", e),
+            };
+            let rows: Vec<(String, i64)> = stmt
+                .query_map(params![ts], |r| Ok((r.get(0)?, r.get(1)?)))
+                .map(|iter| iter.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default();
+            let total: i64 = rows.iter().map(|(_, d)| *d).sum();
+            if rows.is_empty() {
+                return "No screen time recorded today. (run `alexie screentime watch`)".to_string();
             }
-            // parse active/idle
-            let active: i64 = {
-                let (c, o, _) = run("sh", &["-c", &format!("printf '%s' {} | jq -r '.active // 0'", shell_quote(&payload))]);
-                if c == 0 { o.trim().parse().unwrap_or(0) } else { 0 }
-            };
-            let idle: i64 = {
-                let (c, o, _) = run("sh", &["-c", &format!("printf '%s' {} | jq -r '.idle // 0'", shell_quote(&payload))]);
-                if c == 0 { o.trim().parse().unwrap_or(0) } else { 0 }
-            };
             let mut out = String::new();
-            out.push_str(&format!("date:   {}\n", day));
-            out.push_str(&format!("active: {}\n", format_seconds(active)));
-            out.push_str(&format!("idle:   {}\n", format_seconds(idle)));
-            out.push_str(&format!("total:  {}\n", format_seconds(active + idle)));
+            out.push_str(&format!("active: {}\n", format_seconds(total)));
             out.push_str("\napps:\n");
-            let apps_script = format!("printf '%s' {} | jq -r '.apps // {{}} | to_entries | sort_by(-.value) | .[:8][] | \"\\(.value)\\t\\(.key)\"'", shell_quote(&payload));
-            let (c, o, _) = run("sh", &["-c", &apps_script]);
-            if c == 0 {
-                for line in o.lines() {
-                    let parts: Vec<&str> = line.split('\t').collect();
-                    if parts.len() >= 2 {
-                        let secs: i64 = parts[0].parse().unwrap_or(0);
-                        let app = parts[1];
-                        if !app.is_empty() {
-                            out.push_str(&format!("  {:<10} {}\n", format_seconds(secs), app));
-                        }
-                    }
-                }
+            for (app, secs) in rows {
+                out.push_str(&format!("  {:<10} {}\n", format_seconds(secs), app));
             }
             out.trim_end().to_string()
         }
         "json" => {
-            let (code, live, _) = run(&qs(), &["ipc", "call", "screentime", "status"]);
-            let payload = if code == 0 && !live.trim().is_empty() {
-                let (vc, _, _) = run("sh", &["-c", &format!("printf '%s' {} | jq -e 'type == \"object\"' >/dev/null 2>&1", shell_quote(&live))]);
-                if vc == 0 { live.trim().to_string() } else if file.exists() { std::fs::read_to_string(&file).unwrap_or_default() } else { String::new() }
-            } else if file.exists() { std::fs::read_to_string(&file).unwrap_or_default() } else { String::new() };
-            if payload.is_empty() {
-                format!("{{\"date\":\"{}\",\"apps\":{{}},\"idle\":0,\"active\":0}}", day)
-            } else { payload }
+            let ts = today_start();
+            let mut stmt = match conn.prepare(
+                "SELECT app_class, SUM(duration) FROM sessions WHERE start_time >= ?1 GROUP BY app_class",
+            ) {
+                Ok(s) => s,
+                Err(e) => return format!("ERR: {}", e),
+            };
+            let mut apps = serde_json::Map::new();
+            if let Ok(iter) = stmt.query_map(params![ts], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
+                for (k, v) in iter.filter_map(|r| r.ok()) {
+                    apps.insert(k, serde_json::json!(v));
+                }
+            }
+            let total: i64 = apps.values().filter_map(|v| v.as_i64()).sum();
+            let obj = serde_json::json!({"date": "", "apps": apps, "active": total, "idle": 0});
+            obj.to_string()
         }
         "reset" => {
-            let _ = run(&qs(), &["ipc", "call", "screentime", "reset"]);
-            let _ = std::fs::remove_file(&file);
-            format!("Screen time reset for {}.", day)
+            let ts = today_start();
+            let _ = conn.execute("DELETE FROM sessions WHERE start_time >= ?1", params![ts]);
+            format!("Screen time reset for today.")
         }
-        "path" => file.to_string_lossy().to_string(),
-        "panel" => {
-            let _ = run(&qs(), &["ipc", "call", "bar", "enable", "bar.screentime"]);
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            let _ = run(&qs(), &["ipc", "call", "panel", "toggle", "screentime"]);
-            "OK".to_string()
-        }
-        _ => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let (code, out, err) = run("screentime", &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
-        }
+        "path" => db_path().to_string_lossy().to_string(),
+        "watch" => "Run `alexie screentime watch` directly (it blocks).".to_string(),
+        _ => format!("ERR unknown subcommand: {}", sub),
     }
 }
-
