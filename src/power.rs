@@ -4,11 +4,15 @@ use std::path::PathBuf;
 
 pub fn state_dir_pub() -> PathBuf { state_dir() }
 fn state_dir() -> PathBuf {
+    // Legacy power state is $XDG_STATE_HOME/anixie/powerprofile
+    // (see anixie modules/features/power/default.nix `state`).
+    // Writing automation/ac/battery/brightness.* directly into
+    // .../anixie polluted the parent dir and never matched legacy.
     let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
         let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         format!("{}/.local/state", home)
     });
-    PathBuf::from(state).join("anixie")
+    PathBuf::from(state).join("anixie").join("powerprofile")
 }
 
 
@@ -302,5 +306,20 @@ pub fn handle(args: &[String]) -> String {
             if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
             else { format!("ERR (exit {}) {}", code, err.trim()) }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_dir_is_anixie_powerprofile() {
+        let dir = state_dir();
+        assert!(
+            dir.ends_with(std::path::Path::new("anixie").join("powerprofile")),
+            "got: {}",
+            dir.display()
+        );
     }
 }
