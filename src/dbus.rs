@@ -160,6 +160,41 @@ impl PowerIface {
     }
 }
 
+// ---------- Clipboard interface ----------
+pub struct ClipboardIface;
+#[interface(name = "org.alexie.Clipboard1")]
+impl ClipboardIface {
+    fn list(&self) -> String { crate::clipboard::handle(&["--list".to_string()]) }
+    fn text(&self, id: &str) -> String { crate::clipboard::handle(&["--text".to_string(), id.to_string()]) }
+    fn delete(&self, id: &str) -> String { crate::clipboard::handle(&["--delete".to_string(), id.to_string()]) }
+    fn wipe(&self) -> String { crate::clipboard::handle(&["--wipe".to_string()]) }
+}
+
+// ---------- Toggle interface ----------
+pub struct ToggleIface;
+#[interface(name = "org.alexie.Toggle1")]
+impl ToggleIface {
+    fn status(&self, name: &str) -> String {
+        if name.is_empty() { crate::toggle::handle(&[]) } else { crate::toggle::handle(&[name.to_string()]) }
+    }
+    fn list(&self) -> String { crate::toggle::handle(&["list".to_string()]) }
+    fn set(&self, name: &str, state: &str) -> String {
+        // toggle if needed: just call toggle to flip; for explicit set, read current
+        let cur = crate::toggle::handle(&[name.to_string()]);
+        if cur == state { cur } else { crate::toggle::handle(&[name.to_string()]) }
+    }
+}
+
+// ---------- Screentime interface ----------
+pub struct ScreentimeIface;
+#[interface(name = "org.alexie.Screentime1")]
+impl ScreentimeIface {
+    fn show(&self) -> String { crate::screentime::handle(&["show".to_string()]) }
+    fn json(&self) -> String { crate::screentime::handle(&["json".to_string()]) }
+    fn reset(&self) -> String { crate::screentime::handle(&["reset".to_string()]) }
+    fn path(&self) -> String { crate::screentime::handle(&["path".to_string()]) }
+}
+
 // ---------- helpers ----------
 
 fn theme_current() -> String {
@@ -219,6 +254,15 @@ pub fn run_dbus_server() {
     }
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", PowerIface) {
         eprintln!("dbus: register PowerIface failed: {}", e);
+    }
+    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ClipboardIface) {
+        eprintln!("dbus: register ClipboardIface failed: {}", e);
+    }
+    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ToggleIface) {
+        eprintln!("dbus: register ToggleIface failed: {}", e);
+    }
+    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ScreentimeIface) {
+        eprintln!("dbus: register ScreentimeIface failed: {}", e);
     }
     let _ = CONN.set(conn.clone());
     eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme interfaces");
