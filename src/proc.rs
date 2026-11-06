@@ -33,3 +33,32 @@ pub fn shell_quote(s: &str) -> String {
     out.push('\'');
     out
 }
+
+
+/// Run a command (through its resolver) for its exit status only, with stdio
+/// nulled so daemonizing children (e.g. wl-copy) cannot hold the pipes open.
+pub fn run_status(cmd: &str, args: &[&str]) -> i32 {
+    use std::process::Stdio;
+    Command::new(resolve_tool(cmd))
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.code().unwrap_or(-1))
+        .unwrap_or(-1)
+}
+
+
+/// Run a shell snippet for its exit status only, with stdio nulled.
+pub fn run_sh_status(script: &str) -> i32 {
+    use std::process::Stdio;
+    Command::new("sh")
+        .args(["-c", script])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.code().unwrap_or(-1))
+        .unwrap_or(-1)
+}

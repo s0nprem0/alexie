@@ -82,12 +82,7 @@ pub fn handle(args: &[String]) -> String {
             let (code, mime, _) = run(&file_bin(), &["-b", "--mime-type", "--", &tmp]);
             let mime = if code == 0 { mime.trim().to_string() } else { "application/octet-stream".to_string() };
             // copy
-            let _ = std::process::Command::new("sh")
-                .args(["-c", &format!("{} --type {} < {}", wl_copy(), mime, tmp)])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
+            let _ = crate::proc::run_sh_status(&format!("{} --type {} < {}", wl_copy(), mime, tmp));
             let _ = std::fs::remove_file(&tmp);
             // Give the watcher a moment to store the new selection, then drop
             // any entry that did not exist before so the history stays clean.
