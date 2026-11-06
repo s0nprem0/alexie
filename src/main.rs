@@ -10,6 +10,9 @@ mod shortcuts;
 mod snapshot;
 mod webapp;
 mod menu;
+mod webcam_overlay;
+mod transcode;
+mod record;
 mod proc;
 mod monitors;
 mod power;
@@ -86,6 +89,18 @@ pub fn handle_command(cmd: &str) -> String {
         Some("shot") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             shot::handle(&args)
+        }
+        Some("record") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            record::handle(&args)
+        }
+        Some("transcode") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            transcode::handle(&args)
+        }
+        Some("webcam-overlay") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            webcam_overlay::handle(&args)
         }
         Some("clipboard") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
