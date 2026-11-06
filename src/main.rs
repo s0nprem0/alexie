@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 fn socket_path() -> PathBuf {
     let runtime = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(runtime).join("anixie").join("daemon.sock")
+    PathBuf::from(runtime).join("alexie").join("daemon.sock")
 }
 
 fn state_dir() -> PathBuf {
@@ -125,7 +125,7 @@ fn run_daemon() {
             std::process::exit(1);
         }
     };
-    eprintln!("anixied daemon listening on {}", sock.display());
+    eprintln!("alexie daemon listening on {}", sock.display());
     for stream in listener.incoming() {
         match stream {
             Ok(s) => handle_stream(s),
@@ -159,7 +159,7 @@ fn run_client(args: &[String]) {
     let mut stream = match UnixStream::connect(&sock) {
         Ok(s) => s,
         Err(_) => {
-            eprintln!("daemon not running ({}). Start with: anixied daemon", sock.display());
+            eprintln!("daemon not running ({}). Start with: alexie daemon", sock.display());
             std::process::exit(1);
         }
     };
@@ -181,7 +181,7 @@ fn run_client(args: &[String]) {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("usage: anixied <command...> | anixied daemon");
+        eprintln!("usage: alexie <command...> | alexie daemon");
         std::process::exit(2);
     }
     if args[1] == "daemon" {

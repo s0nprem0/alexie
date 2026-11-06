@@ -1,5 +1,5 @@
 {
-  description = "anixied: Rust daemon + CLI for anixie";
+  description = "alexie: Rust daemon + CLI for anixie";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -12,7 +12,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
       in {
         packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "anixied";
+          pname = "alexie";
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
