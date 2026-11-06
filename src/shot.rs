@@ -131,27 +131,64 @@ fn move_file(src: &str, dst: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Geometry "X,Y WxH" for the focused window, from hyprctl JSON.
+/// Pure, so it can be tested without hyprctl/jq.
+fn window_geometry_from_json(json: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let at = v.get("at")?.as_array()?;
+    let size = v.get("size")?.as_array()?;
+    if at.len() < 2 || size.len() < 2 {
+        return None;
+    }
+    let x = at[0].as_i64()?;
+    let y = at[1].as_i64()?;
+    let w = size[0].as_i64()?;
+    let h = size[1].as_i64()?;
+    Some(format!("{x},{y} {w}x{h}"))
+}
+
+/// Geometry for the focused monitor, from hyprctl monitors JSON.
+fn focused_monitor_geometry_from_json(json: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let arr = v.as_array()?;
+    let mon = arr.iter().find(|m| m.get("focused").and_then(|f| f.as_bool()) == Some(true))?;
+    let x = mon.get("x")?.as_i64()?;
+    let y = mon.get("y")?.as_i64()?;
+    let w = mon.get("width")?.as_i64()?;
+    let h = mon.get("height")?.as_i64()?;
+    Some(format!("{x},{y} {w}x{h}"))
+}
+
+/// Window class from hyprctl activewindow JSON.
+fn window_class_from_json(json: &str) -> String {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+        return String::new();
+    };
+    v.get("class").and_then(|c| c.as_str()).unwrap_or("").to_string()
+}
+
 fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
     // get geometry
     let geometry = if mode == "window" {
         let (code, out, _) = run(&hyprctl(), &["activewindow", "-j"]);
         if code != 0 { return "ERR no focused window".to_string(); }
-        // parse at/size
-        // use jq
-        let filter = r#"if .at == null or .size == null then empty else "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])" end"#;
-        let script = format!("printf '%s' {} | jq -r '{}'", shell_quote(&out), filter);
-        let (code, g, _) = run("sh", &["-c", &script]);
-        if code != 0 || g.trim().is_empty() { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No focused window."]); return "ERR no focused window to capture".to_string(); }
-        g.trim().to_string()
+        match window_geometry_from_json(&out) {
+            Some(g) => g,
+            None => {
+                let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No focused window."]);
+                return "ERR no focused window to capture".to_string();
+            }
+        }
     } else if mode == "fullscreen" {
-        // focused monitor geometry: 0,0 WxH
         let (code, out, _) = run(&hyprctl(), &["monitors", "-j"]);
         if code != 0 { return "ERR no monitors".to_string(); }
-        let filter = r#"[.[] | select(.focused == true)][0] | "\(.x),\(.y) \(.width)x\(.height)""#;
-        let script = format!("printf '%s' {} | jq -r '{}'", shell_quote(&out), filter);
-        let (code, g, _) = run("sh", &["-c", &script]);
-        if code != 0 || g.trim().is_empty() { let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No focused monitor."]); return "ERR no focused monitor".to_string(); }
-        g.trim().to_string()
+        match focused_monitor_geometry_from_json(&out) {
+            Some(g) => g,
+            None => {
+                let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", "No focused monitor."]);
+                return "ERR no focused monitor".to_string();
+            }
+        }
     } else {
         // region / windows: use shot-pick
         let picker_mode = if mode == "windows" { "windows" } else if mode == "smart" { "smart" } else { "region" };
@@ -284,12 +321,12 @@ fn release_freeze() {
 fn window_slug() -> String {
     let (code, out, _) = run(&hyprctl(), &["activewindow", "-j"]);
     if code != 0 { return String::new(); }
-    let filter = r#".class // empty"#;
-    let script = format!("printf '%s' {} | jq -r {}", shell_quote(&out), shell_quote(filter));
-    let (code, g, _) = run("sh", &["-c", &script]);
-    if code != 0 { return String::new(); }
-    let class = g.trim();
+    let class = window_class_from_json(&out);
     if class.is_empty() { return String::new(); }
+    slugify_class(&class)
+}
+
+fn slugify_class(class: &str) -> String {
     let lowered = class.to_lowercase();
     let mut slug = String::new();
     let mut prev_dash = false;
@@ -329,5 +366,27 @@ mod tests {
         assert!(out.starts_with("ERR unknown argument:"), "got: {out}");
         let out = handle(&["region".to_string(), "__bogus__".to_string()]);
         assert!(out.starts_with("ERR unknown argument:"), "got: {out}");
+    }
+
+    #[test]
+    fn geometry_from_json() {
+        assert_eq!(
+            window_geometry_from_json(r#"{"at":[10,20],"size":[800,600]}"#),
+            Some("10,20 800x600".to_string())
+        );
+        assert_eq!(window_geometry_from_json(r#"{"at":null,"size":null}"#), None);
+        assert_eq!(window_geometry_from_json("not json"), None);
+        assert_eq!(
+            focused_monitor_geometry_from_json(
+                r#"[{"name":"eDP-1","x":0,"y":0,"width":1920,"height":1080,"focused":false},{"name":"HDMI-A-1","x":1920,"y":0,"width":2560,"height":1440,"focused":true}]"#
+            ),
+            Some("1920,0 2560x1440".to_string())
+        );
+        assert_eq!(focused_monitor_geometry_from_json("[]"), None);
+        assert_eq!(
+            window_class_from_json(r#"{"class":"kitty"}"#),
+            "kitty".to_string()
+        );
+        assert_eq!(slugify_class("Firefox Developer"), "firefox-developer");
     }
 }
