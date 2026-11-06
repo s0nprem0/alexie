@@ -154,17 +154,6 @@ pub fn handle_command(cmd: &str) -> String {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             menu::handle(&args)
         }
-        Some(tool) if ["shot", "record", "transcode", "capture-text", "capture-qr", "share",
-                        "webcam-overlay", "clipboard", "emoji", "focus", "screentime",
-                        "toggle", "power", "snapshot", "webapp"].contains(&tool) => {
-            // Delegate to the installed bash tool until ported.
-            let (code, out, err) = run_tool(&proc::resolve_tool(parts[0]), &parts[1..]);
-            if code == 0 {
-                if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
-            } else {
-                format!("ERR (exit {}) {}", code, err.trim())
-            }
-        }
         _ => {
             // Generic fallback: run the first token as a binary with the rest as
             // args, so unported tools (clipboard, emoji, toggle, shot, ...) work

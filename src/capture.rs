@@ -38,12 +38,9 @@ pub fn handle(args: &[String]) -> String {
         "text" => capture_text(),
         "qr" => capture_qr(),
         "share" => {
-            // delegate to bash share
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = resolve_tool("share");
-            let (code, out, err) = run(&tool, &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // native share (subcommands); delegate unknown to legacy via share::handle
+            let sub_args: Vec<String> = args[1..].to_vec();
+            crate::share::handle(&sub_args)
         }
         "cancel" | "edit-last" | "copy-path" | "copy-uri" => {
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
