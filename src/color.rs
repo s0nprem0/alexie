@@ -2,6 +2,12 @@
 use std::io::IsTerminal;
 
 pub fn enabled() -> bool {
+    // Unit tests assert on the rendered layout, not on terminal capabilities.
+    // Without this, `cargo test` run from a terminal (or a builder that hands
+    // the process a tty) emits SGR codes and the table tests fail.
+    if cfg!(test) {
+        return false;
+    }
     if std::env::var_os("NO_COLOR").is_some() {
         return false;
     }
