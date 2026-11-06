@@ -8,11 +8,23 @@ fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
     }
 }
 
+fn resolve_tool(name: &str) -> String {
+    let check = format!("command -v {} >/dev/null 2>&1", name);
+    if Command::new("sh").args(["-c", &check]).status().map(|s| s.success()).unwrap_or(false) {
+        return name.to_string();
+    }
+    let legacy = format!("{}-legacy", name);
+    let check2 = format!("command -v {} >/dev/null 2>&1", legacy);
+    if Command::new("sh").args(["-c", &check2]).status().map(|s| s.success()).unwrap_or(false) {
+        return legacy;
+    }
+    name.to_string()
+}
+
 pub fn handle(_args: &[String]) -> String {
-    // delegate to bash emoji (complex awk + pick + wtype)
-    let (code, out, err) = run("emoji", &[]);
+    // emoji: awk + pick + wtype. Delegate to bash emoji (complex awk pipeline).
+    let tool = resolve_tool("emoji");
+    let (code, out, err) = run(&tool, &[]);
     if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
     else { format!("ERR (exit {}) {}", code, err.trim()) }
 }
-RUST
-echo done
