@@ -296,11 +296,12 @@ pub fn handle(args: &[String]) -> String {
         }
         "check" => { check_battery(); "OK".to_string() }
         "watch" => {
-            // delegate to bash powerprofile watch (udev loop) for now
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let (code, out, err) = run("powerprofile", &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // The native watcher (power_watch::run, udev + 30s timer)
+            // blocks forever and is special-cased in main() for
+            // `alexie power watch`, like screentime watch. Delegating
+            // to the bash powerprofile watcher here was dead code
+            // via the CLI and would block a daemon thread forever.
+            "Run `alexie power watch` directly (it blocks).".to_string()
         }
         _ => {
             let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
@@ -323,5 +324,11 @@ mod tests {
             "got: {}",
             dir.display()
         );
+    }
+
+    #[test]
+    fn watch_tells_user_to_run_directly() {
+        let out = handle(&["watch".to_string()]);
+        assert!(out.contains("alexie power watch"), "got: {out}");
     }
 }
