@@ -1,0 +1,11 @@
+[package]
+name = "anixied"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
