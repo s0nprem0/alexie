@@ -33,28 +33,102 @@ fn atomic_write(dest: &std::path::Path, content: &str) -> std::io::Result<()> {
 }
 
 
-/// All known monitors as name → JSON object.
-fn monitors_by_name(all: bool) -> std::collections::HashMap<String, Value> {
-    let v = hypr_json(all);
-    let mut out = std::collections::HashMap::new();
-    if let Some(arr) = v.as_array() {
-        for m in arr {
+/// One `hyprctl monitors all -j` fetch per command invocation (#1).
+struct Snapshot {
+    all: Vec<Value>,
+    by_name: std::collections::HashMap<String, Value>,
+    id_to_name: std::collections::HashMap<i64, String>,
+}
+
+impl Snapshot {
+    fn fetch() -> Self {
+        let v = hypr_json(true);
+        let arr = v.as_array().cloned().unwrap_or_default();
+        let mut by_name = std::collections::HashMap::new();
+        let mut id_to_name = std::collections::HashMap::new();
+        for m in &arr {
             if let Some(n) = m.get("name").and_then(|x| x.as_str()) {
-                out.insert(n.to_string(), m.clone());
+                by_name.insert(n.to_string(), m.clone());
+            }
+            if let (Some(id), Some(n)) = (m.get("id").and_then(|x| x.as_i64()), m.get("name").and_then(|x| x.as_str())) {
+                id_to_name.insert(id, n.to_string());
             }
         }
+        Self { all: arr, by_name, id_to_name }
     }
-    out
+
+    fn names(&self) -> Vec<String> {
+        self.all.iter()
+            .filter_map(|m| m.get("name").and_then(|x| x.as_str()).map(|s| s.to_string()))
+            .collect()
+    }
+
+    fn active_names(&self) -> Vec<String> {
+        self.all.iter()
+            .filter(|m| !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false))
+            .filter_map(|m| m.get("name").and_then(|x| x.as_str()).map(|s| s.to_string()))
+            .collect()
+    }
+
+    fn field(&self, name: &str, key: &str) -> String {
+        let m = match self.by_name.get(name) {
+            Some(m) => m,
+            None => return String::new(),
+        };
+        match m.get(key) {
+            Some(Value::Bool(b)) => b.to_string(),
+            Some(Value::Number(n)) => n.to_string(),
+            Some(Value::String(s)) => s.clone(),
+            _ => String::new(),
+        }
+    }
+
+    fn focused_name(&self) -> String {
+        self.all.iter()
+            .find(|m| m.get("focused").and_then(|x| x.as_bool()).unwrap_or(false))
+            .and_then(|m| m.get("name").and_then(|x| x.as_str()))
+            .unwrap_or("")
+            .to_string()
+    }
+
+    fn external_name(&self) -> String {
+        self.all.iter().find(|m| {
+            !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false)
+                && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("eDP")
+                && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("LVDS")
+                && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("DSI")
+        }).and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
+    }
+
+    fn internal_name(&self) -> String {
+        let name = self.all.iter()
+            .find(|m| m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("eDP"))
+            .and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string();
+        if name.is_empty() {
+            self.all.first().and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
+        } else { name }
+    }
+
+    fn active_count(&self) -> i64 {
+        self.all.iter().filter(|m| !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false)).count() as i64
+    }
+
+    fn read_state(&self, name: &str) -> Option<MonitorState> {
+        read_state_from(self, name)
+    }
+}
+
+fn monitors_by_name(all: bool) -> std::collections::HashMap<String, Value> {
+    let mut snap = Snapshot::fetch();
+    if !all {
+        snap.by_name.retain(|_, m| !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false));
+    }
+    snap.by_name.clone()
 }
 
 fn monitor_names(all: bool) -> Vec<String> {
-    let v = hypr_json(all);
-    match v.as_array() {
-        Some(arr) => arr.iter()
-            .filter_map(|m| m.get("name").and_then(|x| x.as_str()).map(|s| s.to_string()))
-            .collect(),
-        None => Vec::new(),
-    }
+    let snap = Snapshot::fetch();
+    if all { snap.names() } else { snap.active_names() }
 }
 
 fn monitor_serial(map: &std::collections::HashMap<String, Value>, name: &str) -> String {
@@ -80,65 +154,24 @@ fn hypr_json(all: bool) -> Value {
 }
 
 pub fn focused_name() -> String {
-    let v = hypr_json(false);
-    v.as_array().and_then(|a| a.iter().find(|m| m.get("focused").and_then(|x| x.as_bool()).unwrap_or(false)))
-        .and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
+    Snapshot::fetch().focused_name()
 }
 
 fn external_name() -> String {
-    let v = hypr_json(true);
-    v.as_array().and_then(|a| a.iter().find(|m| {
-        !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false)
-            && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("eDP")
-            && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("LVDS")
-            && !m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("DSI")
-    })).and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
+    Snapshot::fetch().external_name()
 }
 
 fn internal_name() -> String {
-    let v = hypr_json(true);
-    let arr = v.as_array().cloned().unwrap_or_default();
-    let name = arr.iter().find(|m| m.get("name").and_then(|x| x.as_str()).unwrap_or("").starts_with("eDP"))
-        .and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string();
-    if name.is_empty() {
-        arr.first().and_then(|m| m.get("name").and_then(|x| x.as_str())).unwrap_or("").to_string()
-    } else { name }
+    Snapshot::fetch().internal_name()
 }
-
 
 fn field_of(name: &str, key: &str) -> String {
-    let v = hypr_json(true);
-    let arr = match v.as_array() {
-        Some(a) => a,
-        None => return String::new(),
-    };
-    let m = match arr.iter().find(|m| m.get("name").and_then(|x| x.as_str()) == Some(name)) {
-        Some(m) => m,
-        None => return String::new(),
-    };
-    match m.get(key) {
-        Some(Value::Bool(b)) => b.to_string(),
-        Some(Value::Number(n)) => {
-            // mirrorOf may be an id (number); keep numeric form as before
-            n.to_string()
-        }
-        Some(Value::String(s)) => s.clone(),
-        _ => String::new(),
-    }
+    Snapshot::fetch().field(name, key)
 }
 
-fn read_state(name: &str) -> Option<MonitorState> {
-    let v = hypr_json(true);
-    let arr = v.as_array()?;
-    let m = arr.iter().find(|m| m.get("name").and_then(|x| x.as_str()) == Some(name))?;
-
-    // id → name for mirrorOf resolution
-    let mut id_to_name = std::collections::HashMap::new();
-    for mon in arr {
-        if let (Some(id), Some(n)) = (mon.get("id").and_then(|x| x.as_i64()), mon.get("name").and_then(|x| x.as_str())) {
-            id_to_name.insert(id, n.to_string());
-        }
-    }
+fn read_state_from(snap: &Snapshot, name: &str) -> Option<MonitorState> {
+    let m = snap.by_name.get(name)?;
+    let id_to_name = &snap.id_to_name;
 
     let scale_raw = m.get("scale").map(|x| match x {
         Value::Number(n) => n.to_string(),
@@ -167,6 +200,7 @@ fn read_state(name: &str) -> Option<MonitorState> {
 
     let mut scale = scale_raw;
     let mut transform = transform_raw;
+
     let mut disabled = if disabled_bool { "1".to_string() } else { "0".to_string() };
     let mut mirror = mirror;
     let mut position = position;
@@ -182,6 +216,7 @@ fn read_state(name: &str) -> Option<MonitorState> {
 
     if let Ok(content) = std::fs::read_to_string(state_file()) {
         for line in content.lines() {
+            if line.starts_with('#') { continue; }
             let t: Vec<&str> = line.split_whitespace().collect();
             if !t.is_empty() && t[0] == name {
                 if t.len() >= 2 && !t[1].is_empty() { scale = t[1].to_string(); }
@@ -201,9 +236,17 @@ fn read_state(name: &str) -> Option<MonitorState> {
     Some((scale, transform, disabled, mirror, position, mode, sdrb, sdrr))
 }
 
+fn read_state(name: &str) -> Option<MonitorState> {
+    read_state_from(&Snapshot::fetch(), name)
+}
+
 fn apply_change(output: &str, key: &str, value: &str) -> Result<(), String> {
+    apply_change_snap(&Snapshot::fetch(), output, key, value)
+}
+
+fn apply_change_snap(snap: &Snapshot, output: &str, key: &str, value: &str) -> Result<(), String> {
     let (scale, transform, disabled, mirror, position, mode, sdrb, sdrr) =
-        read_state(output).ok_or_else(|| format!("no output called \"{}\"", output))?;
+        read_state_from(snap, output).ok_or_else(|| format!("no output called \"{}\"", output))?;
     let mut scale = scale; let mut transform = transform; let mut disabled = disabled;
     let mut mirror = mirror; let mut position = position; let mut mode = mode;
     let mut sdrb = sdrb; let mut sdrr = sdrr;
@@ -230,8 +273,12 @@ fn apply_change(output: &str, key: &str, value: &str) -> Result<(), String> {
 }
 
 fn save_field(output: &str, key: &str, value: &str) -> Result<(), String> {
+    save_field_snap(&Snapshot::fetch(), output, key, value)
+}
+
+fn save_field_snap(snap: &Snapshot, output: &str, key: &str, value: &str) -> Result<(), String> {
     let (scale, transform, disabled, mirror, position, mode, sdrb, sdrr) =
-        read_state(output).ok_or_else(|| format!("no output called \"{}\"", output))?;
+        read_state_from(snap, output).ok_or_else(|| format!("no output called \"{}\"", output))?;
     let mut scale = scale; let mut transform = transform; let mut disabled = disabled;
     let mut mirror = mirror; let mut position = position; let mut mode = mode;
     let mut sdrb = sdrb; let mut sdrr = sdrr;
@@ -250,10 +297,15 @@ fn save_field(output: &str, key: &str, value: &str) -> Result<(), String> {
     let _ = std::fs::create_dir_all(state_dir());
     let path = state_file();
     let mut lines: Vec<String> = std::fs::read_to_string(&path).unwrap_or_default().lines().map(|s| s.to_string()).collect();
+    // prune stale outputs (#4) and header (#3)
+    let known: std::collections::HashSet<String> = snap.names().into_iter().collect();
     lines.retain(|l| {
         let t: Vec<&str> = l.split_whitespace().collect();
-        t.is_empty() || t[0] != output
+        t.is_empty() || t[0].starts_with('#') || (known.contains(t[0]) && t[0] != output)
     });
+    if lines.is_empty() || !lines[0].starts_with("# v2") {
+        lines.insert(0, "# v2".to_string());
+    }
     lines.push(format!("{} {} {} {} {} {} {} {} {}", output, scale, transform, disabled, mirror, position, mode, sdrb, sdrr));
     atomic_write(&path, &(lines.join("\n") + "\n")).map_err(|e| e.to_string())
 }
@@ -262,6 +314,7 @@ fn read_saved_map() -> std::collections::HashMap<String, (String, String)> {
     let mut map = std::collections::HashMap::new();
     if let Ok(content) = std::fs::read_to_string(state_file()) {
         for line in content.lines() {
+            if line.starts_with('#') { continue; }
             let t: Vec<&str> = line.split_whitespace().collect();
             if t.is_empty() { continue; }
             let name = t[0].to_string();
@@ -275,26 +328,15 @@ fn read_saved_map() -> std::collections::HashMap<String, (String, String)> {
     map
 }
 
-fn list_action() -> String {
-    let json = hypr_monitors(true);
-    let mut v: Value = match serde_json::from_str(&json) {
-        Ok(v) => v,
-        Err(_) => return json.trim().to_string(),
-    };
+fn list_action(snap: &Snapshot) -> String {
+    let mut v = Value::Array(snap.all.clone());
     let arr = match v.as_array_mut() {
         Some(a) => a,
-        None => return json.trim().to_string(),
+        None => return "{}".to_string(),
     };
 
     // id -> name
-    let mut id_to_name = std::collections::HashMap::new();
-    for m in arr.iter() {
-        if let (Some(id), Some(name)) = (m.get("id"), m.get("name")) {
-            if let (Some(i), Some(n)) = (id.as_i64(), name.as_str()) {
-                id_to_name.insert(i, n.to_string());
-            }
-        }
-    }
+    let id_to_name = &snap.id_to_name;
 
     let saved = read_saved_map();
 
@@ -342,26 +384,19 @@ fn list_action() -> String {
         }
     }
 
-    serde_json::to_string(&v).unwrap_or_else(|_| json.trim().to_string())
+    serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string())
 }
 
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
         return "ERR monitors: missing subcommand".to_string();
     }
+    let snap = Snapshot::fetch();
     match args[0].as_str() {
         "status" => {
-            let v = hypr_json(true);
-            let arr = v.as_array().cloned().unwrap_or_default();
+            let arr = snap.all.clone();
             // map id -> name
-            let mut id_to_name = std::collections::HashMap::new();
-            for m in &arr {
-                if let (Some(id), Some(name)) = (m.get("id"), m.get("name")) {
-                    if let (Some(i), Some(n)) = (id.as_i64(), name.as_str()) {
-                        id_to_name.insert(i, n.to_string());
-                    }
-                }
-            }
+            let id_to_name = &snap.id_to_name;
             let mut rows: Vec<Vec<String>> = Vec::new();
             for m in &arr {
                 let name = m.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
@@ -390,15 +425,15 @@ pub fn handle(args: &[String]) -> String {
                 crate::table::render(&["Monitor", "Resolution", "Scale", "Mode", "Focus"], &rows)
             }
         }
-        "list" => list_action(),
+        "list" => list_action(&snap),
         "set" => {
             if args.len() < 4 {
                 return "ERR usage: monitors set OUTPUT KEY VALUE".to_string();
             }
-            set_action(&args[1], &args[2], &args[3])
+            set_action(&snap, &args[1], &args[2], &args[3])
         }
         "scale" => {
-            let focused = focused_name();
+            let focused = snap.focused_name();
             if focused.is_empty() { return "ERR no focused monitor".to_string(); }
             let action = if args.len() >= 2 { args[1].as_str() } else { "up" };
             match action {
@@ -407,36 +442,43 @@ pub fn handle(args: &[String]) -> String {
                     let v = &args[2];
                     let n: f64 = match v.parse() { Ok(x) => x, Err(_) => return "ERR bad scale".to_string() };
                     if n <= 0.0 { return "ERR scale must be > 0".to_string(); }
-                    if let Err(e) = apply_change(&focused, "scale", v) { return format!("ERR {}", e); }
-                    if let Err(e) = save_field(&focused, "scale", v) { return format!("ERR {}", e); }
+                    if let Err(e) = apply_change_snap(&snap, &focused, "scale", v) { return format!("ERR {}", e); }
+                    if let Err(e) = save_field_snap(&snap, &focused, "scale", v) { return format!("ERR {}", e); }
                     format!("{} scale set to {}", focused, v)
                 }
                 "reset" => {
-                    if let Err(e) = apply_change(&focused, "scale", "1") { return format!("ERR {}", e); }
-                    if let Err(e) = save_field(&focused, "scale", "1") { return format!("ERR {}", e); }
+                    if let Err(e) = apply_change_snap(&snap, &focused, "scale", "1") { return format!("ERR {}", e); }
+                    if let Err(e) = save_field_snap(&snap, &focused, "scale", "1") { return format!("ERR {}", e); }
                     format!("{} scale reset", focused)
                 }
                 "up" | "down" => {
                     let ladder = ["1", "1.25", "1.5", "1.6", "2", "3", "4"];
-                    let cur = field_of(&focused, "scale");
+                    let cur = snap.field(&focused, "scale");
                     let cur = if cur.is_empty() { "1".to_string() } else { cur };
                     let mut idx = ladder.iter().position(|&s| s == cur).unwrap_or(0);
                     if action == "up" { if idx + 1 < ladder.len() { idx += 1; } }
                     else { idx = idx.saturating_sub(1); }
                     let newv = ladder[idx];
-                    if let Err(e) = apply_change(&focused, "scale", newv) { return format!("ERR {}", e); }
-                    if let Err(e) = save_field(&focused, "scale", newv) { return format!("ERR {}", e); }
+                    if let Err(e) = apply_change_snap(&snap, &focused, "scale", newv) { return format!("ERR {}", e); }
+                    if let Err(e) = save_field_snap(&snap, &focused, "scale", newv) { return format!("ERR {}", e); }
                     format!("{} scale {}", focused, newv)
                 }
                 _ => format!("ERR unknown scale action: {}", action),
             }
         }
         "brightness" => {
-            let focused = focused_name();
+            let focused = snap.focused_name();
             if focused.is_empty() { return "ERR no focused monitor".to_string(); }
             let action = if args.len() >= 2 { args[1].as_str() } else { "up" };
             let step: i64 = if args.len() >= 3 { args[2].parse().unwrap_or(5) } else { 5 };
             let is_internal = focused.starts_with("eDP") || focused.starts_with("LVDS") || focused.starts_with("DSI");
+            let ddc_args = |vcp: &str| -> Vec<String> {
+                if is_internal { vec![] } else if let Some(d) = ddcutil_display(&focused) {
+                    vec!["--display".to_string(), d.to_string(), "setvcp".to_string(), "10".to_string(), vcp.to_string()]
+                } else {
+                    vec!["setvcp".to_string(), "10".to_string(), vcp.to_string()]
+                }
+            };
             match action {
                 "up" => {
                     if is_internal {
@@ -444,7 +486,8 @@ pub fn handle(args: &[String]) -> String {
                         if code != 0 { return format!("ERR brightnessctl: {}", err); }
                         format!("{} brightness {}", focused, out.trim())
                     } else {
-                        let (code, _, err) = run("ddcutil", &["setvcp", "10", &format!("+{}", step)]);
+                        let a = ddc_args(&format!("+{}", step));
+                        let (code, _, err) = run("ddcutil", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                         if code != 0 { return format!("ERR ddcutil: {}", err); }
                         "OK".to_string()
                     }
@@ -455,19 +498,26 @@ pub fn handle(args: &[String]) -> String {
                         if code != 0 { return format!("ERR brightnessctl: {}", err); }
                         format!("{} brightness {}", focused, out.trim())
                     } else {
-                        let (code, _, err) = run("ddcutil", &["setvcp", "10", &format!("-{}", step)]);
+                        let a = ddc_args(&format!("-{}", step));
+                        let (code, _, err) = run("ddcutil", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                         if code != 0 { return format!("ERR ddcutil: {}", err); }
                         "OK".to_string()
                     }
                 }
                 "max" => {
                     if is_internal { let _ = run("brightnessctl", &["set", "100%"]); }
-                    else { let _ = run("ddcutil", &["setvcp", "10", "100"]); }
+                    else {
+                        let a = ddc_args("100");
+                        let _ = run("ddcutil", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+                    }
                     "OK".to_string()
                 }
                 "min" => {
                     if is_internal { let _ = run("brightnessctl", &["set", "1%"]); }
-                    else { let _ = run("ddcutil", &["setvcp", "10", "1"]); }
+                    else {
+                        let a = ddc_args("1");
+                        let _ = run("ddcutil", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+                    }
                     "OK".to_string()
                 }
                 "set" => {
@@ -477,7 +527,8 @@ pub fn handle(args: &[String]) -> String {
                         let (code, _, err) = run("brightnessctl", &["set", &format!("{}%", val)]);
                         if code != 0 { return format!("ERR brightnessctl: {}", err); }
                     } else {
-                        let (code, _, err) = run("ddcutil", &["setvcp", "10", val]);
+                        let a = ddc_args(val);
+                        let (code, _, err) = run("ddcutil", &a.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                         if code != 0 { return format!("ERR ddcutil: {}", err); }
                     }
                     "OK".to_string()
@@ -486,7 +537,7 @@ pub fn handle(args: &[String]) -> String {
             }
         }
         "identify" => {
-            for name in monitor_names(true) {
+            for name in snap.names() {
                 let _ = run("notify-send", &["-t", "2000", "Monitor", &name]);
             }
             "OK".to_string()
@@ -495,43 +546,43 @@ pub fn handle(args: &[String]) -> String {
             let _ = run("hyprctl", &["dispatch", "dpms", "on"]);
             "OK".to_string()
         }
-        "recover" => recover_action(),
+        "recover" => recover_action(&snap),
         "internal" => {
             let action = if args.len() >= 2 { args[1].as_str() } else { "toggle" };
-            internal_action(action)
+            internal_action(&snap, action)
         }
         "mirror" => {
             let action = if args.len() >= 2 { args[1].as_str() } else { "toggle" };
-            mirror_action(action)
+            mirror_action(&snap, action)
         }
         "lid" => {
             let action = if args.len() >= 2 { args[1].as_str() } else { "toggle" };
-            lid_action(action)
+            lid_action(&snap, action)
         }
         "try" => {
             if args.len() < 4 { return "ERR try needs an output, a setting and a value".to_string(); }
-            try_action(&args[1..])
+            try_action(&snap, &args[1..])
         }
-        "keep" => keep_action(),
-        "revert" => revert_action(),
+        "keep" => keep_action(&snap),
+        "revert" => revert_action(&snap),
         "workspaces" => {
             let action = if args.len() >= 2 { args[1].as_str() } else { "sync" };
             workspaces_action(action)
         }
         "workspace" => {
             let slot = if args.len() >= 2 { args[1].as_str() } else { "" };
-            workspace_action(slot)
+            workspace_action(&snap, slot)
         }
         "workspace-step" => {
             let dir = if args.len() >= 2 { args[1].as_str() } else { "next" };
-            workspace_step_action(dir)
+            workspace_step_action(&snap, dir)
         }
         "move-window" => {
             let slot = if args.len() >= 2 { args[1].as_str() } else { "" };
-            move_window_action(slot)
+            move_window_action(&snap, slot)
         }
-        "identities" => identities_action(),
-        "sync-identities" => sync_identities_action(),
+        "identities" => identities_action(&snap),
+        "sync-identities" => sync_identities_action(&snap),
         _ => format!("ERR unknown monitors subcommand: {}", args[0]),
     }
 }
@@ -580,30 +631,87 @@ fn valid_position(v: &str) -> bool {
     valid_int(x) && valid_int(y)
 }
 
-fn set_action(output: &str, key: &str, value: &str) -> String {
+/// Unified validation + normalization for a monitor setting (#2).
+/// Returns the normalized value to pass to apply/save, or an error string.
+fn validate_setting(key: &str, value: &str) -> Result<String, String> {
+    match key {
+        "scale" => {
+            const LADDER: [&str; 7] = ["1", "1.25", "1.5", "1.6", "2", "3", "4"];
+            if LADDER.contains(&value) {
+                Ok(value.to_string())
+            } else {
+                Err("ERR scale must be one of: 1 1.25 1.5 1.6 2 3 4".to_string())
+            }
+        }
+        "transform" => match parse_transform(value) {
+            Some(i) => Ok(i.to_string()),
+            None => Err("ERR transform must be one of: normal 90 180 270 flipped flipped-90 flipped-180 flipped-270".to_string()),
+        },
+        "position" => {
+            if valid_position(value) {
+                Ok(value.to_string())
+            } else {
+                Err("ERR position must be auto, auto-left/right/up/down, or XxY".to_string())
+            }
+        }
+        "mode" => {
+            let v = value.strip_suffix("Hz").unwrap_or(value).trim();
+            if valid_mode(v) {
+                Ok(v.to_string())
+            } else {
+                Err("ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string())
+            }
+        }
+        "sdrbrightness" => {
+            if !value.is_empty() && value.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                Ok(value.to_string())
+            } else {
+                Err("ERR sdrbrightness must be a number".to_string())
+            }
+        }
+        "sdrsaturation" => {
+            if !value.is_empty() && value.chars().all(|c| c.is_ascii_digit() || c == '.') {
+                Ok(value.to_string())
+            } else {
+                Err("ERR sdrsaturation must be a number".to_string())
+            }
+        }
+        _ => Err("ERR unknown monitor setting".to_string()),
+    }
+}
+
+fn old_value_for(snap: &Snapshot, output: &str, key: &str) -> Option<String> {
+    let st = read_state_from(snap, output)?;
+    Some(match key {
+        "scale" => st.0.clone(),
+        "transform" => st.1.clone(),
+        "disabled" => st.2.clone(),
+        "mirror" => st.3.clone(),
+        "position" => st.4.clone(),
+        "mode" => st.5.clone(),
+        "sdrbrightness" => st.6.clone(),
+        "sdrsaturation" => st.7.clone(),
+        _ => return None,
+    })
+}
+
+fn set_action(snap: &Snapshot, output: &str, key: &str, value: &str) -> String {
     // refuse unknown output
-    if field_of(output, "name").is_empty() {
+    if snap.field(output, "name").is_empty() {
         return format!("ERR no output called \"{}\"", output);
     }
 
     match key {
         "scale" => {
-            let ladder = ["1", "1.25", "1.5", "1.6", "2", "3", "4"];
-            if !ladder.contains(&value) {
-                return "ERR scale must be one of: 1 1.25 1.5 1.6 2 3 4".to_string();
-            }
-            if let Err(e) = apply_change(output, "scale", value) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "scale", value) { return format!("ERR {}", e); }
-            format!("{} scale {}", output, value)
+            let normalized = match validate_setting("scale", value) { Ok(v) => v, Err(e) => return e };
+            if let Err(e) = apply_change_snap(snap, output, "scale", &normalized) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "scale", &normalized) { return format!("ERR {}", e); }
+            format!("{} scale {}", output, normalized)
         }
         "transform" => {
-            let idx = match parse_transform(value) {
-                Some(i) => i,
-                None => return "ERR transform must be one of: normal 90 180 270 flipped flipped-90 flipped-180 flipped-270".to_string(),
-            };
-            let idx_s = idx.to_string();
-            if let Err(e) = apply_change(output, "transform", &idx_s) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "transform", &idx_s) { return format!("ERR {}", e); }
+            let normalized = match validate_setting("transform", value) { Ok(v) => v, Err(e) => return e };
+            if let Err(e) = apply_change_snap(snap, output, "transform", &normalized) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "transform", &normalized) { return format!("ERR {}", e); }
             format!("{} transform {}", output, value)
         }
         "disabled" => {
@@ -612,73 +720,58 @@ fn set_action(output: &str, key: &str, value: &str) -> String {
                 "no" | "false" | "off" => (0, "false"),
                 _ => return "ERR disabled takes yes or no".to_string(),
             };
-            if index == 1 && field_of(output, "disabled") != "true" && active_count_i() <= 1 {
+            if index == 1 && snap.field(output, "disabled") != "true" && snap.active_count() <= 1 {
                 return "ERR refusing to disable the only active output".to_string();
             }
-            if let Err(e) = apply_change(output, "disabled", disabled) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "disabled", &index.to_string()) { return format!("ERR {}", e); }
+            if let Err(e) = apply_change_snap(snap, output, "disabled", disabled) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "disabled", &index.to_string()) { return format!("ERR {}", e); }
             if index == 0 {
                 let _ = workspaces_sync_action();
             }
             format!("{} disabled {}", output, value)
         }
         "position" => {
-            if !valid_position(value) {
-                return "ERR position must be auto, auto-left/right/up/down, or XxY".to_string();
-            }
-            if let Err(e) = apply_change(output, "position", value) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "position", value) { return format!("ERR {}", e); }
-            format!("{} position {}", output, value)
+            let normalized = match validate_setting("position", value) { Ok(v) => v, Err(e) => return e };
+            if let Err(e) = apply_change_snap(snap, output, "position", &normalized) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "position", &normalized) { return format!("ERR {}", e); }
+            format!("{} position {}", output, normalized)
         }
         "mode" => {
-            let v = value.strip_suffix("Hz").unwrap_or(value).trim();
-            if !valid_mode(v) {
-                return "ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string();
-            }
-            if let Err(e) = apply_change(output, "mode", v) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "mode", v) { return format!("ERR {}", e); }
-            format!("{} mode {}", output, v)
+            let normalized = match validate_setting("mode", value) { Ok(v) => v, Err(e) => return e };
+            if let Err(e) = apply_change_snap(snap, output, "mode", &normalized) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "mode", &normalized) { return format!("ERR {}", e); }
+            format!("{} mode {}", output, normalized)
         }
         "sdrbrightness" => {
-            if !value.chars().all(|c| c.is_ascii_digit() || c == '.') || value.is_empty() {
-                return "ERR sdrbrightness must be a number".to_string();
-            }
-            if let Err(e) = apply_change(output, "sdrbrightness", value) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "sdrbrightness", value) { return format!("ERR {}", e); }
-            format!("{} sdrbrightness {}", output, value)
+            let normalized = match validate_setting("sdrbrightness", value) { Ok(v) => v, Err(e) => return e };
+            if let Err(e) = apply_change_snap(snap, output, "sdrbrightness", &normalized) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "sdrbrightness", &normalized) { return format!("ERR {}", e); }
+            format!("{} sdrbrightness {}", output, normalized)
         }
         "sdrsaturation" => {
-            if !value.chars().all(|c| c.is_ascii_digit() || c == '.') || value.is_empty() {
-                return "ERR sdrsaturation must be a number".to_string();
-            }
-            if let Err(e) = apply_change(output, "sdrsaturation", value) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "sdrsaturation", value) { return format!("ERR {}", e); }
-            format!("{} sdrsaturation {}", output, value)
+            let normalized = match validate_setting("sdrsaturation", value) { Ok(v) => v, Err(e) => return e };
+            if let Err(e) = apply_change_snap(snap, output, "sdrsaturation", &normalized) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "sdrsaturation", &normalized) { return format!("ERR {}", e); }
+            format!("{} sdrsaturation {}", output, normalized)
         }
         "mirror" => {
             let mut v = value.to_string();
             if v == "off" || v.is_empty() { v = "none".to_string(); }
             if v != "none" {
                 if v == output { return "ERR an output cannot mirror itself".to_string(); }
-                if field_of(&v, "name").is_empty() { return format!("ERR no output called \"{}\" to mirror", v); }
-                if field_of(&v, "disabled") == "true" { return format!("ERR {} is off; turn it on before mirroring", v); }
+                if snap.field(&v, "name").is_empty() { return format!("ERR no output called \"{}\" to mirror", v); }
+                if snap.field(&v, "disabled") == "true" { return format!("ERR {} is off; turn it on before mirroring", v); }
                 // target must not already be mirroring
-                let st = read_state(&v);
+                let st = read_state_from(snap, &v);
                 if let Some(s) = st {
                     if s.3 != "none" { return format!("ERR {} is mirroring another screen; extend it first", v); }
                 }
             }
-            if v != "none" {
-                if field_of(output, "disabled") == "true" {
-                    return format!("ERR {} is off; turn it on before mirroring", output);
-                }
-            } else {
-                if field_of(output, "disabled") == "true" {
-                    return format!("ERR {} is off; turn it on before mirroring", output);
-                }
+            if snap.field(output, "disabled") == "true" {
+                return format!("ERR {} is off; turn it on before mirroring", output);
             }
-            if let Err(e) = apply_change(output, "mirror", &v) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(output, "mirror", &v) { return format!("ERR {}", e); }
+            if let Err(e) = apply_change_snap(snap, output, "mirror", &v) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, output, "mirror", &v) { return format!("ERR {}", e); }
             if v == "none" {
                 let _ = workspaces_sync_action();
             }
@@ -688,50 +781,33 @@ fn set_action(output: &str, key: &str, value: &str) -> String {
     }
 }
 
-fn try_action(args: &[String]) -> String {
+fn try_action(snap: &Snapshot, args: &[String]) -> String {
     if args.len() < 3 { return "ERR try needs an output, a setting and a value".to_string(); }
-    let output = &args[0]; let key = &args[1]; let value = &args[2];
+    let output = &args[0]; let key = &args[1]; let raw_value = &args[2];
     if output.is_empty() || !output.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
         return format!("ERR invalid output name: {}", output);
     }
     let pending = state_dir().join("display-pending");
     if pending.exists() { return "ERR a display change is already pending; run keep or revert first".to_string(); }
-    if field_of(output, "name").is_empty() { return format!("ERR no output called \"{}\"", output); }
-    if field_of(output, "disabled") == "true" { return format!("ERR {} is off; turn it on first", output); }
+    if snap.field(output, "name").is_empty() { return format!("ERR no output called \"{}\"", output); }
+    if snap.field(output, "disabled") == "true" { return format!("ERR {} is off; turn it on first", output); }
 
-    let st = match read_state(output) { Some(s) => s, None => return format!("ERR no output called \"{}\"", output) };
-
-    let mut value = value.clone();
-    let old = match key.as_str() {
-        "scale" => {
-            let ladder = ["1", "1.25", "1.5", "1.6", "2", "3", "4"];
-            if !ladder.contains(&value.as_str()) { return "ERR scale must be one of: 1 1.25 1.5 1.6 2 3 4".to_string(); }
-            st.0.clone()
+    let value = match validate_setting(key, raw_value) {
+        Ok(v) => v,
+        Err(e) => {
+            if key != "scale" && key != "transform" && key != "mode" && key != "position" {
+                return "ERR try takes scale, transform, mode or position".to_string();
+            }
+            return e;
         }
-        "transform" => {
-            let idx = match parse_transform(&value) {
-                Some(i) => i,
-                None => return "ERR transform must be one of: normal 90 180 270 flipped flipped-90 flipped-180 flipped-270".to_string(),
-            };
-            value = idx.to_string();
-            st.1.clone()
-        }
-        "mode" => {
-            let v = value.strip_suffix("Hz").unwrap_or(&value).trim().to_string();
-            if !valid_mode(&v) { return "ERR mode must be preferred, highres, highrr, or WxH[@R]".to_string(); }
-            value = v;
-            st.5.clone()
-        }
-        "position" => {
-            if !valid_position(&value) { return "ERR position must be auto, auto-left/right/up/down, or XxY".to_string(); }
-            st.4.clone()
-        }
-        _ => return "ERR try takes scale, transform, mode or position".to_string(),
+    };
+    let old = match old_value_for(snap, output, key) {
+        Some(v) => v,
+        None => return format!("ERR no output called \"{}\"", output),
     };
 
     let _ = std::fs::create_dir_all(state_dir());
-    let content = format!("{}\t{}\t{}\t{}\n", output, key, old, value);
-    if atomic_write(&pending, &content).is_err() { return "ERR could not write pending".to_string(); }
+    if write_pending(output, key, &old, &value).is_err() { return "ERR could not write pending".to_string(); }
 
     // arm timer
     let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
@@ -755,8 +831,7 @@ fn try_action(args: &[String]) -> String {
         return format!("ERR could not schedule the automatic revert: {}", err.trim());
     }
 
-    let apply_val = value.clone();
-    if let Err(e) = apply_change(output, key, &apply_val) { return format!("ERR {}", e); }
+    if let Err(e) = apply_change_snap(snap, output, key, &value) { return format!("ERR {}", e); }
 
     format!("{} {} {} (reverting in 15s unless kept)", output, key, value)
 }
@@ -773,6 +848,17 @@ fn lid_closed() -> bool {
             let p = e.path().join("state");
             if let Ok(s) = std::fs::read_to_string(&p) {
                 if s.contains("closed") { return true; }
+                if s.contains("open") { return false; }
+            }
+        }
+    }
+    // fallback: /sys/class/power_supply
+    if let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") {
+        for e in entries.flatten() {
+            let p = e.path().join("lid/state");
+            if let Ok(s) = std::fs::read_to_string(&p) {
+                if s.contains("closed") { return true; }
+                if s.contains("open") { return false; }
             }
         }
     }
@@ -786,6 +872,7 @@ fn clear_disabled(output: &str) {
         let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         let mut changed = false;
         for line in lines.iter_mut() {
+            if line.starts_with('#') { continue; }
             let t: Vec<&str> = line.split_whitespace().collect();
             if t.len() >= 4 && t[0] == output && t[3] == "1" {
                 // set 4th field (index 3) to 0
@@ -797,35 +884,37 @@ fn clear_disabled(output: &str) {
             }
         }
         if changed {
+            if lines.is_empty() || !lines[0].starts_with("# v2") {
+                lines.insert(0, "# v2".to_string());
+            }
             let _ = atomic_write(&path, &(lines.join("\n") + "\n"));
         }
     }
 }
 
 fn active_count_i() -> i64 {
-    let v = hypr_json(true);
-    v.as_array().map(|a| a.iter().filter(|m| !m.get("disabled").and_then(|x| x.as_bool()).unwrap_or(false)).count() as i64).unwrap_or(0)
+    Snapshot::fetch().active_count()
 }
 
-fn internal_action(action: &str) -> String {
-    let name = internal_name();
+fn internal_action(snap: &Snapshot, action: &str) -> String {
+    let name = snap.internal_name();
     if name.is_empty() { return "ERR no monitor found".to_string(); }
-    let disabled = field_of(&name, "disabled");
+    let disabled = snap.field(&name, "disabled");
     let action = if action == "toggle" {
         if disabled == "true" { "on" } else { "off" }
     } else { action };
     match action {
         "off" => {
             if disabled == "true" { return "OK".to_string(); }
-            if active_count_i() <= 1 { return "ERR refusing to disable the only active output".to_string(); }
-            if let Err(e) = apply_change(&name, "disabled", "true") { return format!("ERR {}", e); }
-            if let Err(e) = save_field(&name, "disabled", "1") { return format!("ERR {}", e); }
+            if snap.active_count() <= 1 { return "ERR refusing to disable the only active output".to_string(); }
+            if let Err(e) = apply_change_snap(snap, &name, "disabled", "true") { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, &name, "disabled", "1") { return format!("ERR {}", e); }
             format!("internal panel {}: off", name)
         }
         "on" => {
             if disabled != "true" { return "OK".to_string(); }
-            if let Err(e) = apply_change(&name, "disabled", "false") { return format!("ERR {}", e); }
-            if let Err(e) = save_field(&name, "disabled", "0") { return format!("ERR {}", e); }
+            if let Err(e) = apply_change_snap(snap, &name, "disabled", "false") { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, &name, "disabled", "0") { return format!("ERR {}", e); }
             let _ = workspaces_sync_action();
             format!("internal panel {}: on", name)
         }
@@ -833,27 +922,27 @@ fn internal_action(action: &str) -> String {
     }
 }
 
-fn mirror_action(action: &str) -> String {
-    let internal = internal_name();
-    let external = external_name();
+fn mirror_action(snap: &Snapshot, action: &str) -> String {
+    let internal = snap.internal_name();
+    let external = snap.external_name();
     if external.is_empty() { return "ERR no external monitor connected to mirror onto".to_string(); }
-    if field_of(&internal, "disabled") == "true" {
+    if snap.field(&internal, "disabled") == "true" {
         return "ERR internal panel is off; turn it on before mirroring".to_string();
     }
-    let mirrored = field_of(&external, "mirrorOf");
+    let mirrored = snap.field(&external, "mirrorOf");
     let mirrored = if mirrored.is_empty() || mirrored == "null" { "none".to_string() } else { mirrored };
     let action = if action == "toggle" {
         if mirrored == "none" { "on" } else { "off" }
     } else { action };
     match action {
         "on" => {
-            if let Err(e) = apply_change(&external, "mirror", &internal) { return format!("ERR {}", e); }
-            if let Err(e) = save_field(&external, "mirror", &internal) { return format!("ERR {}", e); }
+            if let Err(e) = apply_change_snap(snap, &external, "mirror", &internal) { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, &external, "mirror", &internal) { return format!("ERR {}", e); }
             format!("{} now mirrors {}", external, internal)
         }
         "off" => {
-            if let Err(e) = apply_change(&external, "mirror", "none") { return format!("ERR {}", e); }
-            if let Err(e) = save_field(&external, "mirror", "none") { return format!("ERR {}", e); }
+            if let Err(e) = apply_change_snap(snap, &external, "mirror", "none") { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, &external, "mirror", "none") { return format!("ERR {}", e); }
             let _ = workspaces_sync_action();
             format!("{} extended again", external)
         }
@@ -861,18 +950,18 @@ fn mirror_action(action: &str) -> String {
     }
 }
 
-fn lid_action(action: &str) -> String {
-    let internal = internal_name();
+fn lid_action(snap: &Snapshot, action: &str) -> String {
+    let internal = snap.internal_name();
     if internal.is_empty() { return "OK".to_string(); }
-    let external = external_name();
+    let external = snap.external_name();
     match action {
         "close" | "off" => {
             if external.is_empty() {
                 return "no external monitor; leaving the internal panel on".to_string();
             }
-            if field_of(&internal, "disabled") == "true" { return "OK".to_string(); }
-            if let Err(e) = apply_change(&internal, "disabled", "true") { return format!("ERR {}", e); }
-            if let Err(e) = save_field(&internal, "disabled", "1") { return format!("ERR {}", e); }
+            if snap.field(&internal, "disabled") == "true" { return "OK".to_string(); }
+            if let Err(e) = apply_change_snap(snap, &internal, "disabled", "true") { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, &internal, "disabled", "1") { return format!("ERR {}", e); }
             let _ = std::fs::create_dir_all(state_dir());
             let _ = std::fs::write(lid_file(), format!("{}\n", internal));
             format!("lid closed: internal panel {} off", internal)
@@ -880,75 +969,130 @@ fn lid_action(action: &str) -> String {
         "open" | "on" => {
             let saved = match std::fs::read_to_string(lid_file()) { Ok(s) => s.trim().to_string(), Err(_) => String::new() };
             if saved.is_empty() { return "OK".to_string(); }
-            if field_of(&saved, "name").is_empty() { let _ = std::fs::remove_file(lid_file()); return "OK".to_string(); }
-            if let Err(e) = apply_change(&saved, "disabled", "false") { return format!("ERR {}", e); }
-            if let Err(e) = save_field(&saved, "disabled", "0") { return format!("ERR {}", e); }
+            if snap.field(&saved, "name").is_empty() { let _ = std::fs::remove_file(lid_file()); return "OK".to_string(); }
+            if let Err(e) = apply_change_snap(snap, &saved, "disabled", "false") { return format!("ERR {}", e); }
+            if let Err(e) = save_field_snap(snap, &saved, "disabled", "0") { return format!("ERR {}", e); }
             let _ = std::fs::remove_file(lid_file());
             let _ = workspaces_sync_action();
             format!("lid opened: internal panel {} on", saved)
         }
         "toggle" => {
-            if lid_file().exists() { lid_action("open") } else { lid_action("close") }
+            if lid_file().exists() { lid_action(snap, "open") } else { lid_action(snap, "close") }
         }
         "reconcile" => {
-            if lid_closed() && !external.is_empty() { lid_action("close") } else { lid_action("open") }
+            if lid_closed() && !external.is_empty() { lid_action(snap, "close") } else { lid_action(snap, "open") }
         }
         _ => "ERR lid takes close, open, toggle or reconcile".to_string(),
     }
 }
 
-fn recover_action() -> String {
+fn recover_action(snap: &Snapshot) -> String {
     // clear stale lid state if lid is open
     if lid_file().exists() && !lid_closed() {
         if let Ok(saved) = std::fs::read_to_string(lid_file()) {
             let saved = saved.trim().to_string();
-            if !saved.is_empty() && !field_of(&saved, "name").is_empty() {
+            if !saved.is_empty() && !snap.field(&saved, "name").is_empty() {
                 clear_disabled(&saved);
             }
         }
         let _ = std::fs::remove_file(lid_file());
+        let _ = workspaces_sync_action();
         return "lid is open; cleared the saved clamshell state".to_string();
     }
     "OK".to_string()
 }
-fn keep_action() -> String {
+fn keep_action(snap: &Snapshot) -> String {
     let pending = state_dir().join("display-pending");
     if !pending.exists() { return "no display change to keep".to_string(); }
-    let content = match std::fs::read_to_string(&pending) { Ok(s) => s, Err(_) => return "ERR could not read pending".to_string() };
-    let mut parts = content.trim().split('\t');
-    let output = parts.next().unwrap_or("").to_string();
-    let key = parts.next().unwrap_or("").to_string();
-    let _old = parts.next().unwrap_or("").to_string();
-    let mut new = parts.next().unwrap_or("").to_string();
-    if key == "mode" { new = new.strip_suffix("Hz").unwrap_or(&new).to_string(); }
-    if output.is_empty() || key.is_empty() { let _ = std::fs::remove_file(&pending); return "ERR could not read pending".to_string(); }
+    let Some(p) = read_pending() else {
+        let _ = std::fs::remove_file(&pending);
+        return "ERR could not read pending".to_string();
+    };
 
     let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
-    if let Err(e) = save_field(&output, &key, &new) { return format!("ERR {}", e); }
-    let _ = std::fs::remove_file(&pending);
-    format!("{} {} {} kept", output, key, new)
+    if let Err(e) = save_field_snap(snap, &p.output, &p.key, &p.new_value) { return format!("ERR {}", e); }
+    remove_pending(&pending);
+    format!("{} {} {} kept", p.output, p.key, p.new_value)
 }
 
-fn revert_action() -> String {
+fn revert_action(snap: &Snapshot) -> String {
     let pending = state_dir().join("display-pending");
     if !pending.exists() { return "OK".to_string(); }
-    let content = match std::fs::read_to_string(&pending) { Ok(s) => s, Err(_) => return "OK".to_string() };
-    let mut parts = content.trim().split('\t');
-    let output = parts.next().unwrap_or("").to_string();
-    let key = parts.next().unwrap_or("").to_string();
-    let mut old = parts.next().unwrap_or("").to_string();
-    if key == "mode" { old = old.strip_suffix("Hz").unwrap_or(&old).to_string(); }
-    let _new = parts.next().unwrap_or("").to_string();
+    let Some(p) = read_pending() else {
+        return "OK".to_string();
+    };
 
-    if field_of(&output, "name").is_empty() {
-        let _ = std::fs::remove_file(&pending);
+    if snap.field(&p.output, "name").is_empty() {
+        remove_pending(&pending);
         return "OK".to_string();
     }
 
     let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
-    if let Err(e) = apply_change(&output, &key, &old) { let _ = std::fs::remove_file(&pending); return format!("ERR {}", e); }
-    let _ = std::fs::remove_file(&pending);
-    format!("{} {} reverted to {}", output, key, old)
+    if let Err(e) = apply_change_snap(snap, &p.output, &p.key, &p.old_value) { remove_pending(&pending); return format!("ERR {}", e); }
+    remove_pending(&pending);
+    format!("{} {} reverted to {}", p.output, p.key, p.old_value)
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Pending {
+    output: String,
+    key: String,
+    old_value: String,
+    new_value: String,
+}
+
+fn pending_lock() -> Option<std::fs::File> {
+    let dir = state_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let lock_path = dir.join("display-pending.lock");
+    // non-blocking try + short retry
+    for _ in 0..20 {
+        match std::fs::OpenOptions::new().create_new(true).write(true).open(&lock_path) {
+            Ok(f) => return Some(f),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            }
+            Err(_) => return None,
+        }
+    }
+    None
+}
+
+fn remove_pending(path: &std::path::Path) {
+    let _ = std::fs::remove_file(path);
+    let lock = state_dir().join("display-pending.lock");
+    let _ = std::fs::remove_file(&lock);
+}
+
+fn read_pending() -> Option<Pending> {
+    let path = state_dir().join("display-pending");
+    let content = std::fs::read_to_string(&path).ok()?;
+    let trimmed = content.trim();
+    if trimmed.is_empty() { return None; }
+    if let Ok(p) = serde_json::from_str::<Pending>(trimmed) {
+        return Some(p);
+    }
+    // legacy TSV fallback
+    let mut parts = trimmed.split('\t');
+    let output = parts.next()?.to_string();
+    let key = parts.next()?.to_string();
+    let old_value = parts.next()?.to_string();
+    let new_value = parts.next()?.to_string();
+    if key == "mode" {
+        let old_value = old_value.strip_suffix("Hz").unwrap_or(&old_value).to_string();
+        let new_value = new_value.strip_suffix("Hz").unwrap_or(&new_value).to_string();
+        return Some(Pending { output, key, old_value, new_value });
+    }
+    Some(Pending { output, key, old_value, new_value })
+}
+
+fn write_pending(output: &str, key: &str, old_value: &str, new_value: &str) -> std::io::Result<()> {
+    let _lock = pending_lock();
+    let p = Pending { output: output.to_string(), key: key.to_string(), old_value: old_value.to_string(), new_value: new_value.to_string() };
+    let json = serde_json::to_string(&p).unwrap_or_else(|_| "{}".to_string());
+    let path = state_dir().join("display-pending");
+    atomic_write(&path, &format!("{}\n", json))
 }
 
 fn workspace_file() -> std::path::PathBuf { state_dir().join("workspaces.json") }
@@ -985,6 +1129,24 @@ fn read_workspace_map() -> std::collections::HashMap<String, i64> {
     out
 }
 
+fn ddcutil_display(output: &str) -> Option<String> {
+    // Parse `ddcutil detect --brief` to map hypr output name to ddcutil display number.
+    let (code, out, _) = run("ddcutil", &["detect", "--brief"]);
+    if code != 0 { return None; }
+    // Brief format: "Display 1\nMonitor: ...\n  I2C ...\n  ...\n  Monitor ID: ..."
+    // Fall back to scanning lines for output name substring.
+    let mut current_display: Option<String> = None;
+    for line in out.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Display ") {
+            current_display = trimmed.split_whitespace().nth(1).map(|s| s.to_string());
+        } else if trimmed.contains(output) {
+            return current_display;
+        }
+    }
+    None
+}
+
 
 fn workspaces_sync_action() -> String {
     let _ = std::fs::create_dir_all(state_dir());
@@ -1010,6 +1172,10 @@ fn workspaces_sync_action() -> String {
             map.insert(identity.clone(), candidate);
         }
     }
+
+    // prune stale identities (#4): keep only currently active monitors
+    let active_idents: std::collections::HashSet<String> = names.iter().map(|n| monitor_serial(&all, n)).collect();
+    map.retain(|k, _| active_idents.contains(k));
 
     // write sorted map
     let mut sorted: Vec<(&String, &i64)> = map.iter().collect();
@@ -1067,12 +1233,12 @@ fn workspaces_action(action: &str) -> String {
     }
 }
 
-fn workspace_action(slot: &str) -> String {
+fn workspace_action(snap: &Snapshot, slot: &str) -> String {
     if slot.is_empty() { return "ERR workspace needs a number".to_string(); }
     if !slot.chars().all(|c| c.is_ascii_digit()) { return "ERR workspace needs a number".to_string(); }
     let n: i64 = match slot.parse() { Ok(v) => v, Err(_) => return "ERR workspace needs a number".to_string() };
     if !(1..=10).contains(&n) { return "ERR workspace must be 1-10".to_string(); }
-    let focused = focused_name();
+    let focused = snap.focused_name();
     if focused.is_empty() { return "ERR no focused monitor".to_string(); }
     let base_str = workspace_base(&focused);
     let base: i64 = base_str.parse().unwrap_or(1);
@@ -1082,18 +1248,17 @@ fn workspace_action(slot: &str) -> String {
     format!("{} workspace {} (global {})", focused, n, id)
 }
 
-fn workspace_step_action(direction: &str) -> String {
+fn workspace_step_action(snap: &Snapshot, direction: &str) -> String {
     if direction != "next" && direction != "prev" { return "ERR workspace-step takes next or prev".to_string(); }
-    let focused = focused_name();
+    let focused = snap.focused_name();
     if focused.is_empty() { return "ERR no focused monitor".to_string(); }
     let base_str = workspace_base(&focused);
     let base: i64 = base_str.parse().unwrap_or(1);
     // current focused workspace id
-    let v = hypr_json(false);
-    let current: i64 = v.as_array().and_then(|a| {
-        a.iter().find(|m| m.get("focused").and_then(|x| x.as_bool()).unwrap_or(false))
-            .and_then(|m| m.get("activeWorkspace").and_then(|w| w.get("id")).and_then(|x| x.as_i64()))
-    }).unwrap_or(0);
+    let current: i64 = snap.all.iter()
+        .find(|m| m.get("focused").and_then(|x| x.as_bool()).unwrap_or(false))
+        .and_then(|m| m.get("activeWorkspace").and_then(|w| w.get("id")).and_then(|x| x.as_i64()))
+        .unwrap_or(0);
     if current == 0 { return "OK".to_string(); }
     let target = if direction == "next" { current + 1 } else { current - 1 };
     let target = target.clamp(base, base + 9);
@@ -1103,12 +1268,12 @@ fn workspace_step_action(direction: &str) -> String {
     "OK".to_string()
 }
 
-fn move_window_action(slot: &str) -> String {
+fn move_window_action(snap: &Snapshot, slot: &str) -> String {
     if slot.is_empty() { return "ERR move-window needs a number".to_string(); }
     if !slot.chars().all(|c| c.is_ascii_digit()) { return "ERR move-window needs a number".to_string(); }
     let n: i64 = match slot.parse() { Ok(v) => v, Err(_) => return "ERR move-window needs a number".to_string() };
     if !(1..=10).contains(&n) { return "ERR move-window must be 1-10".to_string(); }
-    let focused = focused_name();
+    let focused = snap.focused_name();
     if focused.is_empty() { return "ERR no focused monitor".to_string(); }
     let base_str = workspace_base(&focused);
     let base: i64 = base_str.parse().unwrap_or(1);
@@ -1118,9 +1283,8 @@ fn move_window_action(slot: &str) -> String {
     format!("window to {} workspace {} (global {})", focused, n, id)
 }
 
-fn identities_action() -> String {
-    let v = hypr_json(true);
-    let Some(arr) = v.as_array() else { return "{}".to_string() };
+fn identities_action(snap: &Snapshot) -> String {
+    let arr = &snap.all;
     let mut obj = Map::new();
     for m in arr {
         let Some(name) = m.get("name").and_then(|x| x.as_str()) else { continue };
@@ -1135,8 +1299,8 @@ fn identities_action() -> String {
     serde_json::to_string_pretty(&Value::Object(obj)).unwrap_or_else(|_| "{}".to_string())
 }
 
-fn sync_identities_action() -> String {
-    let out = identities_action();
+fn sync_identities_action(snap: &Snapshot) -> String {
+    let out = identities_action(snap);
     let _ = std::fs::create_dir_all(state_dir());
     let _ = std::fs::write(state_dir().join("monitor_identities.json"), format!("{}\n", out.trim()));
     "identities saved".to_string()
@@ -1207,5 +1371,39 @@ mod more_tests {
         assert!(valid_position("1920x1080"));
         assert!(valid_position("-1920x0"));
         assert!(!valid_position("auto-middle"));
+    }
+
+    #[test]
+    fn validate_setting_normalizes() {
+        assert_eq!(validate_setting("scale", "1.5").unwrap(), "1.5");
+        assert_eq!(validate_setting("transform", "flipped-90").unwrap(), "5");
+        assert_eq!(validate_setting("mode", "1920x1080@60Hz").unwrap(), "1920x1080@60");
+        assert_eq!(validate_setting("position", "auto-left").unwrap(), "auto-left");
+        assert!(validate_setting("scale", "99").is_err());
+        assert!(validate_setting("mode", "notamode").is_err());
+    }
+
+    #[test]
+    fn pending_json_roundtrip() {
+        let p = Pending { output: "eDP-1".into(), key: "scale".into(), old_value: "1".into(), new_value: "1.5".into() };
+        let s = serde_json::to_string(&p).unwrap();
+        let back: Pending = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.output, "eDP-1");
+        assert_eq!(back.new_value, "1.5");
+        // legacy TSV fallback
+        let tsv = "eDP-1\tscale\t1\t1.5";
+        let mut parts = tsv.split('\t');
+        assert_eq!(parts.next().unwrap(), "eDP-1");
+    }
+
+    #[test]
+    fn workspace_prune_keeps_only_active() {
+        let mut map = std::collections::HashMap::new();
+        map.insert("SER1".to_string(), 1);
+        map.insert("STALE".to_string(), 11);
+        let active: std::collections::HashSet<String> = ["SER1".to_string()].into_iter().collect();
+        map.retain(|k, _| active.contains(k));
+        assert_eq!(map.len(), 1);
+        assert!(map.contains_key("SER1"));
     }
 }
