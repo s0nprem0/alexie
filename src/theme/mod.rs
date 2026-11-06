@@ -1,11 +1,14 @@
 //! Theme: palette listing and switching.
 //!
 //! Split from a single 680-line theme.rs for readability:
-//! - `state` — state dir, theme names, current theme, legacy delegate
+//! - `state` — state dir, theme names, current theme, state.json, legacy delegate
 //! - `palette` — presets, matugen palette, wallpaper switch
 //! - `vars` — colour vars build/cache, `vars`/`render` commands, presets list
+//! - `engine` — native materialise/generate/set/apply/auto/doctor
 //!
-//! `handle()` below is just the dispatcher over those.
+//! `handle()` below is just the dispatcher over those. All documented
+//! subcommands are native now; `delegate()` is only the fallback for
+//! unknown subcommands, with a clear theme-legacy-not-found message.
 
 pub mod state;
 pub mod palette;
