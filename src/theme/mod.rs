@@ -1,21 +1,20 @@
 //! Theme: palette listing and switching.
 //!
 //! Split from a single 680-line theme.rs for readability:
-//! - `state` — state dir, theme names, current theme, state.json, legacy delegate
+//! - `state` — state dir, theme names, current theme, state.json
 //! - `palette` — presets, matugen palette, wallpaper switch
 //! - `vars` — colour vars build/cache, `vars`/`render` commands, presets list
 //! - `engine` — native materialise/generate/set/apply/auto/doctor
 //!
 //! `handle()` below is just the dispatcher over those. All documented
-//! subcommands are native now; `delegate()` is only the fallback for
-//! unknown subcommands, with a clear theme-legacy-not-found message.
+//! subcommands are native; unknown ones are rejected outright.
 
 pub mod state;
 pub mod palette;
 pub mod vars;
 pub mod engine;
 
-use state::{current_theme, delegate, has_theme, mode_of, palette_entry, saved_wallpaper_mode, state_dir, state_ensure, state_file, theme_field, theme_names, wallpaper_mode_file, write_atomic};
+use state::{current_theme, has_theme, mode_of, palette_entry, saved_wallpaper_mode, state_dir, state_ensure, state_file, theme_field, theme_names, wallpaper_mode_file, write_atomic};
 use crate::proc::run;
 
 pub fn handle(args: &[String]) -> String {
@@ -119,9 +118,9 @@ pub fn handle(args: &[String]) -> String {
         "auto" => engine::apply_auto(),
         "apply" => engine::apply_theme(),
         "doctor" => engine::doctor(),
-        // Unknown subcommands fall back to legacy with a clear
-        // not-found message, instead of claiming native support.
-        _ => delegate(args),
+        // Unknown subcommands are rejected outright; there is no
+        // legacy bash theme left to delegate to.
+        _ => format!("ERR unknown theme subcommand: {}", args[0]),
     }
 }
 
@@ -304,6 +303,12 @@ mod tests {
     fn theme_list_rejects_unknown_flag() {
         let out = handle(&["list".to_string(), "--bogus".to_string()]);
         assert!(out.starts_with("ERR usage: theme list"), "got: {out}");
+    }
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus_subcommand__".to_string()]);
+        assert!(out.starts_with("ERR unknown theme subcommand:"), "got: {out}");
     }
 }
 

@@ -6,7 +6,7 @@ A Rust daemon + CLI that replaces anixie's shell-script tooling (`monitors`, `sh
 
 Substantially complete. Native (no bash delegation):
 - `monitors` — fully ported (status, list, set, scale, brightness, identify, wake, recover, internal, mirror, lid, try, keep, revert, workspaces, workspace, workspace-step, move-window, identities).
-- `theme` — list/current/next/prev/state (set/wallpaper delegate to legacy bash).
+- `theme` — fully ported (list/current/next/prev/state/set/wallpaper/apply/auto/doctor/info/export/favorite/pin/wallpaper-mode/cursor-size/vars/render/presets/switch).
 - `wallpaper` — current (heavy ops delegate).
 - `shot`/capture — core modes (region/windows/fullscreen/window + copy/save/preview), capture-text, capture-qr (smart/scroll/redact/text/annotate delegate). Cursor included; cross-filesystem safe; notifies on failure.
 - `toggle` — nightlight/idle/dnd/stayawake.

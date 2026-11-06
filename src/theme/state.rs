@@ -1,4 +1,3 @@
-use crate::proc::run;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -212,28 +211,6 @@ pub(crate) fn state_set_generation(gen: &str) -> Result<(), String> {
 }
 
 
-pub(crate) fn delegate(args: &[String]) -> String {
-    // Delegate heavy ops to the legacy bash implementation explicitly.
-    // Using resolve_tool("theme") here would re-enter alexie itself via
-    // the `theme` shim (`alexie theme "$@"`) when daemon mode is on,
-    // recursing forever. `run("theme-legacy")` goes through
-    // resolve_tool("theme-legacy"), which prefers a real legacy binary.
-    let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) = run("theme-legacy", &a);
-    if code == 0 {
-        if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
-    } else if err.trim() == "No such file or directory" || code == -1 {
-        // Command::new fails with -1/ENOENT when no legacy binary exists.
-        format!(
-            "ERR theme-legacy not found: subcommand `{}` needs the legacy bash theme (enable anixie.daemon, which renames it to theme-legacy)",
-            args.first().map(|s| s.as_str()).unwrap_or("")
-        )
-    } else {
-        format!("ERR (exit {}) {}", code, err.trim())
-    }
-}
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,9 +251,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn delegate_unknown_subcommand_fails_fast() {
-        let out = delegate(&["__bogus_subcommand__".to_string()]);
-        assert!(out.starts_with("ERR"), "got: {out}");
-    }
 }
