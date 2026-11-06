@@ -16,11 +16,16 @@
           version = "0.1.0";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
-          # No test suite yet; skip the (empty) check phase so builds don't
-          # pay for a second full compile pass.
           doCheck = false;
-          # zbus and the rest of the dependency tree are pure Rust, but keep
-          # pkg-config on the path so any future native crate resolves cleanly.
+          nativeBuildInputs = [ pkgs.pkg-config ];
+        };
+        packages.anixie = pkgs.rustPlatform.buildRustPackage {
+          pname = "anixie";
+          version = "0.1.0";
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
+          cargoBuildFlags = [ "--bin" "anixie" ];
+          doCheck = false;
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
         devShells.default = pkgs.mkShell {
