@@ -1,6 +1,6 @@
 //! DB: open/migrate, active window, daily JSON mirror.
 
-use super::time::{today_start, today_string};
+use super::time::{now_secs, today_start, today_string};
 use rusqlite::{Connection, params};
 use serde_json::Value;
 use std::env;
@@ -47,7 +47,15 @@ pub(crate) fn open_db() -> Result<Connection, rusqlite::Error> {
     )?;
     // finalize any dangling sessions from a previous (killed) run
     let _ = conn.execute("UPDATE sessions SET end_time = start_time, duration = 0 WHERE end_time = 0", []);
+    prune_old_sessions(&conn);
     Ok(conn)
+}
+
+/// Keep history bounded: sessions older than 30 days are deleted,
+/// so the DB does not grow forever on a long-lived machine.
+fn prune_old_sessions(conn: &Connection) {
+    let cutoff = now_secs() - 30 * 24 * 60 * 60;
+    let _ = conn.execute("DELETE FROM sessions WHERE start_time < ?1", params![cutoff]);
 }
 
 pub(crate) fn active_window() -> Option<(String, String)> {
@@ -80,5 +88,46 @@ pub(crate) fn write_daily_json(conn: &Connection) {
     }
     let obj = serde_json::json!({"date": day, "apps": apps, "idle": 0, "active": total});
     let _ = fs::write(&file, obj.to_string());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prune_removes_only_sessions_older_than_30_days() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_class TEXT NOT NULL,
+                title TEXT NOT NULL,
+                start_time INTEGER NOT NULL,
+                end_time INTEGER NOT NULL,
+                duration INTEGER NOT NULL
+            );",
+        )
+        .unwrap();
+        let now = now_secs();
+        let old = now - 31 * 24 * 60 * 60;
+        for (app, start) in [("old-app", old), ("new-app", now)] {
+            conn.execute(
+                "INSERT INTO sessions (app_class, title, start_time, end_time, duration) VALUES (?1, 't', ?2, ?2, 0)",
+                rusqlite::params![app, start],
+            )
+            .unwrap();
+        }
+        prune_old_sessions(&conn);
+        let count = |app: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM sessions WHERE app_class = ?1",
+                rusqlite::params![app],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(count("old-app"), 0, "31-day-old session should be pruned");
+        assert_eq!(count("new-app"), 1, "recent session should be kept");
+    }
 }
 
