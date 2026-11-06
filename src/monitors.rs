@@ -255,7 +255,7 @@ fn save_field(output: &str, key: &str, value: &str) -> Result<(), String> {
         t.is_empty() || t[0] != output
     });
     lines.push(format!("{} {} {} {} {} {} {} {} {}", output, scale, transform, disabled, mirror, position, mode, sdrb, sdrr));
-    std::fs::write(&path, lines.join("\n") + "\n").map_err(|e| e.to_string())
+    atomic_write(&path, &(lines.join("\n") + "\n")).map_err(|e| e.to_string())
 }
 
 fn read_saved_map() -> std::collections::HashMap<String, (String, String)> {
@@ -797,7 +797,7 @@ fn clear_disabled(output: &str) {
             }
         }
         if changed {
-            let _ = std::fs::write(&path, lines.join("\n") + "\n");
+            let _ = atomic_write(&path, &(lines.join("\n") + "\n"));
         }
     }
 }
