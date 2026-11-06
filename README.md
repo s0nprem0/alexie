@@ -56,13 +56,18 @@ Over time, anixie's Hyprland binds and shell IPC would call `alexie <cmd>` inste
 
 ## Roadmap
 
-- `monitors` fully ported (native, no bash delegation).
-- Port `theme` (list/current/next/prev/state done; set/wallpaper delegate).
-- Port `wallpaper` (current done; heavy ops delegate).
-- Port `shot`/capture (freeze, region, window snap, swappy hand-off).
-- Port `menu` (fast, structured, no jq).
-- Generic fallback routes all unported tools through the daemon.
-- DBus interface (optional, for richer shell integration).
+- `monitors` fully ported (native, no bash delegation). Transparent cut-over via
+  a `monitors` shim when the daemon is enabled.
+- `menu` ported (native, quickshell IPC; no jq). Transparent cut-over via shim.
+- `theme` (list/current/next/prev/state native; set/wallpaper delegate to the
+  legacy bash tool).
+- `wallpaper` (current native; heavy ops delegate to the legacy bash tool).
+- `shot`/capture (text + QR native; freeze, region, window snap, swappy and the
+  rest delegate to the legacy bash tool).
+- Generic fallback routes all unported tools through the daemon; delegation
+  prefers a `*-legacy` binary when present so shims never recurse.
+- DBus interface (optional, richer: typed methods, properties and signals for
+  monitors/theme).
 - Tests (unit + property tests for parsers).
 
 ## Design notes
