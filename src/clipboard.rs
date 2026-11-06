@@ -15,6 +15,15 @@ fn resolve_tool(name: &str) -> String {
     name.to_string()
 }
 
+fn shell_quote(s: &str) -> String {
+    let mut out = String::from("'");
+    for c in s.chars() {
+        if c == '\'' { out.push_str("'\\''"); } else { out.push(c); }
+    }
+    out.push('\'');
+    out
+}
+
 fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
     match Command::new(resolve_tool(cmd)).args(args).output() {
         Ok(o) => (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).to_string(), String::from_utf8_lossy(&o.stderr).to_string()),
@@ -78,10 +87,36 @@ pub fn handle(args: &[String]) -> String {
             let dir = preview_dir().join("thumbs");
             let _ = std::fs::remove_dir_all(&dir);
             let _ = std::fs::create_dir_all(&dir);
-            // delegate to bash clipboard for the awk logic (complex)
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let (code, out, err) = run("clipboard", &a);
-            if code == 0 { out.trim_end().to_string() } else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // chmod 700
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+            }
+            let (code, list, _) = run(&cliphist(), &["list"]);
+            if code != 0 { return "ERR cliphist list failed".to_string(); }
+            let mut out = String::new();
+            let mut count = 0;
+            for line in list.lines() {
+                if count >= 16 { break; }
+                let tab = match line.find('\t') { Some(t) => t, None => continue };
+                let id = &line[..tab];
+                let preview = &line[tab+1..];
+                if !preview.starts_with("[[ binary data ") { continue; }
+                let path = dir.join(id);
+                // decode
+                let (dcode, _, _) = run("sh", &["-c", &format!("{} decode {} > {} 2>/dev/null", cliphist(), id, path.display())]);
+                if dcode == 0 {
+                    // check non-empty
+                    if std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) > 0 {
+                        out.push_str(&format!("{}\t{}\n", id, path.display()));
+                        count += 1;
+                    } else {
+                        let _ = std::fs::remove_file(&path);
+                    }
+                }
+            }
+            out.trim_end().to_string()
         }
         "--image" => {
             if args.len() < 2 { return "ERR usage: clipboard --image ID".to_string(); }
@@ -98,11 +133,21 @@ pub fn handle(args: &[String]) -> String {
         }
         "--delete" => {
             if args.len() < 2 { return "ERR usage: clipboard --delete ID".to_string(); }
-            // delegate to bash (awk logic)
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let (code, out, err) = run("clipboard", &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            let id = &args[1];
+            let (code, list, _) = run(&cliphist(), &["list"]);
+            if code != 0 { return "ERR cliphist list failed".to_string(); }
+            // find the line
+            let mut found_line = String::new();
+            for line in list.lines() {
+                let tab = match line.find('\t') { Some(t) => t, None => continue };
+                if &line[..tab] == id {
+                    found_line = line.to_string();
+                    break;
+                }
+            }
+            if found_line.is_empty() { return "OK".to_string(); }
+            let (code, _, err) = run("sh", &["-c", &format!("printf '%s\\n' {} | {} delete", shell_quote(&found_line), cliphist())]);
+            if code != 0 { format!("ERR {}", err.trim()) } else { "OK".to_string() }
         }
         "--wipe" => {
             let (code, _, err) = run(&cliphist(), &["wipe"]);
