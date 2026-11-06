@@ -15,6 +15,8 @@ type MonitorState = (String, String, String, String, String, String, String, Str
 fn state_file() -> std::path::PathBuf { state_dir().join("display.conf") }
 fn lid_file() -> std::path::PathBuf { state_dir().join("lid") }
 
+fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
+
 // Write `content` to `dest` atomically via a temp file in the same
 // directory. `/tmp` may be on a different filesystem than the state dir,
 // where `std::fs::rename` fails with EXDEV; the bash original used `mv`
@@ -536,12 +538,7 @@ pub fn handle(args: &[String]) -> String {
                 _ => format!("ERR unknown brightness action: {}", action),
             }
         }
-        "identify" => {
-            for name in snap.names() {
-                let _ = run("notify-send", &["-t", "2000", "Monitor", &name]);
-            }
-            "OK".to_string()
-        }
+        "identify" => identify_action(&snap, args),
         "wake" => {
             let _ = run("hyprctl", &["dispatch", "dpms", "on"]);
             "OK".to_string()
@@ -1299,6 +1296,64 @@ fn identities_action(snap: &Snapshot) -> String {
     serde_json::to_string_pretty(&Value::Object(obj)).unwrap_or_else(|_| "{}".to_string())
 }
 
+// Ask the running shell to flash each output's name on that output. The
+// overlay lives in the shell (Ui/IdentifyHost.qml + Ui/ScreenLayers.qml),
+// reached through its `identify` IPC target: `flash <ms> <descriptions>`,
+// where the descriptions are a JSON map of output name to "make model".
+fn identify_action(snap: &Snapshot, args: &[String]) -> String {
+    let duration = match parse_identify_duration(args) {
+        Ok(d) => d.to_string(),
+        Err(e) => return e,
+    };
+    let payload = identify_descriptions(snap);
+    let (_, out, err) = run(&qs(), &["ipc", "call", "identify", "flash", &duration, &payload]);
+    if identify_reply_ok(&out) {
+        return "OK".to_string();
+    }
+    let detail = out.trim();
+    let detail = if detail.is_empty() { err.trim() } else { detail };
+    let detail = if detail.is_empty() { "no reply" } else { detail };
+    format!("ERR could not ask the running shell to identify the displays ({})", detail)
+}
+
+// `ipc call` exits zero even when the target does not exist (it prints
+// "Target not found."), so the answer — not the exit code — is what says
+// whether the shell is new enough to have the handler.
+fn identify_reply_ok(out: &str) -> bool {
+    matches!(out.trim(), "ok" | "\"ok\"")
+}
+
+// Milliseconds to keep the overlay up. The shell defaults and clamps too;
+// parsing here only rejects a non-numeric argument early.
+fn parse_identify_duration(args: &[String]) -> Result<i64, String> {
+    let Some(raw) = args.get(1) else { return Ok(3000) };
+    match raw.parse::<i64>() {
+        Ok(ms) => Ok(ms.clamp(500, 10_000)),
+        Err(_) => Err("ERR usage: monitors identify [MS]".to_string()),
+    }
+}
+
+// Friendly "make model" per output, for the secondary line under the name.
+// The hyprctl description appends the serial, which is not what a bezel says.
+fn identify_descriptions(snap: &Snapshot) -> String {
+    let mut map = Map::new();
+    for m in &snap.all {
+        let Some(name) = m.get("name").and_then(|x| x.as_str()) else { continue };
+        let make = m.get("make").and_then(|x| x.as_str()).unwrap_or("").trim();
+        let model = m.get("model").and_then(|x| x.as_str()).unwrap_or("").trim();
+        let label = format!("{} {}", make, model).trim().to_string();
+        let label = if label.is_empty() {
+            m.get("description").and_then(|x| x.as_str()).unwrap_or("").trim().to_string()
+        } else {
+            label
+        };
+        if !label.is_empty() {
+            map.insert(name.to_string(), Value::String(label));
+        }
+    }
+    serde_json::to_string(&Value::Object(map)).unwrap_or_else(|_| "{}".to_string())
+}
+
 fn sync_identities_action(snap: &Snapshot) -> String {
     let out = identities_action(snap);
     let _ = std::fs::create_dir_all(state_dir());
@@ -1321,6 +1376,41 @@ mod tests {
     fn transform_index_unknown() {
         assert_eq!(transform_index("foo"), None);
         assert_eq!(transform_index(""), None);
+    }
+
+    #[test]
+    fn identify_reply_only_ok_succeeds() {
+        assert!(identify_reply_ok("ok\n"));
+        assert!(identify_reply_ok("\"ok\""));
+        assert!(!identify_reply_ok("Target not found."));
+        assert!(!identify_reply_ok(""));
+        assert!(!identify_reply_ok("error"));
+    }
+
+    #[test]
+    fn identify_duration_defaults_clamps_and_rejects() {
+        assert_eq!(parse_identify_duration(&["identify".to_string()]), Ok(3000));
+        assert_eq!(parse_identify_duration(&["identify".to_string(), "5000".to_string()]), Ok(5000));
+        assert_eq!(parse_identify_duration(&["identify".to_string(), "10".to_string()]), Ok(500));
+        assert_eq!(parse_identify_duration(&["identify".to_string(), "99999".to_string()]), Ok(10_000));
+        assert!(parse_identify_duration(&["identify".to_string(), "soon".to_string()]).is_err());
+    }
+
+    #[test]
+    fn identify_descriptions_prefers_make_model_over_serial() {
+        let snap = Snapshot {
+            all: vec![
+                serde_json::json!({"name": "HDMI-A-1", "make": "GWD", "model": "ARZOPA", "serial": "0000001083904", "description": "GWD ARZOPA 0000001083904"}),
+                serde_json::json!({"name": "eDP-1", "description": "Chimei Innolux Corporation 0x15E7"}),
+                serde_json::json!({"name": "DP-1"}),
+            ],
+            by_name: std::collections::HashMap::new(),
+            id_to_name: std::collections::HashMap::new(),
+        };
+        let payload: Value = serde_json::from_str(&identify_descriptions(&snap)).unwrap();
+        assert_eq!(payload["HDMI-A-1"], "GWD ARZOPA");
+        assert_eq!(payload["eDP-1"], "Chimei Innolux Corporation 0x15E7");
+        assert!(payload.get("DP-1").is_none());
     }
 }
 
