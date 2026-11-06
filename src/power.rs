@@ -3,6 +3,7 @@ use std::fs;
 use std::process::Command;
 use std::path::PathBuf;
 
+pub fn state_dir_pub() -> PathBuf { state_dir() }
 fn state_dir() -> PathBuf {
     let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
         let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -160,6 +161,7 @@ fn enter_dim(level: &str, target: i64) {
     let _ = std::fs::write(dim_level_file(), format!("{}\n", level));
 }
 
+pub fn apply_pub() { apply(); }
 fn apply() {
     let _ = std::fs::create_dir_all(state_dir());
     let src = source_name();
@@ -186,6 +188,7 @@ fn apply() {
     let _ = std::fs::write(last_source_file(), format!("{}\n", src));
 }
 
+pub fn check_battery_pub() { check_battery(); }
 fn check_battery() {
     if !automation_enabled() { return; }
     let _ = std::fs::create_dir_all(state_dir());

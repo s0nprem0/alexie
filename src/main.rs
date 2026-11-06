@@ -11,6 +11,7 @@ mod webapp;
 mod menu;
 mod monitors;
 mod power;
+mod power_watch;
 mod screentime;
 mod shot;
 mod theme;
@@ -236,6 +237,11 @@ fn run_client(args: &[String]) {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    // power watch: run the watcher (blocks).
+    if args.len() >= 3 && (args[1] == "power" || args[1] == "powerprofile") && args[2] == "watch" {
+        power_watch::run();
+        return;
+    }
     if args.len() < 2 {
         eprintln!("usage: alexie <command...> | alexie daemon");
         std::process::exit(2);
