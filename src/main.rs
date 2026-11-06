@@ -1,4 +1,5 @@
 mod monitors;
+mod theme;
 
 use std::env;
 use std::fs;
@@ -18,6 +19,10 @@ fn handle_command(cmd: &str) -> String {
         Some("monitors") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             monitors::handle(&args)
+        }
+        Some("theme") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            theme::handle(&args)
         }
         _ => format!("ERR unknown command: {}", cmd),
     }
