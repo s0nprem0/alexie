@@ -19,10 +19,6 @@
           doCheck = true;
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
-        packages.anixie = pkgs.runCommand "anixie" {} ''
-          mkdir -p $out/bin
-          ln -s ${self.packages.${system}.default}/bin/alexie $out/bin/anixie
-        '';
         devShells.default = pkgs.mkShell {
           buildInputs = [
             pkgs.cargo

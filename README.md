@@ -22,7 +22,7 @@ Thin wrappers (delegate to the quickshell, which owns the UI/timer): `focus`.
 Delegated to legacy bash (complex process/systemd management): `record`, `webcam-overlay`.
 - `share` — native subcommands (uri/path/edit/folder/compress); interactive picker delegates.
 
-The daemon listens on `$XDG_RUNTIME_DIR/alexie/daemon.sock` and exposes a DBus service (`org.alexie.Daemon`, typed methods/properties/signals). It also ships an `anixie` front-door binary replacing the bash dispatcher.
+The daemon listens on `$XDG_RUNTIME_DIR/alexie/daemon.sock` and exposes a DBus service (`org.alexie.Daemon`, typed methods/properties/signals).
 
 ## Build
 

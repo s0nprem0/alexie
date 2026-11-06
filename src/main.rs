@@ -1,5 +1,4 @@
 mod dbus;
-mod anixie;
 mod capture;
 mod clipboard;
 mod color;
@@ -244,19 +243,12 @@ fn run_client(args: &[String]) {
 }
 
 fn main() {
-    let mut args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
 
-    // anixie-style front door: meta commands and group resolution.
-    let groups = anixie::parse_groups();
-    if let Some(code) = anixie::try_meta(&args, &groups) {
-        std::process::exit(code);
-    }
-    // Resolve a group name (e.g. "display") to its underlying command
-    // (e.g. "monitors") so a single binary covers both `alexie` and `anixie`.
-    if args.len() >= 2 {
-        if let Some(cmd) = anixie::resolve(&groups, &args[1]) {
-            args[1] = cmd;
-        }
+    if args.len() >= 2 && (args[1] == "--help" || args[1] == "-h" || args[1] == "help") {
+        eprintln!("usage: alexie <command...>");
+        eprintln!("usage: alexie daemon");
+        std::process::exit(0);
     }
 
     // power watch: run the watcher (blocks).
