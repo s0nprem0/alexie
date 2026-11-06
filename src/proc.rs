@@ -100,6 +100,36 @@ pub fn run_with_stdin(cmd: &str, args: &[&str], stdin_data: &str) -> (i32, Strin
     }
 }
 
+/// Like `run_with_stdin`, but for binary data (clipboard image
+/// selections): a `&str` round-trip would corrupt non-UTF8 bytes.
+pub fn run_bytes_with_stdin(cmd: &str, args: &[&str], data: &[u8]) -> (i32, String, String) {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = match Command::new(resolve_tool(cmd))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return (-1, String::new(), e.to_string()),
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(data);
+        // stdin drops here, signalling EOF to the child
+    }
+    match child.wait_with_output() {
+        Ok(o) => {
+            let code = o.status.code().unwrap_or(-1);
+            let out = String::from_utf8_lossy(&o.stdout).to_string();
+            let err = String::from_utf8_lossy(&o.stderr).to_string();
+            (code, out, err)
+        }
+        Err(e) => (-1, String::new(), e.to_string()),
+    }
+}
+
 #[allow(dead_code)]
 pub fn shell_quote(s: &str) -> String {
     let mut out = String::from("'");

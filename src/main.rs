@@ -71,6 +71,17 @@ fn main() {
         screentime::watch();
         return;
     }
+    // clipboard watch/store: run locally, never via the daemon
+    // socket. Watch blocks, and store is the wl-paste child mode
+    // that must work even with the daemon down.
+    if args.len() >= 3 && args[1] == "clipboard" && args[2] == "watch" {
+        clipboard::watch();
+        return;
+    }
+    if args.len() >= 3 && args[1] == "clipboard" && args[2] == "store" {
+        clipboard::store();
+        return;
+    }
     if args.len() < 2 {
         eprintln!("usage: alexie <command...> | alexie daemon");
         std::process::exit(2);
