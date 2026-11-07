@@ -23,6 +23,7 @@ mod help;
 mod pick;
 mod reminder;
 mod share;
+mod share_picker;
 mod shortcuts;
 mod snapshot;
 mod table;

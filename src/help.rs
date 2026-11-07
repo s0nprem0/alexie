@@ -55,6 +55,7 @@ pub(crate) const COMMANDS: &[(&str, &str, &str)] = &[
     ("pick", "generic picker.", "  --title, --placeholder, --input\n"),
     ("reminder", "reminders.", "  show, count, clear\n"),
     ("share", "file sharing.", "  uri, path, edit, folder, compress\n"),
+    ("share-picker", "portal picker config.", "  status [--json], apply, check\n"),
     ("shortcuts", "keyboard shortcuts.", "  (help)\n"),
     ("toggle", "nightlight, idle, dnd, stay-awake.", "  nightlight, idle, dnd, stayawake\n  status, list\n"),
     ("menu", "application and action menu.", "  apps, --list, --only\n"),

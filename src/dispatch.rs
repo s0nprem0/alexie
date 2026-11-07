@@ -1,5 +1,5 @@
 use super::help::{help_text, is_help_flag};
-use crate::{apps, capture, clipboard, emoji, focus, menu, monitors, pick, power, proc, record, reminder, screentime, share, shortcuts, shot, snapshot, status, theme, toggle, transcode, wallpaper, webcam_overlay, webapp};
+use crate::{apps, capture, clipboard, emoji, focus, menu, monitors, pick, power, proc, record, reminder, screentime, share, share_picker, shortcuts, shot, snapshot, status, theme, toggle, transcode, wallpaper, webcam_overlay, webapp};
 use std::process::Command;
 
 fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
@@ -121,6 +121,10 @@ pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
         Some("share") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             share::handle(&args)
+        }
+        Some("share-picker") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            share_picker::handle(&args)
         }
         Some("shortcuts") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();

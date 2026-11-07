@@ -20,6 +20,7 @@ Substantially complete. Native (no bash delegation):
 - `status` — network/sysmon/audio/bluetooth as text or JSON (P0 from doty's `wabi`). `alexie status <name> --json` (aliases `alexie network|sysmon|audio|bluetooth`) emits wabi-compatible JSON for Quickshell popups; cached to `$XDG_CACHE_HOME/anixie/`.
 - `shot db` — screenshot/recording asset index (P1, wabi `media_db` port). `add/list/remove/clear/check/path/thumbs`, `color` + `ocr` groups, `status --json` (wabi `MediaStatus`); saves + recordings auto-index. DB at `$XDG_STATE_HOME/anixie/assets.db`, thumbs at `$XDG_CACHE_HOME/anixie/thumbnails/`.
 - `apps` — app launcher backend (P1, wabi `apps.rs` port). `list [--json]` (wabi `{most_used,all_apps,web_history,file_history,bookmarks}`), `launch`, `bookmark`, `history`, `web search/open`, `files index/search/open`; wabi `--launch`/`--add-bookmark`/… flags accepted. DB at `$XDG_STATE_HOME/anixie/launcher.db`.
+- `share-picker` — portal picker config (`status`/`apply`/`check` for `hyprland-preview-share-picker` + `xdph.conf`).
 
 - `shortcuts`, `menu`, `focus` — quickshell IPC wrappers (shell owns UI/timer).
 - `share` — native subcommands (uri/path/edit/folder/compress); interactive picker delegates.
