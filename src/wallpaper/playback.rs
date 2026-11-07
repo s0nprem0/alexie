@@ -2,7 +2,6 @@ use super::state::{cache_dir, state_dir, watch_dirs};
 use crate::proc::run;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 
 pub(crate) fn video_paused_file() -> PathBuf {
     // Matches legacy wallpaper.sh ($STATE/video-paused) and the
@@ -59,71 +58,6 @@ pub(crate) fn toggle_pause_video() -> String {
 
 pub(crate) fn status_video() -> String {
     video_status(mpvpaper_running(), is_video_paused()).to_string()
-}
-
-pub(crate) fn set_wallpaper(raw: &str) -> String {
-    let path = match std::fs::canonicalize(raw) {
-        Ok(p) => p,
-        Err(e) => return format!("ERR cannot resolve path '{}': {}", raw, e),
-    };
-    let ext = path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).unwrap_or_default();
-    let path_str = path.to_string_lossy().to_string();
-    if ext == "mp4" || ext == "webm" {
-        // Kill existing mpvpaper by exact name, like legacy apply().
-        let _ = run("pkill", &["-x", "mpvpaper"]);
-        for _ in 0..20 {
-            if !mpvpaper_running() { break; }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        let mut mpv_opts = String::from("--loop --no-audio --hwdec=no --load-scripts=no --cache=no --demuxer-max-bytes=10M --vd-lavc-fast=yes --vd-lavc-skiploopfilter=all --vf=fps=30 --scale=bilinear --cscale=bilinear --dscale=bilinear --sws-scaler=fast-bilinear --correct-downscaling=no --linear-downscaling=no --sigmoid-upscaling=no --hdr-compute-peak=no --input-ipc-server=/tmp/mpvpaper-ipc");
-        if is_video_paused() { mpv_opts.push_str(" --pause"); }
-        // Spawn directly with argv instead of bash -c with the path
-        // interpolated into a shell string (breaks / injects on paths
-        // with spaces, quotes or $).
-        let log = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(cache_dir().join("mpvpaper.log"));
-        let mut cmd = Command::new("uwsm");
-        cmd.args(["app", "--", "mpvpaper", "-o", &mpv_opts, "*", &path_str]);
-        cmd.stdin(std::process::Stdio::null());
-        cmd.stdout(std::process::Stdio::null());
-        if let Ok(f) = log {
-            cmd.stderr(f);
-        } else {
-            cmd.stderr(std::process::Stdio::null());
-        }
-        match cmd.spawn() {
-            Ok(_) => format!("wallpaper set to {}", path_str),
-            Err(e) => format!("ERR spawn mpvpaper: {}", e),
-        }
-    } else {
-        // image: try swww
-        let has_swww = crate::proc::find_in_path(
-            "swww",
-            &std::env::var("PATH").unwrap_or_default(),
-        )
-        .is_some();
-        if has_swww {
-            let status = Command::new("swww").args(["img", &path_str]).status();
-            match status {
-                Ok(s) if s.success() => format!("wallpaper set to {}", path_str),
-                Ok(s) => format!("ERR swww exited {}", s.code().unwrap_or(-1)),
-                Err(e) => format!("ERR swww: {}", e),
-            }
-        } else {
-            // fallback to legacy wallpaper binary explicitly, not
-            // `wallpaper` (which is the alexie shim when daemon is on)
-            let (code, out, err) = crate::proc::run("wallpaper-legacy", &["set", &path_str]);
-            if code == 0 {
-                if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
-            } else if code == -1 {
-                "ERR wallpaper-legacy not found: set needs the legacy bash wallpaper (enable anixie.daemon, which renames it to wallpaper-legacy)".to_string()
-            } else {
-                format!("ERR (exit {}) {}", code, err.trim())
-            }
-        }
-    }
 }
 
 pub(crate) fn watch_wallpapers(args: &[String]) -> ! {

@@ -91,6 +91,7 @@ pub(crate) fn wallpaper_recursive() -> bool {
 }
 
 pub(crate) fn thumbs_dir() -> PathBuf { state_dir().join("thumbs") }
+#[allow(dead_code)]
 pub(crate) fn posters_dir() -> PathBuf { state_dir().join("posters") }
 pub(crate) fn generated_dir() -> PathBuf { state_dir().join("wallpapers") }
 

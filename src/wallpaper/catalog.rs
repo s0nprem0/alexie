@@ -4,7 +4,7 @@
 //! (library.json + library.stamp) keep the legacy names and shape so
 //! the shell/QML readers need no changes.
 
-use super::state::{current_theme, default_wallpaper, generated_file, generated_dir, state_dir, theme_dir, thumbs_dir, wallpaper_recursive, watch_dirs};
+use super::state::{current_theme, default_wallpaper, generated_file, state_dir, theme_dir, thumbs_dir, wallpaper_recursive, watch_dirs};
 use crate::proc::{run, run_with_stdin};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -13,6 +13,7 @@ pub(crate) fn wallpapers_file() -> PathBuf { state_dir().join("wallpapers.json")
 pub(crate) fn background_file() -> PathBuf { state_dir().join("background.json") }
 pub(crate) fn library_cache_file() -> PathBuf { state_dir().join("library.json") }
 pub(crate) fn library_stamp_file() -> PathBuf { state_dir().join("library.stamp") }
+#[allow(dead_code)]
 pub(crate) fn rotation_file() -> PathBuf { state_dir().join("rotation") }
 
 pub(crate) fn is_video(path: &str) -> bool {
@@ -212,11 +213,9 @@ pub(crate) fn library_json(refresh: bool) -> String {
     if !refresh
         && cache.is_file()
         && std::fs::read_to_string(&stamp_file).map(|s| s.trim() == stamp).unwrap_or(false)
-    {
-        if let Ok(s) = std::fs::read_to_string(&cache) {
+        && let Ok(s) = std::fs::read_to_string(&cache) {
             return s.trim_end().to_string();
         }
-    }
     let mut rows: Vec<serde_json::Value> = Vec::new();
     if scan[0].0 == "generated" {
         let thumb = thumb_for(&generated_file(""), "", "");

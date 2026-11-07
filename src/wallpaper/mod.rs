@@ -12,9 +12,27 @@ pub mod library;
 pub mod playback;
 
 pub mod catalog;
+pub mod select;
 use state::{current_theme, delegate, state_dir};
 use std::fs;
 use std::path::PathBuf;
+
+/// Parse a trailing `--output NAME` flag, like legacy use/record.
+/// Returns the output name, or "" when absent. Malformed flags are
+/// left to the selection layer to reject as a missing file.
+fn parse_output_flag(args: &[String]) -> String {
+    let mut output = String::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--output" && i + 1 < args.len() {
+            output = args[i + 1].clone();
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    output
+}
 
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
@@ -24,11 +42,10 @@ pub fn handle(args: &[String]) -> String {
         "current" => {
             if args.get(1).map(|s| s.as_str()) == Some("--json") {
                 let bg = catalog::background_file();
-                if let Ok(s) = fs::read_to_string(&bg) {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                if let Ok(s) = fs::read_to_string(&bg)
+                    && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
                         return v.to_string();
                     }
-                }
                 let path = handle(&["current".to_string()]);
                 return serde_json::json!({"outputs": {}, "fallback": {"path": path, "video": false, "poster": ""}}).to_string();
             }
@@ -74,11 +91,25 @@ pub fn handle(args: &[String]) -> String {
             };
             library::search(&dirs, query)
         }
-        "status" => playback::status_video(),
-        "set" => {
-            if args.len() < 2 { return "ERR usage: wallpaper set FILE".to_string(); }
-            playback::set_wallpaper(&args[1])
+        "use" => {
+            if args.len() < 2 { return "ERR usage: wallpaper use FILE [--output NAME]".to_string(); }
+            let output = parse_output_flag(&args[2..]);
+            select::use_wallpaper(&args[1], &output)
         }
+        "record" => {
+            if args.len() < 2 { return "ERR usage: wallpaper record FILE [--output NAME]".to_string(); }
+            let output = parse_output_flag(&args[2..]);
+            select::record_selection(&args[1], &output)
+        }
+        "set" | "add-file" => {
+            if args.len() < 2 { return "ERR usage: wallpaper set FILE".to_string(); }
+            select::add_file(&args[1])
+        }
+        "add" => {
+            if args.len() < 2 { return "ERR usage: wallpaper add DIR".to_string(); }
+            select::add_dir(&args[1])
+        }
+        "status" => playback::status_video(),
         "pause" => playback::pause_video(),
         "resume" => playback::resume_video(),
         "toggle-pause" => playback::toggle_pause_video(),

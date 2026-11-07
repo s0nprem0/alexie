@@ -210,6 +210,21 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
 }
 
 pub(crate) fn wallpaper_theme(wp: &str, requested: &str) -> String {
+    wallpaper_theme_mode(
+        wp,
+        requested,
+        env::var("ANIXIE_WALLPAPER_RECORDED").map(|v| v == "1").unwrap_or(false),
+    )
+}
+
+/// Like wallpaper_theme, but with the recorded flag as an explicit
+/// argument: `wallpaper use` already saved the selection, so it must
+/// not record a second global choice on top.
+pub(crate) fn wallpaper_theme_recorded(wp: &str, requested: &str, recorded: bool) -> String {
+    wallpaper_theme_mode(wp, requested, recorded)
+}
+
+fn wallpaper_theme_mode(wp: &str, requested: &str, recorded: bool) -> String {
     // Save an explicit mode for the next picture, like legacy.
     if !requested.is_empty() {
         match requested {
@@ -236,8 +251,8 @@ pub(crate) fn wallpaper_theme(wp: &str, requested: &str) -> String {
         return format!("ERR {}", e);
     }
     drop(_lock);
-    if !wp.is_empty() && !env::var("ANIXIE_WALLPAPER_RECORDED").map(|v| v == "1").unwrap_or(false) {
-        let _ = run("wallpaper-legacy", &["record", wp]);
+    if !wp.is_empty() && !recorded {
+        let _ = crate::wallpaper::select::record_selection(wp, "");
     }
     tell_apps("wallpaper");
     run_hooks("wallpaper");
