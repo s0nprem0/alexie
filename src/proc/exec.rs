@@ -92,7 +92,11 @@ pub fn run_bytes_with_stdin(cmd: &str, args: &[&str], data: &[u8]) -> (i32, Stri
 /// Like `run`, but kills the child after `timeout` and returns -1.
 /// For quickshell IPC calls: an unanswered shell must not leave the
 /// daemon thread (and the user's frozen overlay) hanging forever.
-pub fn run_timeout(cmd: &str, args: &[&str], timeout: std::time::Duration) -> (i32, String, String) {
+pub fn run_timeout(
+    cmd: &str,
+    args: &[&str],
+    timeout: std::time::Duration,
+) -> (i32, String, String) {
     use std::io::Read;
     use std::process::Stdio;
     let mut child = match Command::new(resolve_tool(cmd))
@@ -108,23 +112,35 @@ pub fn run_timeout(cmd: &str, args: &[&str], timeout: std::time::Duration) -> (i
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let out = child.stdout.take().map(|mut s| {
-                    let mut v = String::new();
-                    let _ = s.read_to_string(&mut v);
-                    v
-                }).unwrap_or_default();
-                let err = child.stderr.take().map(|mut s| {
-                    let mut v = String::new();
-                    let _ = s.read_to_string(&mut v);
-                    v
-                }).unwrap_or_default();
+                let out = child
+                    .stdout
+                    .take()
+                    .map(|mut s| {
+                        let mut v = String::new();
+                        let _ = s.read_to_string(&mut v);
+                        v
+                    })
+                    .unwrap_or_default();
+                let err = child
+                    .stderr
+                    .take()
+                    .map(|mut s| {
+                        let mut v = String::new();
+                        let _ = s.read_to_string(&mut v);
+                        v
+                    })
+                    .unwrap_or_default();
                 return (status.code().unwrap_or(-1), out, err);
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return (-1, String::new(), format!("timed out after {}s", timeout.as_secs()));
+                    return (
+                        -1,
+                        String::new(),
+                        format!("timed out after {}s", timeout.as_secs()),
+                    );
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
@@ -132,7 +148,6 @@ pub fn run_timeout(cmd: &str, args: &[&str], timeout: std::time::Duration) -> (i
         }
     }
 }
-
 
 /// Shell-quote `s` as a single POSIX word (`'…'\''…'`).
 /// Used for static args baked into `pick --on-select` templates at

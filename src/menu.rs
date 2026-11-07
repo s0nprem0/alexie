@@ -58,47 +58,47 @@ fn parse(args: &[String]) -> Result<Command, String> {
         Some(pair) => pair,
     };
     match sub.as_str() {
-            "apps" if rest.is_empty() => Ok(Command::Only("Applications".into())),
-            "apps" => Err(unexpected("apps", rest)),
-            "--only" => match rest {
-                [] => Err(format!(
-                    "ERR menu: --only needs a group name\n\n{}",
-                    usage()
-                )),
-                [group] => Ok(Command::Only(group.clone())),
-                _ => Err(format!(
-                    "ERR menu: --only takes exactly one GROUP\n\n{}",
-                    usage()
-                )),
-            },
-            "--list" => match rest {
-                [] => Ok(Command::List(None)),
-                [group] => Ok(Command::List(Some(group.clone()))),
-                _ => Err(format!(
-                    "ERR menu: --list takes at most one GROUP\n\n{}",
-                    usage()
-                )),
-            },
-            other if other.starts_with('-') => Err(format!(
-                "ERR menu: unknown option: {}\n\n{}",
-                other,
+        "apps" if rest.is_empty() => Ok(Command::Only("Applications".into())),
+        "apps" => Err(unexpected("apps", rest)),
+        "--only" => match rest {
+            [] => Err(format!(
+                "ERR menu: --only needs a group name\n\n{}",
                 usage()
             )),
-            name => {
-                if !rest.is_empty() {
-                    // A spacey NAME arrives as one argv after quoting
-                    // (`menu 'My App'`); unquoted extra words mean the
-                    // user typed two names. Reject instead of silently
-                    // launching the first one.
-                    return Err(format!(
-                        "ERR menu: NAME takes no extra arguments (got: {})\n\n{}",
-                        rest.join(" "),
-                        usage()
-                    ));
-                }
-                Ok(Command::Launch(name.to_owned()))
+            [group] => Ok(Command::Only(group.clone())),
+            _ => Err(format!(
+                "ERR menu: --only takes exactly one GROUP\n\n{}",
+                usage()
+            )),
+        },
+        "--list" => match rest {
+            [] => Ok(Command::List(None)),
+            [group] => Ok(Command::List(Some(group.clone()))),
+            _ => Err(format!(
+                "ERR menu: --list takes at most one GROUP\n\n{}",
+                usage()
+            )),
+        },
+        other if other.starts_with('-') => Err(format!(
+            "ERR menu: unknown option: {}\n\n{}",
+            other,
+            usage()
+        )),
+        name => {
+            if !rest.is_empty() {
+                // A spacey NAME arrives as one argv after quoting
+                // (`menu 'My App'`); unquoted extra words mean the
+                // user typed two names. Reject instead of silently
+                // launching the first one.
+                return Err(format!(
+                    "ERR menu: NAME takes no extra arguments (got: {})\n\n{}",
+                    rest.join(" "),
+                    usage()
+                ));
             }
+            Ok(Command::Launch(name.to_owned()))
         }
+    }
 }
 
 /// Format a transport-level IPC failure (non-zero exit). Empty
@@ -191,12 +191,20 @@ mod tests {
 
     #[test]
     fn only_needs_one_group() {
-        assert!(parse(&args("--only")).unwrap_err().starts_with("ERR menu: --only needs"));
+        assert!(
+            parse(&args("--only"))
+                .unwrap_err()
+                .starts_with("ERR menu: --only needs")
+        );
         assert!(matches!(
             parse(&args("--only Utilities")),
             Ok(Command::Only(ref g)) if g == "Utilities"
         ));
-        assert!(parse(&args("--only A B")).unwrap_err().starts_with("ERR menu: --only takes"));
+        assert!(
+            parse(&args("--only A B"))
+                .unwrap_err()
+                .starts_with("ERR menu: --only takes")
+        );
     }
 
     #[test]
@@ -206,7 +214,11 @@ mod tests {
             parse(&args("--list Games")),
             Ok(Command::List(Some(ref g))) if g == "Games"
         ));
-        assert!(parse(&args("--list A B")).unwrap_err().starts_with("ERR menu: --list takes"));
+        assert!(
+            parse(&args("--list A B"))
+                .unwrap_err()
+                .starts_with("ERR menu: --list takes")
+        );
     }
 
     #[test]
@@ -221,20 +233,39 @@ mod tests {
 
     #[test]
     fn unknown_dash_options_rejected() {
-        assert!(parse(&args("--bogus")).unwrap_err().starts_with("ERR menu: unknown option:"));
-        assert!(parse(&args("--")).unwrap_err().starts_with("ERR menu: unknown option:"));
+        assert!(
+            parse(&args("--bogus"))
+                .unwrap_err()
+                .starts_with("ERR menu: unknown option:")
+        );
+        assert!(
+            parse(&args("--"))
+                .unwrap_err()
+                .starts_with("ERR menu: unknown option:")
+        );
     }
 
     #[test]
     fn extra_args_rejected() {
-        assert!(parse(&args("apps Games")).unwrap_err().contains("takes no extra arguments"));
+        assert!(
+            parse(&args("apps Games"))
+                .unwrap_err()
+                .contains("takes no extra arguments")
+        );
         let argv = vec!["Sys".to_string(), "extra".to_string()];
-        assert!(parse(&argv).unwrap_err().contains("takes no extra arguments"));
+        assert!(
+            parse(&argv)
+                .unwrap_err()
+                .contains("takes no extra arguments")
+        );
     }
 
     #[test]
     fn transport_err_renders_exit_code() {
-        assert_eq!(transport_err(1, "no such target"), "ERR (exit 1) no such target");
+        assert_eq!(
+            transport_err(1, "no such target"),
+            "ERR (exit 1) no such target"
+        );
         assert_eq!(transport_err(127, "  "), "ERR (exit 127)");
     }
 

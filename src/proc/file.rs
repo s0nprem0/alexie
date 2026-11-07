@@ -10,10 +10,14 @@ use std::process::Command;
 pub fn tmp_file(prefix: &str, ext: &str) -> std::path::PathBuf {
     // Callers pass literal names today, but keep user input from
     // escaping the temp dir if a future caller is careless.
-    assert!(!prefix.contains('/') && !prefix.contains('\\'),
-        "tmp_file prefix must not contain path separators");
-    assert!(!ext.contains('/') && !ext.contains('\\'),
-        "tmp_file ext must not contain path separators");
+    assert!(
+        !prefix.contains('/') && !prefix.contains('\\'),
+        "tmp_file prefix must not contain path separators"
+    );
+    assert!(
+        !ext.contains('/') && !ext.contains('\\'),
+        "tmp_file ext must not contain path separators"
+    );
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);

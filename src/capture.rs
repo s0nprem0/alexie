@@ -212,7 +212,8 @@ fn capture_qr() -> String {
         return format!("ERR no qr: {}", detail);
     }
 
-    if crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &result, &["--sensitive"]) != 0 {
+    if crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &result, &["--sensitive"]) != 0
+    {
         return "ERR clipboard unavailable".to_string();
     }
     let _ = run(
