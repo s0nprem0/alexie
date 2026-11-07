@@ -92,7 +92,7 @@ pub(crate) fn pick_one() -> String {
     }
     let data = lines.join("\n") + "\n";
     let title = format!("wallpaper — {}", theme);
-    crate::pick::handle_with_stdin(&["--title".to_string(), title, "--on-select".to_string(), "wallpaper use {}".to_string()], &data)
+    crate::pick::handle_with_stdin(&["--title".to_string(), title, "--on-select".to_string(), "wallpaper use '{}'".to_string()], &data)
 }
 
 #[cfg(test)]

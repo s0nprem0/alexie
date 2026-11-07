@@ -2,6 +2,13 @@
 //!
 //! Native port of anixie `pick.sh`. Writes `entries` + flags as a
 //! JSON request file and calls `quickshell ipc call pick open`.
+//!
+//! on-select contract: quickshell substitutes `{}` with the selected
+//! value and runs the result through the shell. Templates must quote
+//! the placeholder as `'{}'` (so values become a single shell word)
+//! and run static args through `crate::proc::shell_quote` at build
+//! time. Picker values must stay free of `'` — handlers validate
+//! what they accept (e.g. emoji `apply`, reminder minutes).
 
 use crate::proc::run;
 use std::env;
@@ -166,7 +173,7 @@ mod tests {
     fn parse_request_basic() {
         let r = parse_request(&[
             "--title".into(), "t".into(),
-            "--on-select".into(), "theme {}".into(),
+            "--on-select".into(), "theme '{}'".into(),
         ]).unwrap();
         assert_eq!(r.title, "t");
         assert_eq!(r.mode, "list");

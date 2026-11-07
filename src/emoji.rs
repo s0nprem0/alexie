@@ -89,6 +89,13 @@ fn apply(selected: &str) -> String {
     if selected.is_empty() {
         return "ERR nothing selected".to_string();
     }
+    // Defense in depth: the picker's on-select is shell-executed as
+    // `emoji --apply '<value>'`. A substituted value containing a
+    // quote, whitespace, or shell metacharacter must never reach the
+    // shell. Valid emoji are single grapheme clusters without those.
+    if selected.chars().any(|c| c.is_whitespace() || matches!(c, '\'' | '"' | '\\' | ';' | '&' | '|' | '$' | '`' | '\n' | '\r' | '(' | ')' | '<' | '>' )) {
+        return "ERR invalid emoji".to_string();
+    }
     let copy_code = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", selected, &[]);
     let (type_code, _out, type_err) = crate::proc::run(&wtype(), &[selected]);
     if copy_code != 0 && type_code != 0 {
@@ -121,7 +128,7 @@ pub fn handle(args: &[String]) -> String {
             "--title".to_string(),
             "emoji".to_string(),
             "--on-select".to_string(),
-            "emoji --apply {}".to_string(),
+            "emoji --apply '{}'".to_string(),
         ],
         &entries,
     )

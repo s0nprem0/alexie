@@ -46,7 +46,7 @@ pub fn handle(args: &[String]) -> String {
             ];
             let data = entries.join("\n") + "\n";
             let out = crate::pick::handle_with_stdin(
-                &["--title".to_string(), "Share capture".to_string(), "--on-select".to_string(), "share {}".to_string()],
+                &["--title".to_string(), "Share capture".to_string(), "--on-select".to_string(), "share '{}'".to_string()],
                 &data,
             );
             // Fallback without a picker: copy the path, like legacy.

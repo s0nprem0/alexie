@@ -73,7 +73,7 @@ pub fn handle(args: &[String]) -> String {
                     "--title".to_string(),
                     "remind in minutes".to_string(),
                     "--on-select".to_string(),
-                    "reminder --ask {}".to_string(),
+                    "reminder --ask '{}'".to_string(),
                 ],
                 entries,
             )
@@ -94,7 +94,7 @@ pub fn handle(args: &[String]) -> String {
                     "--input".to_string(),
                     "--allow-empty".to_string(),
                     "--on-select".to_string(),
-                    format!("reminder {} {{}}", args[1]),
+                    format!("reminder {} '{{}}'", args[1]),
                 ],
                 "",
             )

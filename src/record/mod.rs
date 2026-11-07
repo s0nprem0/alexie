@@ -35,7 +35,7 @@ fn choose_audio() -> String {
     }
     let data = lines.join("\n") + "\n";
     crate::pick::handle_with_stdin(
-        &["--title".to_string(), "record audio".to_string(), "--on-select".to_string(), "record --audio={}".to_string()],
+        &["--title".to_string(), "record audio".to_string(), "--on-select".to_string(), "record --audio='{}'".to_string()],
         &data,
     )
 }

@@ -11,6 +11,7 @@ pub(crate) mod convert;
 
 use convert::{format_size_options, media_type, output_path, transcode_picture, transcode_video, validate_format_resolution};
 use pick::prompt_pick;
+use crate::proc::shell_quote;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -19,8 +20,6 @@ fn search_paths() -> Vec<PathBuf> {
     let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     vec![PathBuf::from(format!("{}/Pictures", home)), PathBuf::from(format!("{}/Videos", home))]
 }
-
-fn quote(s: &str) -> String { format!("'{}'", s.replace('\'', "'\\''")) }
 
 fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
 
@@ -66,7 +65,7 @@ pub fn handle(args: &[String]) -> String {
         candidates.sort();
         candidates.dedup();
         if candidates.is_empty() { return "ERR no pictures or videos found".to_string(); }
-        return prompt_pick("transcode", &candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>(), &format!("transcode {}", quote("{}")));
+        return prompt_pick("transcode", &candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>(), &format!("transcode {}", shell_quote("{}")));
     }
 
     if !std::path::Path::new(&input).is_file() {
@@ -83,7 +82,7 @@ pub fn handle(args: &[String]) -> String {
         return prompt_pick(
             "format",
             formats,
-            &format!("transcode {} {{}}", quote(&input)),
+            &format!("transcode {} '{{}}'", shell_quote(&input)),
         );
     }
 
@@ -96,7 +95,7 @@ pub fn handle(args: &[String]) -> String {
         return prompt_pick(
             "size",
             sizes,
-            &format!("transcode {} {} {{}}", quote(&input), quote(&format)),
+            &format!("transcode {} {} '{{}}'", shell_quote(&input), shell_quote(&format)),
         );
     }
 
@@ -174,7 +173,7 @@ mod tests {
             &pick.to_string_lossy(),
             "format",
             &["jpg", "png"],
-            "transcode '/tmp/x.png' {}",
+            "transcode '/tmp/x.png' '{}'",
         );
         assert_eq!(out, "OK", "got: {out}");
         let fed = std::fs::read_to_string(&log).unwrap();
