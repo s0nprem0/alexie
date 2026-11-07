@@ -79,6 +79,14 @@ pub(crate) fn render_text(r: &AudioResult) -> String {
 }
 
 pub(crate) fn handle(args: &[String]) -> String {
+    // `alexie audio set <node-id> <sink-name>` — point the default output at a
+    // sink and take the streams that are already playing with it (port of
+    // anixie `audio-output-set`). Must be checked before the --json/flag
+    // validation below, which is for the read-only status path.
+    if !args.is_empty() && args[0] == "set" {
+        return handle_set(&args[1..]);
+    }
+
     let want_json = args.iter().any(|a| a == "--json");
     for a in args {
         if a.starts_with("--") && a != "--json" {
@@ -91,6 +99,54 @@ pub(crate) fn handle(args: &[String]) -> String {
     } else {
         render_text(&result)
     }
+}
+
+/// Point the default output at a sink and take the streams along.
+fn handle_set(args: &[String]) -> String {
+    if args.len() != 2 {
+        return "ERR usage: audio set <node-id> <sink-name>".to_string();
+    }
+    let node_id = &args[0];
+    let sink_name = &args[1];
+    if node_id.trim().is_empty() || sink_name.trim().is_empty() {
+        return "ERR audio set needs a node id and a sink name".to_string();
+    }
+
+    let wpctl = crate::status::common::wpctl();
+    let pactl = crate::status::common::pactl();
+
+    // PipeWire and WirePlumber select by node id; the PulseAudio compat
+    // layer names sinks, so both are set.
+    let (code, _, err) = crate::proc::run(&wpctl, &["set-default", node_id]);
+    if code != 0 {
+        return format!("ERR wpctl set-default: {}", err.trim());
+    }
+    // Best-effort: the compat layer may be absent, and the default above is
+    // what takes effect for new streams.
+    let _ = crate::proc::run(&pactl, &["set-default-sink", sink_name]);
+
+    // Move only real application streams. A filter-chain's own output carries
+    // no application.name, and moving it would rewire processing.
+    let (code, out, _) = crate::proc::run(&pactl, &["-f", "json", "list", "sink-inputs"]);
+    if code == 0 {
+        if let Ok(inputs) = serde_json::from_str::<serde_json::Value>(&out) {
+            for input in inputs.as_array().cloned().unwrap_or_default() {
+                let name = input
+                    .pointer("/properties/application.name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if name.is_empty() || name == "EasyEffects" {
+                    continue;
+                }
+                if let Some(index) = input.get("index").and_then(|v| v.as_u64()) {
+                    let _ =
+                        crate::proc::run(&pactl, &["move-sink-input", &index.to_string(), sink_name]);
+                }
+            }
+        }
+    }
+
+    "OK".to_string()
 }
 
 #[cfg(test)]

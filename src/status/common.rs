@@ -24,6 +24,10 @@ pub(crate) fn tailscale() -> String {
 pub(crate) fn pactl() -> String {
     tool("PACTL", "pactl")
 }
+
+pub(crate) fn wpctl() -> String {
+    tool("WPCTL", "wpctl")
+}
 pub(crate) fn playerctl() -> String {
     tool("PLAYERCTL", "playerctl")
 }
