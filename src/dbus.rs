@@ -250,9 +250,7 @@ impl AppsIface {
     fn list_json(&self) -> String { crate::apps::list_json() }
     fn launch(&self, name: &str) -> String {
         let r = crate::apps::handle(&["launch".to_string(), name.to_string()]);
-        if r != "OK" && !r.starts_with("ERR") {
-            emit_apps_changed();
-        } else if r == "OK" {
+        if !r.starts_with("ERR") {
             emit_apps_changed();
         }
         r

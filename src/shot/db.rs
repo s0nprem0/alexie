@@ -259,34 +259,14 @@ pub(crate) fn thumbnail_path_for_in(id: i64, thumb_dir: &Path) -> PathBuf {
 }
 
 fn probe(source: &Path) -> ProbeResult {
-    let mut result = ProbeResult::default();
     let (code, out, _) = crate::proc::run(
         &ffprobe(),
         &["-v", "quiet", "-print_format", "json", "-show_streams", &source.to_string_lossy()],
     );
     if code != 0 {
-        return result;
+        return ProbeResult::default();
     }
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&out) else {
-        return result;
-    };
-    let Some(streams) = value.get("streams").and_then(|v| v.as_array()) else {
-        return result;
-    };
-    for stream in streams {
-        if stream.get("codec_type").and_then(|v| v.as_str()) != Some("video") {
-            continue;
-        }
-        result.width = stream.get("width").and_then(|v| v.as_i64()).map(|v| v as i32);
-        result.height = stream.get("height").and_then(|v| v.as_i64()).map(|v| v as i32);
-        if let Some(dur) = stream.get("duration").and_then(|v| v.as_str())
-            && let Ok(secs) = dur.parse::<f64>()
-        {
-            result.duration_ms = Some((secs * 1000.0) as i32);
-        }
-        break;
-    }
-    result
+    parse_probe_json(&out)
 }
 
 pub fn parse_probe_json(json: &str) -> ProbeResult {

@@ -93,7 +93,8 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert_eq!(code, 0);
-        let (code, _err) = run_stdout_to_file("cat", &[&f.to_string_lossy().to_string()], &dir.join("out.bin"));
+        let f_str = f.to_string_lossy();
+        let (code, _err) = run_stdout_to_file("cat", &[f_str.as_ref()], &dir.join("out.bin"));
         assert_eq!(code, 0);
         assert_eq!(std::fs::read(dir.join("out.bin")).unwrap(), b"\x89PNG\r\n\x1a\n");
         let _ = std::fs::remove_dir_all(&dir);

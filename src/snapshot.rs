@@ -84,17 +84,6 @@ pub fn handle(args: &[String]) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unknown_subcommand_fails_fast() {
-        let out = handle(&["__bogus__".to_string()]);
-        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
-    }
-}
-
 fn prune(keep_str: &str) {
     let keep: usize = keep_str.parse().unwrap_or(20);
     let d = dest();
@@ -107,5 +96,16 @@ fn prune(keep_str: &str) {
     for e in &entries[keep..] {
         let path = format!("{}/{}", d, e);
         let _ = run_root("btrfs", &["subvolume", "delete", &path]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
     }
 }

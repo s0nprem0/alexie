@@ -51,17 +51,6 @@ pub fn handle(args: &[String]) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unknown_subcommand_fails_fast() {
-        let out = handle(&["__bogus__".to_string()]);
-        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
-    }
-}
-
 fn capture_text() -> String {
     let sp = shot_pick();
     let freeze_file = runtime_dir().join("anixie-pick-freeze.pid");
@@ -160,5 +149,16 @@ fn release_freeze(path: &std::path::Path) {
         }
     }
     let _ = std::fs::remove_file(path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_subcommand_fails_fast() {
+        let out = handle(&["__bogus__".to_string()]);
+        assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
+    }
 }
 
