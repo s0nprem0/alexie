@@ -1,39 +1,45 @@
 //! Stop/finalise: signal the recorder, trim and announce.
 
-use super::state::{cancel_file, ffmpeg, name_file, notify_msg, notify_raw, pid_file, recorder_args, region_file, shell_recording, webcam_overlay};
-use crate::proc::{resolve_tool, run};
+use super::state::{cancel_file, ffmpeg, name_file, notify_msg, notify_raw, pid_file, recorder_pids, region_file, shell_recording, signal_recorders, webcam_overlay};
+use crate::proc::run;
 use std::fs;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
+fn recorder_pids_at(pids: &[i32]) -> Vec<i32> {
+    pids.iter().cloned().filter(|pid| !recorder_pids(Some(*pid)).is_empty()).collect()
+}
+
+fn recorded_or_any() -> Vec<i32> {
+    // The recorded pid when it is still a recorder, else any of
+    // ours — the same selection legacy record.sh used.
+    if let Some(pid) = super::state::read_pid()
+        && !recorder_pids(Some(pid)).is_empty()
+    {
+        return vec![pid];
+    }
+    recorder_pids(None)
+}
+
 pub(crate) fn stop_recording() -> String {
     let _ = fs::write(cancel_file(), "");
-    let rec_args = recorder_args();
-    let rp = resolve_tool("record-process");
-    // signal INT
-    let mut args: Vec<String> = rec_args.clone();
-    args.push("--signal".to_string());
-    args.push("INT".to_string());
-    let _ = Command::new(&rp).args(&args).status();
+    let pids = recorded_or_any();
+    let _ = signal_recorders(&pids, "INT");
 
     // wait up to 5s
-    let mut count = 0;
-    while count < 50 {
-        let alive = Command::new(&rp).args(&rec_args).status().map(|s| s.success()).unwrap_or(false);
-        if !alive { break; }
+    for _ in 0..50 {
+        if recorder_pids_at(&pids).is_empty() {
+            break;
+        }
         thread::sleep(Duration::from_millis(100));
-        count += 1;
     }
     // webcam overlay stop
     let _ = run(&webcam_overlay(), &["stop"]);
 
-    let still = Command::new(&rp).args(&rec_args).status().map(|s| s.success()).unwrap_or(false);
-    if still {
-        let mut ka = rec_args.clone();
-        ka.push("--signal".to_string());
-        ka.push("KILL".to_string());
-        let _ = Command::new(&rp).args(&ka).status();
+    let still = recorder_pids_at(&pids);
+    if !still.is_empty() {
+        let _ = signal_recorders(&still, "KILL");
         notify_msg("critical", "Recording failed", "It did not stop cleanly.");
     } else {
         if let Ok(name) = fs::read_to_string(name_file()) {
