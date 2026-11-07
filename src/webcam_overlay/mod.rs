@@ -9,7 +9,7 @@
 mod overlay;
 mod resize;
 
-use crate::proc::{resolve_tool, run};
+// Native: the overlay itself is ported; no legacy delegation remains.
 use std::env;
 use std::path::PathBuf;
 
@@ -52,13 +52,7 @@ pub fn handle(args: &[String]) -> String {
             }
             resize(&action)
         }
-        _ => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = resolve_tool("webcam-overlay-legacy");
-            let (code, out, err) = run(&tool, &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
-        }
+        _ => format!("ERR unknown subcommand: {}", sub),
     }
 }
 
