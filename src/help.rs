@@ -46,7 +46,7 @@ pub(crate) const COMMANDS: &[(&str, &str, &str)] = &[
     ("focus", "focus mode.", "  start, stop, extend, status\n"),
     ("snapshot", "btrfs snapshots.", "  create, list, restore, prune\n"),
     ("webapp", "websites as apps.", "  add, list, remove\n"),
-    ("shot", "screenshots.", "  smart, region, windows, fullscreen, window\n  copy, save, preview, annotate, redact, text\n"),
+    ("shot", "screenshots.", "  smart, region, windows, fullscreen, window\n  copy, save, preview, annotate, redact, text\n  db list|status|add|remove|clear|check [--json]\n  db color|ocr add|list|remove|clear, path, thumbs\n"),
     ("record", "screen recording.", "  --status, --stop, --fullscreen, --audio\n"),
     ("transcode", "picture/video resize.", "  picture|video ...\n"),
     ("webcam-overlay", "webcam overlay.", "  start, stop, resize, list\n"),

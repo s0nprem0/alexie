@@ -17,6 +17,7 @@ Substantially complete. Native (no bash delegation):
 - `transcode` — ported (picture/video resize + clipboard URI).
 - `power` — fully ported including udev watcher (no bash delegation).
 - `status` — network/sysmon/audio/bluetooth as text or JSON (P0 from doty's `wabi`). `alexie status <name> --json` (aliases `alexie network|sysmon|audio|bluetooth`) emits wabi-compatible JSON for Quickshell popups; cached to `$XDG_CACHE_HOME/anixie/`.
+- `shot db` — screenshot/recording asset index (P1, wabi `media_db` port). `add/list/remove/clear/check/path/thumbs`, `color` + `ocr` groups, `status --json` (wabi `MediaStatus`); saves auto-index. DB at `$XDG_STATE_HOME/anixie/assets.db`, thumbs at `$XDG_CACHE_HOME/anixie/thumbnails/`.
 
 Thin wrappers (delegate to the quickshell, which owns the UI/timer): `focus`.
 
@@ -44,6 +45,7 @@ alexie screentime watch &  # track active-window time
 alexie screentime show
 alexie status sysmon --json  # CPU/RAM/disk JSON
 alexie status network --json # wifi/IP JSON (wabi-compatible)
+alexie shot db list --json   # screenshot index (wabi media_db)
 ```
 
 ## Integration with anixie

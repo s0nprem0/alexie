@@ -3,12 +3,14 @@
 //! Split from a single 423-line shot.rs for readability:
 //! - `geometry` — hyprctl JSON geometry, window slug, timestamp
 //! - `capture` — grim capture to save/copy/preview/annotate, freeze
+//! - `db` — asset index (wabi `media_db` port): add/list/clear/thumbs
 //!
 //! `handle()` below is just argument parsing/dispatch.
 
 pub mod geometry;
 pub mod capture;
 pub mod scroll;
+pub mod db;
 
 use crate::proc::run;
 use std::env;
@@ -31,6 +33,11 @@ pub(crate) fn runtime_dir() -> std::path::PathBuf {
 }
 
 pub fn handle(args: &[String]) -> String {
+    // `shot db ...` indexes assets/colors/OCR (wabi media_db).
+    if args.first().map(|s| s.as_str()) == Some("db") {
+        let rest: Vec<String> = args[1..].iter().map(|s| s.to_string()).collect();
+        return db::handle(&rest);
+    }
     if args.is_empty() {
         return capture::handle_mode_dest("smart", "preview", &[], None, &[]);
     }

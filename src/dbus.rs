@@ -227,6 +227,14 @@ impl StatusIface {
     }
 }
 
+// ---------- Media interface (P1: shot db) ----------
+pub struct MediaIface;
+#[interface(name = "org.alexie.Media1")]
+impl MediaIface {
+    fn list_json(&self) -> String { crate::shot::handle(&["db".to_string(), "list".to_string(), "--json".to_string()]) }
+    fn status_json(&self) -> String { crate::shot::handle(&["db".to_string(), "status".to_string(), "--json".to_string()]) }
+}
+
 // ---------- helpers ----------
 
 fn theme_current() -> String {
@@ -298,8 +306,11 @@ pub fn run_dbus_server() {
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", StatusIface) {
         eprintln!("dbus: register StatusIface failed: {}", e);
     }
+    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", MediaIface) {
+        eprintln!("dbus: register MediaIface failed: {}", e);
+    }
     let _ = CONN.set(conn.clone());
-    eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme/Status interfaces");
+    eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme/Status/Media interfaces");
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }
