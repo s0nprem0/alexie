@@ -18,6 +18,10 @@ impl DaemonIface {
         crate::handle_command(command)
     }
 
+    fn run_args(&self, args: Vec<String>) -> String {
+        crate::dispatch::handle_args(args, "")
+    }
+
     #[zbus(property)]
     fn theme(&self) -> String {
         theme_current()
@@ -208,7 +212,7 @@ impl ScreentimeIface {
     fn path(&self) -> String { crate::screentime::db_path().to_string_lossy().to_string() }
 }
 
-// ---------- Status interface (P0: network/sysmon/audio/bluetooth) ----------
+// ---------- Status interface ----------
 pub struct StatusIface;
 #[interface(name = "org.alexie.Status1")]
 impl StatusIface {
@@ -225,24 +229,53 @@ impl StatusIface {
             _ => format!("ERR unknown status: {}", name),
         }
     }
+
+    #[zbus(property)]
+    fn network(&self) -> String { crate::status::network_json() }
+    #[zbus(property)]
+    fn sysmon(&self) -> String { crate::status::sysmon_json() }
+    #[zbus(property)]
+    fn audio(&self) -> String { crate::status::audio_json() }
+    #[zbus(property)]
+    fn bluetooth(&self) -> String { crate::status::bluetooth_json() }
+
+    #[zbus(signal)]
+    async fn changed(ctxt: &zbus::SignalContext<'_>) -> zbus::Result<()>;
 }
 
-// ---------- Apps interface (P1: launcher) ----------
+// ---------- Apps interface ----------
 pub struct AppsIface;
 #[interface(name = "org.alexie.Apps1")]
 impl AppsIface {
     fn list_json(&self) -> String { crate::apps::list_json() }
     fn launch(&self, name: &str) -> String {
-        crate::apps::handle(&["launch".to_string(), name.to_string()])
+        let r = crate::apps::handle(&["launch".to_string(), name.to_string()]);
+        if r != "OK" && !r.starts_with("ERR") {
+            emit_apps_changed();
+        } else if r == "OK" {
+            emit_apps_changed();
+        }
+        r
     }
+
+    #[zbus(property)]
+    fn list(&self) -> String { crate::apps::list_json() }
+
+    #[zbus(signal)]
+    async fn changed(ctxt: &zbus::SignalContext<'_>) -> zbus::Result<()>;
 }
 
-// ---------- Media interface (P1: shot db) ----------
+// ---------- Media interface ----------
 pub struct MediaIface;
 #[interface(name = "org.alexie.Media1")]
 impl MediaIface {
     fn list_json(&self) -> String { crate::shot::handle(&["db".to_string(), "list".to_string(), "--json".to_string()]) }
     fn status_json(&self) -> String { crate::shot::handle(&["db".to_string(), "status".to_string(), "--json".to_string()]) }
+
+    #[zbus(property)]
+    fn list(&self) -> String { crate::shot::handle(&["db".to_string(), "list".to_string(), "--json".to_string()]) }
+    #[zbus(property)]
+    fn status(&self) -> String { crate::shot::handle(&["db".to_string(), "status".to_string(), "--json".to_string()]) }
 }
 
 // ---------- helpers ----------
@@ -275,6 +308,14 @@ fn emit_theme_changed(name: String) {
         && let Ok(iface_ref) = conn.object_server().interface::<_, ThemeIface>("/org/alexie/Daemon") {
             let ctxt = iface_ref.signal_context();
             let _ = zbus::block_on(ThemeIface::changed(ctxt, &name));
+        }
+}
+
+fn emit_apps_changed() {
+    if let Some(conn) = CONN.get()
+        && let Ok(iface_ref) = conn.object_server().interface::<_, AppsIface>("/org/alexie/Daemon") {
+            let ctxt = iface_ref.signal_context();
+            let _ = zbus::block_on(AppsIface::changed(ctxt));
         }
 }
 
