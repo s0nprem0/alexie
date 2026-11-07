@@ -81,7 +81,12 @@ pub fn run_bytes_with_stdin(cmd: &str, args: &[&str], data: &[u8]) -> (i32, Stri
     }
 }
 
-#[allow(dead_code)]
+/// Shell-quote `s` as a single POSIX word (`'…'\''…'`).
+/// Used for static args baked into `pick --on-select` templates at
+/// build time (e.g. transcode input paths). The substituted `{}` value
+/// is quoted template-side as `'{}'`; the shell (quickshell) must
+/// treat the substituted word as data, so picker values must stay free
+/// of `'` — handlers validate this (see emoji `apply`).
 pub fn shell_quote(s: &str) -> String {
     let mut out = String::from("'");
     for c in s.chars() {
@@ -89,20 +94,5 @@ pub fn shell_quote(s: &str) -> String {
     }
     out.push('\'');
     out
-}
-
-
-/// Run a shell snippet for its exit status only, with stdio nulled.
-#[allow(dead_code)]
-pub fn run_sh_status(script: &str) -> i32 {
-    use std::process::Stdio;
-    Command::new("sh")
-        .args(["-c", script])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.code().unwrap_or(-1))
-        .unwrap_or(-1)
 }
 
