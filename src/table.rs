@@ -106,7 +106,10 @@ pub fn render(headers: &[&str], rows: &[Vec<String>]) -> String {
 
 /// Render a two-column key/value table.
 pub fn render_kv(pairs: &[(&str, String)]) -> String {
-    let rows: Vec<Vec<String>> = pairs.iter().map(|(k, v)| vec![k.to_string(), v.clone()]).collect();
+    let rows: Vec<Vec<String>> = pairs
+        .iter()
+        .map(|(k, v)| vec![k.to_string(), v.clone()])
+        .collect();
     render(&["Key", "Value"], &rows)
 }
 

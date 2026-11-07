@@ -6,31 +6,62 @@ use std::path::{Path, PathBuf};
 
 pub(crate) use crate::proc::tool;
 
-pub(crate) fn nmcli() -> String { tool("NMCLI", "nmcli") }
-pub(crate) fn rfkill() -> String { tool("RFKILL", "rfkill") }
-pub(crate) fn iw() -> String { tool("IW", "iw") }
-pub(crate) fn warp_cli() -> String { tool("WARP_CLI", "warp-cli") }
-pub(crate) fn tailscale() -> String { tool("TAILSCALE", "tailscale") }
-pub(crate) fn pactl() -> String { tool("PACTL", "pactl") }
-pub(crate) fn playerctl() -> String { tool("PLAYERCTL", "playerctl") }
-pub(crate) fn bluetoothctl() -> String { tool("BLUETOOTHCTL", "bluetoothctl") }
-pub(crate) fn upower() -> String { tool("UPOWER", "upower") }
-pub(crate) fn nvidia_smi() -> String { tool("NVIDIA_SMI", "nvidia-smi") }
-pub(crate) fn inxi() -> String { tool("INXI", "inxi") }
-pub(crate) fn lsblk() -> String { tool("LSBLK", "lsblk") }
+pub(crate) fn nmcli() -> String {
+    tool("NMCLI", "nmcli")
+}
+pub(crate) fn rfkill() -> String {
+    tool("RFKILL", "rfkill")
+}
+pub(crate) fn iw() -> String {
+    tool("IW", "iw")
+}
+pub(crate) fn warp_cli() -> String {
+    tool("WARP_CLI", "warp-cli")
+}
+pub(crate) fn tailscale() -> String {
+    tool("TAILSCALE", "tailscale")
+}
+pub(crate) fn pactl() -> String {
+    tool("PACTL", "pactl")
+}
+pub(crate) fn playerctl() -> String {
+    tool("PLAYERCTL", "playerctl")
+}
+pub(crate) fn bluetoothctl() -> String {
+    tool("BLUETOOTHCTL", "bluetoothctl")
+}
+pub(crate) fn upower() -> String {
+    tool("UPOWER", "upower")
+}
+pub(crate) fn nvidia_smi() -> String {
+    tool("NVIDIA_SMI", "nvidia-smi")
+}
+pub(crate) fn inxi() -> String {
+    tool("INXI", "inxi")
+}
+pub(crate) fn lsblk() -> String {
+    tool("LSBLK", "lsblk")
+}
 
 /// Run a command, return trimmed stdout on success else "".
 /// Run, return trimmed stdout or empty.
 pub(crate) fn run_out(cmd: &str, args: &[&str]) -> String {
     let (code, out, _) = crate::proc::run(cmd, args);
-    if code == 0 { out.trim().to_string() } else { String::new() }
+    if code == 0 {
+        out.trim().to_string()
+    } else {
+        String::new()
+    }
 }
 
 pub(crate) fn read_trimmed(path: &Path) -> Option<String> {
     fs::read_to_string(path).ok().map(|s| s.trim().to_string())
 }
 
-pub(crate) fn atomic_write_json<T: serde::Serialize>(path: &Path, value: &T) -> std::io::Result<()> {
+pub(crate) fn atomic_write_json<T: serde::Serialize>(
+    path: &Path,
+    value: &T,
+) -> std::io::Result<()> {
     let json = serde_json::to_string_pretty(value)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     if let Some(parent) = path.parent() {
@@ -101,7 +132,11 @@ pub(crate) fn cidr_to_netmask(prefix: u32) -> Option<String> {
 pub(crate) fn active_wifi_device() -> Option<String> {
     let out = {
         let (code, o, _) = crate::proc::run(&nmcli(), &["-t", "-f", "DEVICE,TYPE,STATE", "dev"]);
-        if code == 0 { o } else { return None; }
+        if code == 0 {
+            o
+        } else {
+            return None;
+        }
     };
     for line in out.lines() {
         let parts = split_nmcli_t_line(line);
@@ -146,7 +181,10 @@ mod tests {
     #[test]
     fn nmcli_split_empty_and_colons() {
         assert_eq!(split_nmcli_t_line(""), vec!["".to_string()]);
-        assert_eq!(split_nmcli_t_line("a:b:c"), vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert_eq!(
+            split_nmcli_t_line("a:b:c"),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
     }
 
     #[test]

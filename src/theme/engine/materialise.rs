@@ -1,29 +1,38 @@
+use super::super::state::{
+    self, generated_file, generations_dir, live_link, mode_file, state_dir, state_ensure,
+    state_set_generation, state_set_theme, write_atomic,
+};
 use super::color::palette_ok_file;
-use super::super::state::{self, generated_file, generations_dir, live_link, mode_file, state_dir, state_ensure, state_set_generation, state_set_theme, write_atomic};
 use crate::proc::{run, tool};
 use std::env;
 use std::path::{Path, PathBuf};
 
 pub(crate) fn theme_apps_bin() -> String {
     if let Ok(v) = env::var("THEME_APPS")
-        && !v.is_empty() {
-            return v;
-        }
+        && !v.is_empty()
+    {
+        return v;
+    }
     let cfg = crate::config::get_str(&["theme", "theme_apps"], "");
     if !cfg.is_empty() {
         return cfg;
     }
     if let Ok(s) = std::fs::read_to_string(state::live_link().join("renderer"))
-        && let Some(path) = s.split_whitespace().nth(1) {
-            return path.to_string();
-        }
+        && let Some(path) = s.split_whitespace().nth(1)
+    {
+        return path.to_string();
+    }
     tool("THEME_APPS", "theme-apps")
 }
 
 // ---------- kitty conf (port of write_kitty_conf in core.sh) ----------
 
 pub(crate) fn colour(generated: &serde_json::Value, key: &str) -> String {
-    generated.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string()
+    generated
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 pub(crate) fn ansi_colour(generated: &serde_json::Value, index: u8, fallback: &str) -> String {
@@ -113,7 +122,9 @@ impl Drop for StateLock {
 
 pub(crate) fn prune_generations(current: &Path) {
     let dir = generations_dir();
-    let Ok(read) = std::fs::read_dir(&dir) else { return };
+    let Ok(read) = std::fs::read_dir(&dir) else {
+        return;
+    };
     let mut gens: Vec<(std::time::SystemTime, PathBuf)> = read
         .flatten()
         .map(|e| e.path())
@@ -150,15 +161,20 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         }
         std::fs::read_to_string(generated_file())
             .map_err(|e| e.to_string())
-            .and_then(|s| {
-                serde_json::from_str::<serde_json::Value>(&s)
-                    .map_err(|e| e.to_string())
-            }).map(|v| v.get("_mode").and_then(|m| m.as_str()).unwrap_or("dark").to_string())?
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string()))
+            .map(|v| {
+                v.get("_mode")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("dark")
+                    .to_string()
+            })?
     } else {
         let entry = super::super::state::palette_entry(name)
             .ok_or_else(|| format!("no such theme: {}", name))?;
         // resolved palette = entry without "_" keys
-        let obj = entry.as_object().ok_or_else(|| format!("no such theme: {}", name))?;
+        let obj = entry
+            .as_object()
+            .ok_or_else(|| format!("no such theme: {}", name))?;
         let mut resolved = serde_json::Map::new();
         for (k, v) in obj {
             if !k.starts_with('_') {
@@ -182,7 +198,11 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
     let gen_dir = {
         let stamp = {
             let (code, out, _) = run("date", &["+%Y%m%d%H%M%S"]);
-            if code == 0 { out.trim().to_string() } else { "0".to_string() }
+            if code == 0 {
+                out.trim().to_string()
+            } else {
+                "0".to_string()
+            }
         };
         let mut candidate = generations_dir().join(format!("{}-{}", stamp, std::process::id()));
         let mut n = 0;
@@ -194,7 +214,9 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         candidate
     };
 
-    let cleanup = |gen_dir: &Path| { let _ = std::fs::remove_dir_all(gen_dir); };
+    let cleanup = |gen_dir: &Path| {
+        let _ = std::fs::remove_dir_all(gen_dir);
+    };
     if std::fs::copy(generated_file(), gen_dir.join("palette.json")).is_err() {
         cleanup(&gen_dir);
         return Err("could not stage the palette".to_string());
@@ -273,16 +295,19 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
     // (@THEME_APPS@ legacy). Both write into `gen_dir` (live symlink
     // already points at it for early shell paint).
     use crate::theme::engine::render_apps;
-    let palette_map = generated_json
-        .as_object()
-        .cloned()
-        .unwrap_or_default();
+    let palette_map = generated_json.as_object().cloned().unwrap_or_default();
     let rendered = if render_apps::is_available() {
         render_apps::render_apps(&gen_dir, &palette_map, &mode_value)
     } else {
-        let (code, _, err) = run(&theme_apps_bin(), &[name, gen_dir.to_string_lossy().as_ref()]);
+        let (code, _, err) = run(
+            &theme_apps_bin(),
+            &[name, gen_dir.to_string_lossy().as_ref()],
+        );
         if code != 0 {
-            Err(format!("could not render the application themes: {}", err.trim()))
+            Err(format!(
+                "could not render the application themes: {}",
+                err.trim()
+            ))
         } else {
             Ok(())
         }
@@ -297,27 +322,48 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
     // templates are absent.
     use crate::theme::assets::{optional_outputs, required_outputs};
     let mut required = vec![
-        "palette.json", "mode", "kitty.conf",
-        "qt6ct.conf", "qt5ct.conf", "kvantum.kvconfig",
-        "tmux.conf", "btop.theme", "terminal.zsh",
+        "palette.json",
+        "mode",
+        "kitty.conf",
+        "qt6ct.conf",
+        "qt5ct.conf",
+        "kvantum.kvconfig",
+        "tmux.conf",
+        "btop.theme",
+        "terminal.zsh",
     ];
     required.extend(required_outputs());
     for source in &required {
-        if std::fs::metadata(gen_dir.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
+        if std::fs::metadata(gen_dir.join(source))
+            .map(|m| m.len())
+            .unwrap_or(0)
+            == 0
+        {
             cleanup(&gen_dir);
             return Err(format!("the generation is missing {}", source));
         }
     }
     for source in optional_outputs() {
-        if std::fs::metadata(gen_dir.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
+        if std::fs::metadata(gen_dir.join(source))
+            .map(|m| m.len())
+            .unwrap_or(0)
+            == 0
+        {
             eprintln!("theme: optional generation file missing {}", source);
         }
     }
 
-    let source = if name == "wallpaper" { "wallpaper" } else { "preset" };
+    let source = if name == "wallpaper" {
+        "wallpaper"
+    } else {
+        "preset"
+    };
     write_atomic(&state::current_file(), &format!("{}\n", name)).map_err(|e| e.to_string())?;
     state_set_theme(name, source)?;
-    let gen_name = gen_dir.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let gen_name = gen_dir
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
     if state_set_generation(&gen_name).is_err() {
         eprintln!("theme: could not record the new generation");
     }
@@ -335,4 +381,3 @@ pub(crate) fn wallpaper_palette() -> bool {
             .map(|v| v.get("_mode").is_some())
             .unwrap_or(false)
 }
-

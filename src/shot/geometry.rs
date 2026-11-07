@@ -27,13 +27,17 @@ pub(crate) fn focused_monitor_geometry_from_json(json: &str) -> Option<String> {
     // monitor captures far beyond its logical area.
     let v: serde_json::Value = serde_json::from_str(json).ok()?;
     let arr = v.as_array()?;
-    let mon = arr.iter().find(|m| m.get("focused").and_then(|f| f.as_bool()) == Some(true))?;
+    let mon = arr
+        .iter()
+        .find(|m| m.get("focused").and_then(|f| f.as_bool()) == Some(true))?;
     let x = mon.get("x")?.as_i64()?;
     let y = mon.get("y")?.as_i64()?;
     let width = mon.get("width")?.as_f64()?;
     let height = mon.get("height")?.as_f64()?;
     let scale = mon.get("scale").and_then(|s| s.as_f64()).unwrap_or(1.0);
-    if scale <= 0.0 { return None; }
+    if scale <= 0.0 {
+        return None;
+    }
     let mut w = (width / scale).round() as i64;
     let mut h = (height / scale).round() as i64;
     let transform = mon.get("transform").and_then(|t| t.as_i64()).unwrap_or(0);
@@ -48,15 +52,21 @@ pub(crate) fn window_class_from_json(json: &str) -> String {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
         return String::new();
     };
-    v.get("class").and_then(|c| c.as_str()).unwrap_or("").to_string()
+    v.get("class")
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string()
 }
-
 
 pub(crate) fn window_slug() -> String {
     let (code, out, _) = crate::proc::run(&hyprctl(), &["activewindow", "-j"]);
-    if code != 0 { return String::new(); }
+    if code != 0 {
+        return String::new();
+    }
     let class = window_class_from_json(&out);
-    if class.is_empty() { return String::new(); }
+    if class.is_empty() {
+        return String::new();
+    }
     slugify_class(&class)
 }
 
@@ -80,10 +90,12 @@ pub(crate) fn slugify_class(class: &str) -> String {
 pub(crate) fn chrono_like_stamp() -> String {
     // use date command
     let (code, out, _) = crate::proc::run("date", &["+%Y-%m-%d_%H-%M-%S"]);
-    if code == 0 { out.trim().to_string() } else { "0".to_string() }
+    if code == 0 {
+        out.trim().to_string()
+    } else {
+        "0".to_string()
+    }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -95,7 +107,10 @@ mod tests {
             window_geometry_from_json(r#"{"at":[10,20],"size":[800,600]}"#),
             Some("10,20 800x600".to_string())
         );
-        assert_eq!(window_geometry_from_json(r#"{"at":null,"size":null}"#), None);
+        assert_eq!(
+            window_geometry_from_json(r#"{"at":null,"size":null}"#),
+            None
+        );
         assert_eq!(window_geometry_from_json("not json"), None);
         assert_eq!(
             focused_monitor_geometry_from_json(

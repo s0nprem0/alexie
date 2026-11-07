@@ -18,7 +18,14 @@ pub fn tmp_file(prefix: &str, ext: &str) -> std::path::PathBuf {
     let name = if ext.is_empty() {
         format!("anixie-{}-{}-{}-{}", prefix, std::process::id(), nanos, n)
     } else {
-        format!("anixie-{}-{}-{}-{}.{}", prefix, std::process::id(), nanos, n, ext)
+        format!(
+            "anixie-{}-{}-{}-{}.{}",
+            prefix,
+            std::process::id(),
+            nanos,
+            n,
+            ext
+        )
     };
     std::env::temp_dir().join(name)
 }
@@ -26,7 +33,7 @@ pub fn tmp_file(prefix: &str, ext: &str) -> std::path::PathBuf {
 /// Copy `data` to the clipboard via wl-copy, without a shell.
 /// `extra` carries flags like `--sensitive`.
 pub fn copy_text_to_clipboard(wl_bin: &str, mime: &str, data: &str, extra: &[&str]) -> i32 {
-        use std::process::Stdio;
+    use std::process::Stdio;
     let mut cmd = Command::new(wl_bin);
     cmd.args(extra);
     cmd.args(["--type", mime]);
@@ -83,4 +90,3 @@ pub fn run_stdout_to_file(cmd: &str, args: &[&str], dest: &std::path::Path) -> (
         Err(e) => (-1, e.to_string()),
     }
 }
-

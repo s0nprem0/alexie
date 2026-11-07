@@ -1,10 +1,10 @@
 //! Recover/keep/revert: pending-change finalisation, plus
 //! lid-state recovery when the lid is open.
 
-use super::lid::{clear_disabled, lid_closed};
 use super::super::pending::{read_pending, remove_pending};
-use super::super::workspaces::workspaces_sync_action;
 use super::super::state::{self, Snapshot};
+use super::super::workspaces::workspaces_sync_action;
+use super::lid::{clear_disabled, lid_closed};
 use crate::proc::run;
 
 pub(crate) fn recover_action(snap: &Snapshot) -> String {
@@ -24,21 +24,30 @@ pub(crate) fn recover_action(snap: &Snapshot) -> String {
 }
 pub(crate) fn keep_action(snap: &Snapshot) -> String {
     let pending = state::state_dir().join("display-pending");
-    if !pending.exists() { return "no display change to keep".to_string(); }
+    if !pending.exists() {
+        return "no display change to keep".to_string();
+    }
     let Some(p) = read_pending() else {
         let _ = std::fs::remove_file(&pending);
         return "ERR could not read pending".to_string();
     };
 
-    let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
-    if let Err(e) = state::save_field_snap(snap, &p.output, &p.key, &p.new_value) { return format!("ERR {}", e); }
+    let _ = run(
+        "systemctl",
+        &["--user", "stop", "alexie-display-revert.timer"],
+    );
+    if let Err(e) = state::save_field_snap(snap, &p.output, &p.key, &p.new_value) {
+        return format!("ERR {}", e);
+    }
     remove_pending(&pending);
     format!("{} {} {} kept", p.output, p.key, p.new_value)
 }
 
 pub(crate) fn revert_action(snap: &Snapshot) -> String {
     let pending = state::state_dir().join("display-pending");
-    if !pending.exists() { return "OK".to_string(); }
+    if !pending.exists() {
+        return "OK".to_string();
+    }
     let Some(p) = read_pending() else {
         return "OK".to_string();
     };
@@ -48,9 +57,14 @@ pub(crate) fn revert_action(snap: &Snapshot) -> String {
         return "OK".to_string();
     }
 
-    let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
-    if let Err(e) = state::apply_change_snap(snap, &p.output, &p.key, &p.old_value) { remove_pending(&pending); return format!("ERR {}", e); }
+    let _ = run(
+        "systemctl",
+        &["--user", "stop", "alexie-display-revert.timer"],
+    );
+    if let Err(e) = state::apply_change_snap(snap, &p.output, &p.key, &p.old_value) {
+        remove_pending(&pending);
+        return format!("ERR {}", e);
+    }
     remove_pending(&pending);
     format!("{} {} reverted to {}", p.output, p.key, p.old_value)
 }
-

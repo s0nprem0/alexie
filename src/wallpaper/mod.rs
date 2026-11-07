@@ -7,9 +7,9 @@
 //!
 //! `handle()` below is just the dispatcher over those.
 
-pub mod state;
 pub mod library;
 pub mod playback;
+pub mod state;
 
 pub mod apply;
 pub mod catalog;
@@ -45,9 +45,10 @@ pub fn handle(args: &[String]) -> String {
             if args.get(1).map(|s| s.as_str()) == Some("--json") {
                 let bg = catalog::background_file();
                 if let Ok(s) = fs::read_to_string(&bg)
-                    && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-                        return v.to_string();
-                    }
+                    && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
+                {
+                    return v.to_string();
+                }
                 let path = handle(&["current".to_string()]);
                 return serde_json::json!({"outputs": {}, "fallback": {"path": path, "video": false, "poster": ""}}).to_string();
             }
@@ -59,19 +60,22 @@ pub fn handle(args: &[String]) -> String {
             let wp = state_dir().join("wallpapers.json");
             if let Ok(s) = fs::read_to_string(&wp)
                 && let Ok(value) = serde_json::from_str::<serde_json::Value>(&s)
-                    && let Some(path) = value
-                        .get("themes")
-                        .and_then(|t| t.get(&theme))
-                        .and_then(|t| t.get("fallback"))
-                        .and_then(|f| f.get("path"))
-                        .and_then(|p| p.as_str())
-                        && !path.is_empty() {
-                            return path.to_string();
-                        }
+                && let Some(path) = value
+                    .get("themes")
+                    .and_then(|t| t.get(&theme))
+                    .and_then(|t| t.get("fallback"))
+                    .and_then(|f| f.get("path"))
+                    .and_then(|p| p.as_str())
+                && !path.is_empty()
+            {
+                return path.to_string();
+            }
             let file = state_dir().join(format!("wallpaper.{}", theme));
             if let Ok(s) = fs::read_to_string(&file) {
                 let s = s.trim().to_string();
-                if !s.is_empty() { return s; }
+                if !s.is_empty() {
+                    return s;
+                }
             }
             "generated".to_string()
         }
@@ -84,7 +88,9 @@ pub fn handle(args: &[String]) -> String {
             library::thumbs(&dirs)
         }
         "search" => {
-            if args.len() < 2 { return "ERR usage: wallpaper search QUERY [DIR]".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: wallpaper search QUERY [DIR]".to_string();
+            }
             let query = &args[1];
             let dirs = if args.len() > 2 {
                 vec![PathBuf::from(&args[2])]
@@ -95,21 +101,29 @@ pub fn handle(args: &[String]) -> String {
         }
         "apply" => apply::apply(),
         "use" => {
-            if args.len() < 2 { return "ERR usage: wallpaper use FILE [--output NAME]".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: wallpaper use FILE [--output NAME]".to_string();
+            }
             let output = parse_output_flag(&args[2..]);
             select::use_wallpaper(&args[1], &output)
         }
         "record" => {
-            if args.len() < 2 { return "ERR usage: wallpaper record FILE [--output NAME]".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: wallpaper record FILE [--output NAME]".to_string();
+            }
             let output = parse_output_flag(&args[2..]);
             select::record_selection(&args[1], &output)
         }
         "set" | "add-file" => {
-            if args.len() < 2 { return "ERR usage: wallpaper set FILE".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: wallpaper set FILE".to_string();
+            }
             select::add_file(&args[1])
         }
         "add" => {
-            if args.len() < 2 { return "ERR usage: wallpaper add DIR".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: wallpaper add DIR".to_string();
+            }
             select::add_dir(&args[1])
         }
         "next" => step::step("next", args.get(1).map(|s| s.as_str())),
@@ -130,7 +144,11 @@ pub fn handle(args: &[String]) -> String {
             if WATCHING.swap(true, Ordering::SeqCst) {
                 return "already watching".to_string();
             }
-            let dirs = if args.len() > 1 { vec![std::path::PathBuf::from(&args[1])] } else { state::watch_dirs() };
+            let dirs = if args.len() > 1 {
+                vec![std::path::PathBuf::from(&args[1])]
+            } else {
+                state::watch_dirs()
+            };
             let interval: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(2);
             std::thread::spawn(move || {
                 loop {
@@ -139,7 +157,10 @@ pub fn handle(args: &[String]) -> String {
                     let mut entries = Vec::new();
                     for path in files {
                         let tp = library::thumb_path(&state::cache_dir(), &path);
-                        let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        let stem = path
+                            .file_stem()
+                            .map(|s| s.to_string_lossy().to_string())
+                            .unwrap_or_default();
                         entries.push(serde_json::json!({
                             "path": path.to_string_lossy(),
                             "thumb": tp.to_string_lossy(),
@@ -166,7 +187,9 @@ pub fn handle(args: &[String]) -> String {
         }
         "library" => {
             let refresh = args.iter().any(|a| a == "--refresh");
-            if args.get(1).map(|s| s.as_str()) == Some("--json") || args.get(2).map(|s| s.as_str()) == Some("--json") {
+            if args.get(1).map(|s| s.as_str()) == Some("--json")
+                || args.get(2).map(|s| s.as_str()) == Some("--json")
+            {
                 catalog::library_json(refresh)
             } else {
                 catalog::list_output()

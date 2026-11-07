@@ -1,5 +1,9 @@
 use super::help::{help_text, is_help_flag};
-use crate::{apps, capture, clipboard, emoji, focus, menu, monitors, pick, power, proc, record, reminder, screentime, share, share_picker, shortcuts, shot, snapshot, status, theme, toggle, transcode, wallpaper, webcam_overlay, webapp};
+use crate::{
+    apps, capture, clipboard, emoji, focus, menu, monitors, pick, power, proc, record, reminder,
+    screentime, share, share_picker, shortcuts, shot, snapshot, status, theme, toggle, transcode,
+    wallpaper, webapp, webcam_overlay,
+};
 use std::process::Command;
 
 fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
@@ -26,9 +30,7 @@ pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
         None | Some("--help") | Some("-h") | Some("help") => {
             help_text(parts.get(1).map(|s| s.as_str()))
         }
-        Some(c) if parts.len() >= 2 && is_help_flag(&parts[1]) => {
-            help_text(Some(c))
-        }
+        Some(c) if parts.len() >= 2 && is_help_flag(&parts[1]) => help_text(Some(c)),
         Some("ping") => "pong".to_string(),
         Some("monitors") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
@@ -133,9 +135,15 @@ pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
         Some("capture") | Some("capture-text") | Some("capture-qr") => {
             let mut args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             // normalize capture-text / capture-qr into capture text/qr
-            if parts[0] == "capture-text" { args.insert(0, "text".to_string()); }
-            if parts[0] == "capture-qr" { args.insert(0, "qr".to_string()); }
-            if args.is_empty() && parts[0] == "capture" { args.push("text".to_string()); }
+            if parts[0] == "capture-text" {
+                args.insert(0, "text".to_string());
+            }
+            if parts[0] == "capture-qr" {
+                args.insert(0, "qr".to_string());
+            }
+            if args.is_empty() && parts[0] == "capture" {
+                args.push("text".to_string());
+            }
             capture::handle(&args)
         }
         Some("toggle") => {
@@ -159,14 +167,17 @@ pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
             if code == 127 {
                 format!("ERR unknown command: {}", parts.join(" "))
             } else if code == 0 {
-                if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
+                if out.trim().is_empty() {
+                    "OK".to_string()
+                } else {
+                    out.trim_end().to_string()
+                }
             } else {
                 format!("ERR (exit {}) {}", code, err.trim())
             }
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

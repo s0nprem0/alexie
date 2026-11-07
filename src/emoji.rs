@@ -6,9 +6,10 @@ use std::path::PathBuf;
 
 fn emoji_test_path() -> Option<PathBuf> {
     if let Ok(v) = env::var("EMOJI_TEST")
-        && !v.is_empty() {
-            return Some(PathBuf::from(v));
-        }
+        && !v.is_empty()
+    {
+        return Some(PathBuf::from(v));
+    }
     let cfg = crate::config::get_str(&["emoji", "test_path"], "");
     if !cfg.is_empty() {
         let p = PathBuf::from(&cfg);
@@ -43,9 +44,10 @@ fn emoji_test_path() -> Option<PathBuf> {
 
 fn wtype() -> String {
     if let Ok(v) = env::var("WTYPE")
-        && !v.is_empty() {
-            return v;
-        }
+        && !v.is_empty()
+    {
+        return v;
+    }
     let cfg = crate::config::get_str(&["emoji", "wtype"], "");
     if !cfg.is_empty() {
         return cfg;
@@ -55,9 +57,10 @@ fn wtype() -> String {
 
 fn wl_copy() -> String {
     if let Ok(v) = env::var("WL_COPY")
-        && !v.is_empty() {
-            return v;
-        }
+        && !v.is_empty()
+    {
+        return v;
+    }
     let cfg = crate::config::get_str(&["emoji", "wl_copy"], "");
     if !cfg.is_empty() {
         return cfg;
@@ -93,7 +96,25 @@ fn apply(selected: &str) -> String {
     // `emoji --apply '<value>'`. A substituted value containing a
     // quote, whitespace, or shell metacharacter must never reach the
     // shell. Valid emoji are single grapheme clusters without those.
-    if selected.chars().any(|c| c.is_whitespace() || matches!(c, '\'' | '"' | '\\' | ';' | '&' | '|' | '$' | '`' | '\n' | '\r' | '(' | ')' | '<' | '>' )) {
+    if selected.chars().any(|c| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '\'' | '"'
+                    | '\\'
+                    | ';'
+                    | '&'
+                    | '|'
+                    | '$'
+                    | '`'
+                    | '\n'
+                    | '\r'
+                    | '('
+                    | ')'
+                    | '<'
+                    | '>'
+            )
+    }) {
         return "ERR invalid emoji".to_string();
     }
     let copy_code = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", selected, &[]);
@@ -105,8 +126,12 @@ fn apply(selected: &str) -> String {
 }
 
 pub fn handle(args: &[String]) -> String {
-    if args.iter().any(|a| a == "-h" || a == "--help" || a == "help") {
-        return "emoji — pick one, copy it, and type it\n\nUsage:\n  emoji\n  emoji --apply EMOJI".to_string();
+    if args
+        .iter()
+        .any(|a| a == "-h" || a == "--help" || a == "help")
+    {
+        return "emoji — pick one, copy it, and type it\n\nUsage:\n  emoji\n  emoji --apply EMOJI"
+            .to_string();
     }
     if args.first().map(|s| s.as_str()) == Some("--apply") {
         let selected = args.get(1..).unwrap_or(&[]).join(" ");

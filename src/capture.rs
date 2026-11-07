@@ -1,15 +1,15 @@
 use crate::proc::{notify_send as notify, run, wl_copy};
 use std::env;
 
-
 fn shot_pick() -> String {
     env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string())
 }
-fn grim() -> String { env::var("GRIM").unwrap_or_else(|_| "grim".to_string()) }
+fn grim() -> String {
+    env::var("GRIM").unwrap_or_else(|_| "grim".to_string())
+}
 
 fn runtime_dir() -> std::path::PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-        
         env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
             let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             format!("{}/.local/state", home)
@@ -53,9 +53,15 @@ fn capture_text() -> String {
     let freeze_file = runtime_dir().join("anixie-pick-freeze.pid");
     // get geometry
     let (code, geom, err) = run(&sp, &["region", "--keep-freeze"]);
-    if code != 0 { release_freeze(&freeze_file); return format!("ERR pick: {}", err.trim()); }
+    if code != 0 {
+        release_freeze(&freeze_file);
+        return format!("ERR pick: {}", err.trim());
+    }
     let geom = geom.trim().to_string();
-    if geom.is_empty() { release_freeze(&freeze_file); return "ERR no region".to_string(); }
+    if geom.is_empty() {
+        release_freeze(&freeze_file);
+        return "ERR no region".to_string();
+    }
 
     // grim -g geom - | tesseract
     let grim_bin = grim();
@@ -64,7 +70,9 @@ fn capture_text() -> String {
     let langs = env::var("CAPTURE_TEXT_LANGS").unwrap_or_else(|_| "eng".to_string());
 
     // Run grim to temp file, then tesseract
-    let tmp = crate::proc::tmp_file("text", "png").to_string_lossy().to_string();
+    let tmp = crate::proc::tmp_file("text", "png")
+        .to_string_lossy()
+        .to_string();
     let (code, _, err) = run(&grim_bin, &["-g", &geom, &tmp]);
     if code != 0 {
         // release freeze
@@ -72,10 +80,23 @@ fn capture_text() -> String {
         return format!("ERR grim: {}", err.trim());
     }
 
-    let (_code, text, _) = run(&tesseract_bin, &[
-        &tmp, "stdout", "--oem", "1", "--psm", "6", "--dpi", &dpi,
-        "-l", &langs, "-c", "preserve_interword_spaces=1",
-    ]);
+    let (_code, text, _) = run(
+        &tesseract_bin,
+        &[
+            &tmp,
+            "stdout",
+            "--oem",
+            "1",
+            "--psm",
+            "6",
+            "--dpi",
+            &dpi,
+            "-l",
+            &langs,
+            "-c",
+            "preserve_interword_spaces=1",
+        ],
+    );
     let _ = std::fs::remove_file(&tmp);
 
     // release freeze
@@ -83,14 +104,35 @@ fn capture_text() -> String {
 
     let text = text.trim().to_string();
     if text.is_empty() {
-        let _ = run(&notify(), &["-u", "normal", "-a", "capture", "-G", "f071", "No text found", "Nothing in that region was readable."]);
+        let _ = run(
+            &notify(),
+            &[
+                "-u",
+                "normal",
+                "-a",
+                "capture",
+                "-G",
+                "f071",
+                "No text found",
+                "Nothing in that region was readable.",
+            ],
+        );
         return "ERR no text found".to_string();
     }
 
     // copy to clipboard
     let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &text, &[]);
-    let first = text.lines().next().unwrap_or("").chars().take(60).collect::<String>();
-    let _ = run(&notify(), &["-a", "capture", "-G", "f0c5", "Text copied", &first]);
+    let first = text
+        .lines()
+        .next()
+        .unwrap_or("")
+        .chars()
+        .take(60)
+        .collect::<String>();
+    let _ = run(
+        &notify(),
+        &["-a", "capture", "-G", "f0c5", "Text copied", &first],
+    );
     "OK".to_string()
 }
 
@@ -98,15 +140,27 @@ fn capture_qr() -> String {
     let sp = shot_pick();
     let freeze_file = runtime_dir().join("anixie-pick-freeze.pid");
     let (code, geom, err) = run(&sp, &["region", "--keep-freeze"]);
-    if code != 0 { release_freeze(&freeze_file); return format!("ERR pick: {}", err.trim()); }
+    if code != 0 {
+        release_freeze(&freeze_file);
+        return format!("ERR pick: {}", err.trim());
+    }
     let geom = geom.trim().to_string();
-    if geom.is_empty() { release_freeze(&freeze_file); return "ERR no region".to_string(); }
+    if geom.is_empty() {
+        release_freeze(&freeze_file);
+        return "ERR no region".to_string();
+    }
 
     let grim_bin = grim();
     let zbar_bin = env::var("ZBAR").unwrap_or_else(|_| "zbarimg".to_string());
-    let tmp = crate::proc::tmp_file("qr", "png").to_string_lossy().to_string();
+    let tmp = crate::proc::tmp_file("qr", "png")
+        .to_string_lossy()
+        .to_string();
     let (code, _, err) = run(&grim_bin, &["-g", &geom, &tmp]);
-    if code != 0 { release_freeze(&freeze_file); let _ = std::fs::remove_file(&tmp); return format!("ERR grim: {}", err.trim()); }
+    if code != 0 {
+        release_freeze(&freeze_file);
+        let _ = std::fs::remove_file(&tmp);
+        return format!("ERR grim: {}", err.trim());
+    }
 
     let (_code, result, _) = {
         // zbarimg reads the image on stdin; feed the temp file
@@ -120,7 +174,11 @@ fn capture_qr() -> String {
                 .ok()
         });
         match res {
-            Some(o) => (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).to_string(), String::from_utf8_lossy(&o.stderr).to_string()),
+            Some(o) => (
+                o.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&o.stdout).to_string(),
+                String::from_utf8_lossy(&o.stderr).to_string(),
+            ),
             None => (-1, String::new(), String::new()),
         }
     };
@@ -129,12 +187,35 @@ fn capture_qr() -> String {
 
     let result = result.trim().to_string();
     if result.is_empty() {
-        let _ = run(&notify(), &["-u", "normal", "-a", "capture", "-G", "f071", "No QR code found", "Nothing in that region decoded as a QR code."]);
+        let _ = run(
+            &notify(),
+            &[
+                "-u",
+                "normal",
+                "-a",
+                "capture",
+                "-G",
+                "f071",
+                "No QR code found",
+                "Nothing in that region decoded as a QR code.",
+            ],
+        );
         return "ERR no qr".to_string();
     }
 
-    let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &result, &["--sensitive"]);
-    let _ = run(&notify(), &["-a", "capture", "-G", "f0c5", "QR code copied", "The decoded value is on the clipboard."]);
+    let _ =
+        crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &result, &["--sensitive"]);
+    let _ = run(
+        &notify(),
+        &[
+            "-a",
+            "capture",
+            "-G",
+            "f0c5",
+            "QR code copied",
+            "The decoded value is on the clipboard.",
+        ],
+    );
     "OK".to_string()
 }
 
@@ -158,4 +239,3 @@ mod tests {
         assert!(out.starts_with("ERR unknown subcommand:"), "got: {out}");
     }
 }
-

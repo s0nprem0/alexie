@@ -20,10 +20,14 @@ pub(crate) fn is_airplane_mode() -> bool {
             let blocked = parts[1].to_lowercase() == "blocked";
             if t.contains("wlan") || t.contains("wifi") {
                 has_wlan = true;
-                if blocked { wlan_blocked = true; }
+                if blocked {
+                    wlan_blocked = true;
+                }
             } else if t.contains("bluetooth") {
                 has_bt = true;
-                if blocked { bt_blocked = true; }
+                if blocked {
+                    bt_blocked = true;
+                }
             }
         }
     }
@@ -37,7 +41,10 @@ pub(crate) fn is_airplane_mode() -> bool {
 }
 
 pub(crate) fn wifi_saved_connections() -> HashMap<String, bool> {
-    let out = run_out(&nmcli(), &["-t", "-f", "NAME,TYPE,AUTOCONNECT", "connection", "show"]);
+    let out = run_out(
+        &nmcli(),
+        &["-t", "-f", "NAME,TYPE,AUTOCONNECT", "connection", "show"],
+    );
     let mut map = HashMap::new();
     for line in out.lines() {
         let parts = split_nmcli_t_line(line);

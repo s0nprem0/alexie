@@ -90,9 +90,12 @@ pub fn run_bytes_with_stdin(cmd: &str, args: &[&str], data: &[u8]) -> (i32, Stri
 pub fn shell_quote(s: &str) -> String {
     let mut out = String::from("'");
     for c in s.chars() {
-        if c == '\'' { out.push_str("'\\''"); } else { out.push(c); }
+        if c == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(c);
+        }
     }
     out.push('\'');
     out
 }
-

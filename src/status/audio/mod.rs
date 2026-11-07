@@ -8,10 +8,10 @@
 //!
 //! `render_text()`/`handle()` below just orchestrate.
 
-pub(crate) mod types;
-pub(crate) mod parse;
 pub(crate) mod collect;
+pub(crate) mod parse;
 pub(crate) mod sources;
+pub(crate) mod types;
 
 #[allow(unused_imports)] // re-exported for public API compat
 pub use types::{AppInfo, AudioResult, Diagnostics, MediaInfo, MediaSource, SinkInfo, SourceInfo};
@@ -35,13 +35,24 @@ pub(crate) fn render_text(r: &AudioResult) -> String {
         out.push_str("sink none\n");
     }
     if let Some(s) = &r.default_source {
-        out.push_str(&format!("source {}  {}%{}\n", s.description, s.volume, if s.muted { " (muted)" } else { "" }));
+        out.push_str(&format!(
+            "source {}  {}%{}\n",
+            s.description,
+            s.volume,
+            if s.muted { " (muted)" } else { "" }
+        ));
     }
     if !r.sinks.is_empty() {
         let rows: Vec<Vec<String>> = r
             .sinks
             .iter()
-            .map(|s| vec![s.description.clone(), format!("{}%", s.volume), if s.muted { "yes".into() } else { "no".into() }])
+            .map(|s| {
+                vec![
+                    s.description.clone(),
+                    format!("{}%", s.volume),
+                    if s.muted { "yes".into() } else { "no".into() },
+                ]
+            })
             .collect();
         out.push_str(&crate::table::render(&["Sink", "Volume", "Muted"], &rows));
         out.push('\n');
@@ -50,7 +61,13 @@ pub(crate) fn render_text(r: &AudioResult) -> String {
         let rows: Vec<Vec<String>> = r
             .apps
             .iter()
-            .map(|a| vec![a.name.clone(), format!("{}%", a.volume), if a.muted { "yes".into() } else { "no".into() }])
+            .map(|a| {
+                vec![
+                    a.name.clone(),
+                    format!("{}%", a.volume),
+                    if a.muted { "yes".into() } else { "no".into() },
+                ]
+            })
             .collect();
         out.push_str(&crate::table::render(&["App", "Volume", "Muted"], &rows));
         out.push('\n');

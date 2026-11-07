@@ -7,8 +7,8 @@
 //!
 //! `handle()` below is just argument parsing/dispatch.
 
-mod state;
 mod start;
+mod state;
 mod stop;
 
 use state::{cancel_file, is_recording, lock_file, starting_file};
@@ -16,7 +16,11 @@ use std::fs;
 use std::os::unix::io::AsRawFd;
 
 pub(crate) fn record_status() -> String {
-    if is_recording() { "recording".to_string() } else { "stopped".to_string() }
+    if is_recording() {
+        "recording".to_string()
+    } else {
+        "stopped".to_string()
+    }
 }
 
 /// Ask which audio mix to record, through the shell's picker.
@@ -35,7 +39,12 @@ fn choose_audio() -> String {
     }
     let data = lines.join("\n") + "\n";
     crate::pick::handle_with_stdin(
-        &["--title".to_string(), "record audio".to_string(), "--on-select".to_string(), "record --audio='{}'".to_string()],
+        &[
+            "--title".to_string(),
+            "record audio".to_string(),
+            "--on-select".to_string(),
+            "record --audio='{}'".to_string(),
+        ],
         &data,
     )
 }
@@ -65,7 +74,11 @@ pub fn handle(args: &[String]) -> String {
         "status" => record_status(),
         "stop" => {
             let _ = fs::write(cancel_file(), "");
-            if is_recording() { stop::stop_recording() } else { "ERR not recording".to_string() }
+            if is_recording() {
+                stop::stop_recording()
+            } else {
+                "ERR not recording".to_string()
+            }
         }
         "toggle" => {
             // Serialize starts: two toggles racing must not both
@@ -73,25 +86,40 @@ pub fn handle(args: &[String]) -> String {
             // lock busy asks the start in progress to cancel rather
             // than queueing behind it (legacy flock semantics).
             let lock_path = lock_file();
-            let _ = fs::create_dir_all(lock_path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("/tmp")));
-            let Ok(lock_file_handle) = fs::OpenOptions::new().create(true).write(true).truncate(false).open(&lock_path) else {
+            let _ = fs::create_dir_all(
+                lock_path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp")),
+            );
+            let Ok(lock_file_handle) = fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(false)
+                .open(&lock_path)
+            else {
                 return "ERR could not open the record lock".to_string();
             };
-            let locked = unsafe { libc::flock(lock_file_handle.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0 };
+            let locked = unsafe {
+                libc::flock(lock_file_handle.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0
+            };
             if !locked {
                 let _ = fs::write(cancel_file(), "");
                 return "OK".to_string();
             }
             let _guard = lock_file_handle;
 
-            if is_recording() { return stop::stop_recording(); }
+            if is_recording() {
+                return stop::stop_recording();
+            }
             let _ = fs::remove_file(cancel_file());
             // audio prompt if missing
             if audio.is_empty() {
                 return choose_audio();
             }
             let _ = fs::write(starting_file(), std::process::id().to_string());
-            let result = start::start_recording(fullscreen, &audio, &webcam_size, &webcam_device, None);
+            let result =
+                start::start_recording(fullscreen, &audio, &webcam_size, &webcam_device, None);
             let _ = fs::remove_file(starting_file());
             if result.starts_with("ERR") {
                 let _ = fs::remove_file(cancel_file());
@@ -109,7 +137,10 @@ mod tests {
     #[test]
     fn status_is_recording_or_stopped() {
         let out = handle(&["--status".to_string()]);
-        assert!(matches!(out.as_str(), "recording" | "stopped"), "got: {out}");
+        assert!(
+            matches!(out.as_str(), "recording" | "stopped"),
+            "got: {out}"
+        );
     }
 
     #[test]

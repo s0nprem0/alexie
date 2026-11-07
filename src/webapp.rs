@@ -3,7 +3,11 @@ use std::process::Command;
 
 fn run(cmd: &str, args: &[&str]) -> (i32, String, String) {
     match Command::new(cmd).args(args).output() {
-        Ok(o) => (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).to_string(), String::from_utf8_lossy(&o.stderr).to_string()),
+        Ok(o) => (
+            o.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&o.stdout).to_string(),
+            String::from_utf8_lossy(&o.stderr).to_string(),
+        ),
         Err(e) => (-1, String::new(), e.to_string()),
     }
 }
@@ -37,7 +41,9 @@ fn slug_clean(name: &str) -> String {
             prev_dash = true;
         }
     }
-    while out.ends_with('-') { out.pop(); }
+    while out.ends_with('-') {
+        out.pop();
+    }
     out
 }
 

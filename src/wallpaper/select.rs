@@ -8,7 +8,9 @@ use super::state::{current_theme, state_dir, theme_dir};
 use crate::theme::state::write_atomic;
 use std::path::{Path, PathBuf};
 
-fn wallpapers_file() -> PathBuf { super::catalog::wallpapers_file() }
+fn wallpapers_file() -> PathBuf {
+    super::catalog::wallpapers_file()
+}
 
 pub(crate) fn wallpapers_ensure() -> Result<(), String> {
     let p = wallpapers_file();
@@ -69,21 +71,33 @@ fn read_wallpapers() -> serde_json::Value {
 }
 
 fn write_wallpapers(value: &serde_json::Value) -> Result<(), String> {
-    write_atomic(&wallpapers_file(), &serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()))
-        .map_err(|e| e.to_string())
+    write_atomic(
+        &wallpapers_file(),
+        &serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()),
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Save one selection: per-output when `output` is non-empty
 /// (fallback untouched), else the fallback (per-output map cleared)
 /// plus the legacy `wallpaper.$theme` reminder file.
-pub(crate) fn save_selection(mode: &str, output: &str, path: &str, video: bool) -> Result<(), String> {
+pub(crate) fn save_selection(
+    mode: &str,
+    output: &str,
+    path: &str,
+    video: bool,
+) -> Result<(), String> {
     let _lock = SelectionLock::acquire()?;
     wallpapers_ensure()?;
     let theme = current_theme();
     let mut value = read_wallpapers();
     let themes = value
         .as_object_mut()
-        .and_then(|o| o.entry("themes").or_insert_with(|| serde_json::json!({})).as_object_mut())
+        .and_then(|o| {
+            o.entry("themes")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+        })
         .ok_or("wallpaper: could not update selections".to_string())?;
     let theme_entry = themes
         .entry(theme.clone())
@@ -104,8 +118,15 @@ pub(crate) fn save_selection(mode: &str, output: &str, path: &str, video: bool) 
     }
     write_wallpapers(&value)?;
     if output.is_empty() {
-        let reminder = if mode == "generated" { "generated".to_string() } else { path.to_string() };
-        let _ = write_atomic(&state_dir().join(format!("wallpaper.{}", theme)), &format!("{}\n", reminder));
+        let reminder = if mode == "generated" {
+            "generated".to_string()
+        } else {
+            path.to_string()
+        };
+        let _ = write_atomic(
+            &state_dir().join(format!("wallpaper.{}", theme)),
+            &format!("{}\n", reminder),
+        );
     }
     Ok(())
 }
@@ -120,7 +141,10 @@ fn resolve_target(target: &str) -> Result<(String, String, bool), String> {
     if !path.is_file() {
         return Err(format!("wallpaper: no such file: {}", target));
     }
-    let canonical = path.canonicalize().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| target.to_string());
+    let canonical = path
+        .canonicalize()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| target.to_string());
     let video = is_video(&canonical);
     Ok(("file".to_string(), canonical, video))
 }
@@ -171,7 +195,8 @@ pub(crate) fn use_wallpaper(target: &str, output: &str) -> String {
             } else {
                 let _ = std::fs::remove_file(&legacy);
             }
-            return "ERR wallpaper: could not derive a palette; keeping the previous theme".to_string();
+            return "ERR wallpaper: could not derive a palette; keeping the previous theme"
+                .to_string();
         }
         return format!("OK wallpaper: {}", target);
     }
@@ -197,9 +222,10 @@ pub(crate) fn add_file(file: &str) -> String {
     }
     let dst = dir.join(src.file_name().unwrap_or_default());
     if src.canonicalize().ok() != dst.canonicalize().ok()
-        && let Err(e) = std::fs::copy(src, &dst) {
-            return format!("ERR {}", e);
-        }
+        && let Err(e) = std::fs::copy(src, &dst)
+    {
+        return format!("ERR {}", e);
+    }
     use_wallpaper(&dst.to_string_lossy(), "")
 }
 
@@ -218,10 +244,12 @@ pub(crate) fn add_dir(dir: &str) -> String {
     if let Ok(entries) = std::fs::read_dir(src) {
         for entry in entries.flatten() {
             let p = entry.path();
-            if p.is_file() && super::catalog::is_media(&p.to_string_lossy())
-                && std::fs::copy(&p, dest.join(p.file_name().unwrap_or_default())).is_ok() {
-                    n += 1;
-                }
+            if p.is_file()
+                && super::catalog::is_media(&p.to_string_lossy())
+                && std::fs::copy(&p, dest.join(p.file_name().unwrap_or_default())).is_ok()
+            {
+                n += 1;
+            }
         }
     }
     format!("Added {} background(s) to {}", n, current_theme())

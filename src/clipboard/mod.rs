@@ -7,15 +7,23 @@
 
 pub mod watch;
 
-use crate::proc::{run, run_stdout_to_file, run_with_stdin, quickshell, wl_copy};
+use crate::proc::{quickshell, run, run_stdout_to_file, run_with_stdin, wl_copy};
 use std::env;
 
 pub use watch::{ensure_watcher, store, watch};
 
-pub(crate) fn cliphist() -> String { env::var("CLIPHIST").unwrap_or_else(|_| "cliphist".to_string()) }
-pub(crate) fn file_bin() -> String { env::var("FILE").unwrap_or_else(|_| "file".to_string()) }
-pub(crate) fn qs() -> String { quickshell() }
-pub(crate) fn wl_paste() -> String { env::var("WL_PASTE").unwrap_or_else(|_| "wl-paste".to_string()) }
+pub(crate) fn cliphist() -> String {
+    env::var("CLIPHIST").unwrap_or_else(|_| "cliphist".to_string())
+}
+pub(crate) fn file_bin() -> String {
+    env::var("FILE").unwrap_or_else(|_| "file".to_string())
+}
+pub(crate) fn qs() -> String {
+    quickshell()
+}
+pub(crate) fn wl_paste() -> String {
+    env::var("WL_PASTE").unwrap_or_else(|_| "wl-paste".to_string())
+}
 pub(crate) fn exe() -> String {
     env::current_exe()
         .map(|p| p.to_string_lossy().to_string())
@@ -44,7 +52,10 @@ fn cliphist_list() -> (i32, String, String) {
 }
 
 fn is_safe_id(id: &str) -> bool {
-    !id.is_empty() && !id.contains('/') && !id.contains('\\') && !id.contains('\0')
+    !id.is_empty()
+        && !id.contains('/')
+        && !id.contains('\\')
+        && !id.contains('\0')
         && !id.starts_with('-')
 }
 
@@ -78,14 +89,21 @@ pub fn handle(args: &[String]) -> String {
             "OK".to_string()
         }
         "--copy" => {
-            if args.len() < 2 { return "ERR usage: clipboard --copy ID".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: clipboard --copy ID".to_string();
+            }
             let id = &args[1];
-            if !is_safe_id(id) { return "ERR usage: clipboard --copy ID".to_string(); }
+            if !is_safe_id(id) {
+                return "ERR usage: clipboard --copy ID".to_string();
+            }
             // Decode binary-safely to a temp file (no shell redirect,
             // no lossy UTF-8 conversion of image data).
             let tmp = crate::proc::tmp_file("clip", "");
             let (code, err) = run_stdout_to_file(&cliphist(), &["decode", id], &tmp);
-            if code != 0 { let _ = std::fs::remove_file(&tmp); return format!("ERR {}", err.trim()); }
+            if code != 0 {
+                let _ = std::fs::remove_file(&tmp);
+                return format!("ERR {}", err.trim());
+            }
             if std::fs::metadata(&tmp).map(|m| m.len()).unwrap_or(0) == 0 {
                 let _ = std::fs::remove_file(&tmp);
                 return format!("ERR entry {} is empty", id);
@@ -102,7 +120,11 @@ pub fn handle(args: &[String]) -> String {
             // mime
             let tmp_str = tmp.to_string_lossy().to_string();
             let (code, mime, _) = run(&file_bin(), &["-b", "--mime-type", "--", &tmp_str]);
-            let mime = if code == 0 { mime.trim().to_string() } else { "application/octet-stream".to_string() };
+            let mime = if code == 0 {
+                mime.trim().to_string()
+            } else {
+                "application/octet-stream".to_string()
+            };
             // copy, binary-safe, no shell redirection
             let _ = crate::proc::copy_file_to_clipboard(&wl_copy(), &mime, &tmp);
             let _ = std::fs::remove_file(&tmp);
@@ -114,27 +136,45 @@ pub fn handle(args: &[String]) -> String {
             for _ in 0..20 {
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 let (code, after, _) = cliphist_list();
-                if code != 0 { break; }
+                if code != 0 {
+                    break;
+                }
                 let mut found = false;
                 for (aid, line) in list_ids(&after) {
-                    if before_ids.contains(&aid) { continue; }
+                    if before_ids.contains(&aid) {
+                        continue;
+                    }
                     let _ = cliphist_delete_line(&line);
                     found = true;
                     break;
                 }
-                if found { break; }
+                if found {
+                    break;
+                }
             }
             "OK".to_string()
         }
         "--list" => {
             let (code, out, err) = cliphist_list();
-            if code != 0 { format!("ERR {}", err.trim()) } else { out.trim_end().to_string() }
+            if code != 0 {
+                format!("ERR {}", err.trim())
+            } else {
+                out.trim_end().to_string()
+            }
         }
         "--text" => {
-            if args.len() < 2 { return "ERR usage: clipboard --text ID".to_string(); }
-            if !is_safe_id(&args[1]) { return "ERR usage: clipboard --text ID".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: clipboard --text ID".to_string();
+            }
+            if !is_safe_id(&args[1]) {
+                return "ERR usage: clipboard --text ID".to_string();
+            }
             let (code, out, err) = run(&cliphist(), &["decode", &args[1]]);
-            if code != 0 { format!("ERR {}", err.trim()) } else { out }
+            if code != 0 {
+                format!("ERR {}", err.trim())
+            } else {
+                out
+            }
         }
         "--images" => {
             let dir = preview_dir().join("thumbs");
@@ -147,16 +187,27 @@ pub fn handle(args: &[String]) -> String {
                 let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
             }
             let (code, list, _) = cliphist_list();
-            if code != 0 { return "ERR cliphist list failed".to_string(); }
+            if code != 0 {
+                return "ERR cliphist list failed".to_string();
+            }
             let mut out = String::new();
             let mut count = 0;
             for line in list.lines() {
-                if count >= 16 { break; }
-                let tab = match line.find('\t') { Some(t) => t, None => continue };
+                if count >= 16 {
+                    break;
+                }
+                let tab = match line.find('\t') {
+                    Some(t) => t,
+                    None => continue,
+                };
                 let id = &line[..tab];
-                let preview = &line[tab+1..];
-                if !preview.starts_with("[[ binary data ") { continue; }
-                if !is_safe_id(id) { continue; }
+                let preview = &line[tab + 1..];
+                if !preview.starts_with("[[ binary data ") {
+                    continue;
+                }
+                if !is_safe_id(id) {
+                    continue;
+                }
                 let path = dir.join(id);
                 let (dcode, _) = run_stdout_to_file(&cliphist(), &["decode", id], &path);
                 if dcode == 0 {
@@ -171,13 +222,20 @@ pub fn handle(args: &[String]) -> String {
             out.trim_end().to_string()
         }
         "--image" => {
-            if args.len() < 2 { return "ERR usage: clipboard --image ID".to_string(); }
-            if !is_safe_id(&args[1]) { return "ERR usage: clipboard --image ID".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: clipboard --image ID".to_string();
+            }
+            if !is_safe_id(&args[1]) {
+                return "ERR usage: clipboard --image ID".to_string();
+            }
             let dir = preview_dir().join("previews");
             let _ = std::fs::create_dir_all(&dir);
             let path = dir.join(format!("preview-{}", args[1]));
             let (code, err) = run_stdout_to_file(&cliphist(), &["decode", &args[1]], &path);
-            if code != 0 { let _ = std::fs::remove_file(&path); return format!("ERR {}", err.trim()); }
+            if code != 0 {
+                let _ = std::fs::remove_file(&path);
+                return format!("ERR {}", err.trim());
+            }
             if std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) == 0 {
                 let _ = std::fs::remove_file(&path);
                 return "ERR empty".to_string();
@@ -185,33 +243,56 @@ pub fn handle(args: &[String]) -> String {
             path.to_string_lossy().to_string()
         }
         "--delete" => {
-            if args.len() < 2 { return "ERR usage: clipboard --delete ID".to_string(); }
+            if args.len() < 2 {
+                return "ERR usage: clipboard --delete ID".to_string();
+            }
             let id = &args[1];
-            if !is_safe_id(id) { return "ERR usage: clipboard --delete ID".to_string(); }
+            if !is_safe_id(id) {
+                return "ERR usage: clipboard --delete ID".to_string();
+            }
             let (code, list, _) = cliphist_list();
-            if code != 0 { return "ERR cliphist list failed".to_string(); }
+            if code != 0 {
+                return "ERR cliphist list failed".to_string();
+            }
             let found_line = list_ids(&list)
                 .into_iter()
                 .find(|(lid, _)| lid == id)
                 .map(|(_, line)| line)
                 .unwrap_or_default();
-            if found_line.is_empty() { return "OK".to_string(); }
+            if found_line.is_empty() {
+                return "OK".to_string();
+            }
             let (code, _, err) = cliphist_delete_line(&found_line);
-            if code != 0 { format!("ERR {}", err.trim()) } else { "OK".to_string() }
+            if code != 0 {
+                format!("ERR {}", err.trim())
+            } else {
+                "OK".to_string()
+            }
         }
         "--wipe" => {
             let (code, _, err) = run(&cliphist(), &["wipe"]);
-            if code != 0 { format!("ERR {}", err.trim()) } else { "OK".to_string() }
+            if code != 0 {
+                format!("ERR {}", err.trim())
+            } else {
+                "OK".to_string()
+            }
         }
         _ => {
             // open popup via quickshell (default behavior)
             let (code, out, err) = run(&qs(), &["ipc", "call", "clipboard", "open"]);
-            if code != 0 { format!("ERR (exit {}) {}", code, err.trim()) }
-            else {
+            if code != 0 {
+                format!("ERR (exit {}) {}", code, err.trim())
+            } else {
                 let r = out.trim();
                 match r {
                     "ok" | "\"ok\"" => "OK".to_string(),
-                    _ => if r.is_empty() { "OK".to_string() } else { r.to_string() }
+                    _ => {
+                        if r.is_empty() {
+                            "OK".to_string()
+                        } else {
+                            r.to_string()
+                        }
+                    }
                 }
             }
         }
@@ -241,10 +322,13 @@ mod tests {
     #[test]
     fn list_ids_parses_tab_separated() {
         let ids = list_ids("1\thello\n2\tworld\nno-tab-line\n");
-        assert_eq!(ids, vec![
-            ("1".to_string(), "1\thello".to_string()),
-            ("2".to_string(), "2\tworld".to_string()),
-        ]);
+        assert_eq!(
+            ids,
+            vec![
+                ("1".to_string(), "1\thello".to_string()),
+                ("2".to_string(), "2\tworld".to_string()),
+            ]
+        );
     }
 
     #[test]
@@ -253,7 +337,11 @@ mod tests {
         let dir = "/tmp/opencode/clip-test-bin";
         let _ = fs::remove_dir_all(dir);
         fs::create_dir_all(dir).unwrap();
-        make_fake(dir, "cliphist", "#!/bin/sh\ncase \"$1\" in list) printf '1\\thello\\n2\\tworld\\n';; esac\n");
+        make_fake(
+            dir,
+            "cliphist",
+            "#!/bin/sh\ncase \"$1\" in list) printf '1\\thello\\n2\\tworld\\n';; esac\n",
+        );
         make_fake(dir, "wl-copy", "#!/bin/sh\ncat >/dev/null\n");
         make_fake(dir, "file", "#!/bin/sh\nprintf 'text/plain\\n'\n");
         make_fake(dir, "quickshell", "#!/bin/sh\nprintf 'ok\\n'\n");
@@ -279,14 +367,21 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
         fs::create_dir_all(dir).unwrap();
         let log = format!("{}/delete-stdin.log", dir);
-        make_fake(dir, "cliphist", &format!(
-            "#!/bin/sh\ncase \"$1\" in list) printf '9\\t$(touch {}/pwned)\\n';; delete) cat > {};; esac\n",
-            dir, log
-        ));
+        make_fake(
+            dir,
+            "cliphist",
+            &format!(
+                "#!/bin/sh\ncase \"$1\" in list) printf '9\\t$(touch {}/pwned)\\n';; delete) cat > {};; esac\n",
+                dir, log
+            ),
+        );
         unsafe { std::env::set_var("CLIPHIST", format!("{}/cliphist", dir)) }
         let out = handle(&["--delete".to_string(), "9".to_string()]);
         assert_eq!(out, "OK", "got: {out}");
-        assert!(!std::path::Path::new(&format!("{}/pwned", dir)).exists(), "shell injection via delete line");
+        assert!(
+            !std::path::Path::new(&format!("{}/pwned", dir)).exists(),
+            "shell injection via delete line"
+        );
         let fed = std::fs::read_to_string(&log).unwrap_or_default();
         assert!(fed.contains("9\t"), "got: {fed}");
         let _ = fs::remove_dir_all(dir);

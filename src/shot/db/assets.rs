@@ -1,13 +1,13 @@
 //! Assets: add/list/remove, ffprobe parsing, thumbnails.
 
-use rusqlite::{Connection, OptionalExtension, params};
-use std::os::unix::fs as unixfs;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
 use super::colors::clear_ocr;
 use super::paths::{ffmpeg, ffprobe, now_millis, thumbnails_dir};
 use super::types::{Asset, AssetType, ProbeResult, THUMB_SIZE};
+use rusqlite::{Connection, OptionalExtension, params};
+use std::fs;
+use std::os::unix::fs as unixfs;
+use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 pub fn thumbnail_path_for(id: i64) -> PathBuf {
     thumbnails_dir().join(format!("{id}.png"))
@@ -20,7 +20,14 @@ pub(crate) fn thumbnail_path_for_in(id: i64, thumb_dir: &Path) -> PathBuf {
 fn probe(source: &Path) -> ProbeResult {
     let (code, out, _) = crate::proc::run(
         &ffprobe(),
-        &["-v", "quiet", "-print_format", "json", "-show_streams", &source.to_string_lossy()],
+        &[
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_streams",
+            &source.to_string_lossy(),
+        ],
     );
     if code != 0 {
         return ProbeResult::default();
@@ -40,8 +47,14 @@ pub fn parse_probe_json(json: &str) -> ProbeResult {
         if stream.get("codec_type").and_then(|v| v.as_str()) != Some("video") {
             continue;
         }
-        result.width = stream.get("width").and_then(|v| v.as_i64()).map(|v| v as i32);
-        result.height = stream.get("height").and_then(|v| v.as_i64()).map(|v| v as i32);
+        result.width = stream
+            .get("width")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32);
+        result.height = stream
+            .get("height")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32);
         if let Some(dur) = stream.get("duration").and_then(|v| v.as_str())
             && let Ok(secs) = dur.parse::<f64>()
         {
@@ -150,9 +163,18 @@ fn ensure_thumbnail_in(source: &Path, id: i64, asset_type: AssetType, thumb_dir:
             let _ = crate::proc::run(
                 &ffmpeg(),
                 &[
-                    "-y", "-hide_banner", "-loglevel", "error", "-i",
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
                     &source.to_string_lossy(),
-                    "-ss", "00:00:00.500", "-vframes", "1", "-vf", &scale,
+                    "-ss",
+                    "00:00:00.500",
+                    "-vframes",
+                    "1",
+                    "-vf",
+                    &scale,
                     &thumb.to_string_lossy(),
                 ],
             );
@@ -196,7 +218,8 @@ pub fn clear_assets(conn: &Connection) -> Result<(), String> {
             let _ = fs::remove_file(p);
         }
     }
-    conn.execute("DELETE FROM assets", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM assets", [])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -239,7 +262,11 @@ pub fn check_deleted(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-pub fn list_assets(conn: &Connection, search: Option<&str>, limit: i64) -> Result<Vec<Asset>, String> {
+pub fn list_assets(
+    conn: &Connection,
+    search: Option<&str>,
+    limit: i64,
+) -> Result<Vec<Asset>, String> {
     let mut sql = String::from(
         "SELECT a.id, a.asset_type, a.source_path, a.thumbnail_path, a.created_at, a.deleted_at, a.file_size, a.width, a.height, a.duration_ms \
          FROM assets a",
@@ -253,7 +280,9 @@ pub fn list_assets(conn: &Connection, search: Option<&str>, limit: i64) -> Resul
         conditions.push(format!("a.source_path LIKE ?{idx} ESCAPE '\\'"));
         let pattern = format!(
             "%{}%",
-            s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+            s.replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
         );
         binds.push(Box::new(pattern));
     }
@@ -292,8 +321,18 @@ pub fn list_assets(conn: &Connection, search: Option<&str>, limit: i64) -> Resul
 
     let mut assets: Vec<Asset> = Vec::new();
     for row in asset_iter {
-        let (id, asset_type, source_path, thumbnail_path, created_at, deleted_at, file_size, width, height, duration_ms) =
-            row.map_err(|e| e.to_string())?;
+        let (
+            id,
+            asset_type,
+            source_path,
+            thumbnail_path,
+            created_at,
+            deleted_at,
+            file_size,
+            width,
+            height,
+            duration_ms,
+        ) = row.map_err(|e| e.to_string())?;
 
         if !Path::new(&source_path).exists() {
             let _ = conn.execute(

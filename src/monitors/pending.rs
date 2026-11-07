@@ -14,7 +14,11 @@ pub(crate) fn pending_lock() -> Option<std::fs::File> {
     let lock_path = dir.join("display-pending.lock");
     // non-blocking try + short retry
     for _ in 0..20 {
-        match std::fs::OpenOptions::new().create_new(true).write(true).open(&lock_path) {
+        match std::fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&lock_path)
+        {
             Ok(f) => return Some(f),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 std::thread::sleep(std::time::Duration::from_millis(10));
@@ -36,7 +40,9 @@ pub(crate) fn read_pending() -> Option<Pending> {
     let path = state_dir().join("display-pending");
     let content = std::fs::read_to_string(&path).ok()?;
     let trimmed = content.trim();
-    if trimmed.is_empty() { return None; }
+    if trimmed.is_empty() {
+        return None;
+    }
     if let Ok(p) = serde_json::from_str::<Pending>(trimmed) {
         return Some(p);
     }
@@ -47,21 +53,46 @@ pub(crate) fn read_pending() -> Option<Pending> {
     let old_value = parts.next()?.to_string();
     let new_value = parts.next()?.to_string();
     if key == "mode" {
-        let old_value = old_value.strip_suffix("Hz").unwrap_or(&old_value).to_string();
-        let new_value = new_value.strip_suffix("Hz").unwrap_or(&new_value).to_string();
-        return Some(Pending { output, key, old_value, new_value });
+        let old_value = old_value
+            .strip_suffix("Hz")
+            .unwrap_or(&old_value)
+            .to_string();
+        let new_value = new_value
+            .strip_suffix("Hz")
+            .unwrap_or(&new_value)
+            .to_string();
+        return Some(Pending {
+            output,
+            key,
+            old_value,
+            new_value,
+        });
     }
-    Some(Pending { output, key, old_value, new_value })
+    Some(Pending {
+        output,
+        key,
+        old_value,
+        new_value,
+    })
 }
 
-pub(crate) fn write_pending(output: &str, key: &str, old_value: &str, new_value: &str) -> std::io::Result<()> {
+pub(crate) fn write_pending(
+    output: &str,
+    key: &str,
+    old_value: &str,
+    new_value: &str,
+) -> std::io::Result<()> {
     let _lock = pending_lock();
-    let p = Pending { output: output.to_string(), key: key.to_string(), old_value: old_value.to_string(), new_value: new_value.to_string() };
+    let p = Pending {
+        output: output.to_string(),
+        key: key.to_string(),
+        old_value: old_value.to_string(),
+        new_value: new_value.to_string(),
+    };
     let json = serde_json::to_string(&p).unwrap_or_else(|_| "{}".to_string());
     let path = state_dir().join("display-pending");
     atomic_write(&path, &format!("{}\n", json))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -69,7 +100,12 @@ mod tests {
 
     #[test]
     fn pending_json_roundtrip() {
-        let p = Pending { output: "eDP-1".into(), key: "scale".into(), old_value: "1".into(), new_value: "1.5".into() };
+        let p = Pending {
+            output: "eDP-1".into(),
+            key: "scale".into(),
+            old_value: "1".into(),
+            new_value: "1.5".into(),
+        };
         let s = serde_json::to_string(&p).unwrap();
         let back: Pending = serde_json::from_str(&s).unwrap();
         assert_eq!(back.output, "eDP-1");

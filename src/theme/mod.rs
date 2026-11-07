@@ -10,20 +10,21 @@
 //! `handle()` below is just the dispatcher over those. All documented
 //! subcommands are native; unknown ones are rejected outright.
 
-pub mod state;
-pub mod palette;
-pub mod tokens;
-pub mod renderer;
 pub mod assets;
-pub mod vars;
-pub mod engine;
 pub mod commands;
+pub mod engine;
+pub mod palette;
+pub mod renderer;
+pub mod state;
+pub mod tokens;
+pub mod vars;
 
-use commands::{cursor_size_command, favorite_command, info_command, pin_command, wallpaper_mode_command};
+use commands::{
+    cursor_size_command, favorite_command, info_command, pin_command, wallpaper_mode_command,
+};
 use state::{current_theme, state_ensure, state_file, theme_names};
 
 pub fn handle(args: &[String]) -> String {
-
     // Bare `alexie theme` lists themes — like `power`, `screentime`, etc.
     // default to a read-only view instead of erroring, and like the
     // legacy `theme` which printed the picker list. Users can still
@@ -39,21 +40,23 @@ pub fn handle(args: &[String]) -> String {
             }
             _ => "ERR usage: theme list [--json]".to_string(),
         },
-    "presets" => vars::presets(),
-    "switch" => {
-        let wp = args.get(1).cloned().unwrap_or_default();
-        let mode = args.get(2).cloned().unwrap_or_else(|| "auto".to_string());
-        palette::switch_theme(&wp, &mode)
-    }
-    "vars" => vars::theme_vars(&args[1..]),
-    "render" => vars::theme_render(&args[1..]),
+        "presets" => vars::presets(),
+        "switch" => {
+            let wp = args.get(1).cloned().unwrap_or_default();
+            let mode = args.get(2).cloned().unwrap_or_else(|| "auto".to_string());
+            palette::switch_theme(&wp, &mode)
+        }
+        "vars" => vars::theme_vars(&args[1..]),
+        "render" => vars::theme_render(&args[1..]),
         "current" => {
             let c = current_theme();
             if c.is_empty() { "none".to_string() } else { c }
         }
         "next" | "prev" => {
             let names = theme_names();
-            if names.is_empty() { return "ERR no themes".to_string(); }
+            if names.is_empty() {
+                return "ERR no themes".to_string();
+            }
             let cur = current_theme();
             let idx = names.iter().position(|n| n == &cur).unwrap_or(0);
             let newidx = if args[0] == "next" {
@@ -64,23 +67,27 @@ pub fn handle(args: &[String]) -> String {
             let name = &names[newidx];
             engine::set_theme(name)
         }
-        "state" => {
-            match state_ensure() {
-                Ok(()) => std::fs::read_to_string(state_file()).map(|s| s.trim().to_string()).unwrap_or_else(|_| "{}".to_string()),
-                Err(e) => format!("ERR could not initialise {}: {}", state_file().display(), e),
-            }
-        }
+        "state" => match state_ensure() {
+            Ok(()) => std::fs::read_to_string(state_file())
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|_| "{}".to_string()),
+            Err(e) => format!("ERR could not initialise {}: {}", state_file().display(), e),
+        },
         "migrate" => {
             // Import old separate state files: delete the v1 state
             // (state_ensure will recreate it from `current`), then print it.
             // If state.json is already valid v1, migrate is a no-op like legacy.
             if state::read_state_json().is_none() {
                 match state_ensure() {
-                    Ok(()) => std::fs::read_to_string(state_file()).map(|s| s.trim().to_string()).unwrap_or_else(|_| "{}".to_string()),
+                    Ok(()) => std::fs::read_to_string(state_file())
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_else(|_| "{}".to_string()),
                     Err(e) => format!("ERR could not migrate the theme state: {}", e),
                 }
             } else {
-                std::fs::read_to_string(state_file()).map(|s| s.trim().to_string()).unwrap_or_else(|_| "{}".to_string())
+                std::fs::read_to_string(state_file())
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_else(|_| "{}".to_string())
             }
         }
         "export" => {
@@ -130,7 +137,6 @@ pub fn handle(args: &[String]) -> String {
     }
 }
 
-
 // Re-export for callers that used crate::theme::apply_cursor (engine apps).
 pub(crate) use commands::apply_cursor;
 
@@ -164,7 +170,10 @@ mod tests {
     #[test]
     fn unknown_subcommand_fails_fast() {
         let out = handle(&["__bogus_subcommand__".to_string()]);
-        assert!(out.starts_with("ERR unknown theme subcommand:"), "got: {out}");
+        assert!(
+            out.starts_with("ERR unknown theme subcommand:"),
+            "got: {out}"
+        );
     }
 }
 
@@ -200,25 +209,46 @@ mod native_tests {
     #[test]
     fn favorite_and_pin_usage() {
         assert!(handle(&["favorite".to_string()]).starts_with("ERR usage: theme favorite"));
-        assert!(handle(&["favorite".to_string(), "bogus".to_string(), "tokyo-night".to_string()])
-            .starts_with("ERR favorite must be"));
-        assert!(handle(&["favorite".to_string(), "add".to_string(), "no-such".to_string()])
-            .starts_with("ERR no theme called"));
-        assert!(handle(&["wallpaper-mode".to_string(), "bogus".to_string()])
-            .starts_with("ERR wallpaper-mode must be"));
-        assert!(handle(&["cursor-size".to_string(), "abc".to_string()])
-            .starts_with("ERR cursor-size"));
-        assert!(handle(&["cursor-size".to_string(), "999".to_string()])
-            .starts_with("ERR cursor-size must be between"));
+        assert!(
+            handle(&[
+                "favorite".to_string(),
+                "bogus".to_string(),
+                "tokyo-night".to_string()
+            ])
+            .starts_with("ERR favorite must be")
+        );
+        assert!(
+            handle(&[
+                "favorite".to_string(),
+                "add".to_string(),
+                "no-such".to_string()
+            ])
+            .starts_with("ERR no theme called")
+        );
+        assert!(
+            handle(&["wallpaper-mode".to_string(), "bogus".to_string()])
+                .starts_with("ERR wallpaper-mode must be")
+        );
+        assert!(
+            handle(&["cursor-size".to_string(), "abc".to_string()]).starts_with("ERR cursor-size")
+        );
+        assert!(
+            handle(&["cursor-size".to_string(), "999".to_string()])
+                .starts_with("ERR cursor-size must be between")
+        );
     }
 
     #[test]
     fn cursor_size_validates_range() {
         // Pure validation happens before any file write that would
         // need the real state dir — out-of-range must fail.
-        assert!(handle(&["cursor-size".to_string(), "7".to_string()])
-            .starts_with("ERR cursor-size must be between"));
-        assert!(handle(&["cursor-size".to_string(), "129".to_string()])
-            .starts_with("ERR cursor-size must be between"));
+        assert!(
+            handle(&["cursor-size".to_string(), "7".to_string()])
+                .starts_with("ERR cursor-size must be between")
+        );
+        assert!(
+            handle(&["cursor-size".to_string(), "129".to_string()])
+                .starts_with("ERR cursor-size must be between")
+        );
     }
 }

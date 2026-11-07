@@ -108,15 +108,29 @@ pub(crate) fn set_action(snap: &Snapshot, output: &str, key: &str, value: &str) 
 }
 
 pub(crate) fn try_action(snap: &Snapshot, args: &[String]) -> String {
-    if args.len() < 3 { return "ERR try needs an output, a setting and a value".to_string(); }
-    let output = &args[0]; let key = &args[1]; let raw_value = &args[2];
-    if output.is_empty() || !output.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+    if args.len() < 3 {
+        return "ERR try needs an output, a setting and a value".to_string();
+    }
+    let output = &args[0];
+    let key = &args[1];
+    let raw_value = &args[2];
+    if output.is_empty()
+        || !output
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
         return format!("ERR invalid output name: {}", output);
     }
     let pending = state::state_dir().join("display-pending");
-    if pending.exists() { return "ERR a display change is already pending; run keep or revert first".to_string(); }
-    if snap.field(output, "name").is_empty() { return format!("ERR no output called \"{}\"", output); }
-    if snap.field(output, "disabled") == "true" { return format!("ERR {} is off; turn it on first", output); }
+    if pending.exists() {
+        return "ERR a display change is already pending; run keep or revert first".to_string();
+    }
+    if snap.field(output, "name").is_empty() {
+        return format!("ERR no output called \"{}\"", output);
+    }
+    if snap.field(output, "disabled") == "true" {
+        return format!("ERR {} is off; turn it on first", output);
+    }
 
     let value = match validate_setting(key, raw_value) {
         Ok(v) => v,
@@ -133,19 +147,34 @@ pub(crate) fn try_action(snap: &Snapshot, args: &[String]) -> String {
     };
 
     let _ = std::fs::create_dir_all(state::state_dir());
-    if write_pending(output, key, &old, &value).is_err() { return "ERR could not write pending".to_string(); }
+    if write_pending(output, key, &old, &value).is_err() {
+        return "ERR could not write pending".to_string();
+    }
 
     // arm timer
-    let _ = run("systemctl", &["--user", "stop", "alexie-display-revert.timer"]);
+    let _ = run(
+        "systemctl",
+        &["--user", "stop", "alexie-display-revert.timer"],
+    );
     let mut args: Vec<String> = vec![
-        "--user".to_string(), "--quiet".to_string(), "--collect".to_string(),
+        "--user".to_string(),
+        "--quiet".to_string(),
+        "--collect".to_string(),
         "--unit=alexie-display-revert".to_string(),
         "--on-active=15".to_string(),
     ];
-    if let Ok(v) = std::env::var("HYPRLAND_INSTANCE_SIGNATURE") { args.push(format!("--setenv=HYPRLAND_INSTANCE_SIGNATURE={}", v)); }
-    if let Ok(v) = std::env::var("XDG_RUNTIME_DIR") { args.push(format!("--setenv=XDG_RUNTIME_DIR={}", v)); }
-    if let Ok(v) = std::env::var("XDG_STATE_HOME") { args.push(format!("--setenv=XDG_STATE_HOME={}", v)); }
-    if let Ok(v) = std::env::var("HOME") { args.push(format!("--setenv=HOME={}", v)); }
+    if let Ok(v) = std::env::var("HYPRLAND_INSTANCE_SIGNATURE") {
+        args.push(format!("--setenv=HYPRLAND_INSTANCE_SIGNATURE={}", v));
+    }
+    if let Ok(v) = std::env::var("XDG_RUNTIME_DIR") {
+        args.push(format!("--setenv=XDG_RUNTIME_DIR={}", v));
+    }
+    if let Ok(v) = std::env::var("XDG_STATE_HOME") {
+        args.push(format!("--setenv=XDG_STATE_HOME={}", v));
+    }
+    if let Ok(v) = std::env::var("HOME") {
+        args.push(format!("--setenv=HOME={}", v));
+    }
     args.push("--".to_string());
     args.push("alexie".to_string());
     args.push("monitors".to_string());
@@ -154,12 +183,18 @@ pub(crate) fn try_action(snap: &Snapshot, args: &[String]) -> String {
     let (code, _, err) = run("systemd-run", &a);
     if code != 0 {
         let _ = std::fs::remove_file(&pending);
-        return format!("ERR could not schedule the automatic revert: {}", err.trim());
+        return format!(
+            "ERR could not schedule the automatic revert: {}",
+            err.trim()
+        );
     }
 
-    if let Err(e) = state::apply_change_snap(snap, output, key, &value) { return format!("ERR {}", e); }
+    if let Err(e) = state::apply_change_snap(snap, output, key, &value) {
+        return format!("ERR {}", e);
+    }
 
-    format!("{} {} {} (reverting in 15s unless kept)", output, key, value)
+    format!(
+        "{} {} {} (reverting in 15s unless kept)",
+        output, key, value
+    )
 }
-
-

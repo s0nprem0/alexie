@@ -66,7 +66,10 @@ pub(crate) fn theme_vars(args: &[String]) -> String {
 
 /// Pure template substitution, extracted so tests do not need the
 /// vars cache on disk.
-pub(crate) fn render_template(content: &str, vars: &std::collections::HashMap<String, String>) -> String {
+pub(crate) fn render_template(
+    content: &str,
+    vars: &std::collections::HashMap<String, String>,
+) -> String {
     let mut rendered = content.to_string();
     for (k, v) in vars {
         let placeholder = format!("{{{{{}}}}}", k);
@@ -91,9 +94,10 @@ pub(crate) fn theme_render(args: &[String]) -> String {
     };
     let rendered = render_template(&content, &vars);
     if let Some(parent) = std::path::Path::new(out).parent()
-        && !parent.as_os_str().is_empty() {
-            let _ = std::fs::create_dir_all(parent);
-        }
+        && !parent.as_os_str().is_empty()
+    {
+        let _ = std::fs::create_dir_all(parent);
+    }
     match std::fs::write(out, rendered) {
         Ok(_) => format!("rendered {}", out),
         Err(e) => format!("ERR write: {}", e),
@@ -106,16 +110,32 @@ pub(crate) fn presets() -> String {
     if let Ok(read) = fs::read_dir(&dir) {
         for entry in read.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("toml") { continue; }
-            let content = match fs::read_to_string(&path) { Ok(c) => c, Err(_) => continue };
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                continue;
+            }
+            let content = match fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
             // toml 1.x parses documents into a Table, not a bare Value.
-            let value: toml::Table = match toml::from_str(&content) { Ok(v) => v, Err(_) => continue };
-            let colors_table = match value.get("colors").and_then(|v| v.as_table()) { Some(t) => t, None => continue };
+            let value: toml::Table = match toml::from_str(&content) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let colors_table = match value.get("colors").and_then(|v| v.as_table()) {
+                Some(t) => t,
+                None => continue,
+            };
             let mut colors: BTreeMap<String, String> = BTreeMap::new();
             for (k, v) in colors_table {
-                if let Some(s) = v.as_str() { colors.insert(k.clone(), s.to_string()); }
+                if let Some(s) = v.as_str() {
+                    colors.insert(k.clone(), s.to_string());
+                }
             }
-            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             entries.push(serde_json::json!({
                 "name": stem,
                 "path": path.to_string_lossy(),
@@ -123,10 +143,14 @@ pub(crate) fn presets() -> String {
             }));
         }
     }
-    entries.sort_by(|a, b| a["name"].as_str().unwrap_or("").cmp(b["name"].as_str().unwrap_or("")));
+    entries.sort_by(|a, b| {
+        a["name"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(b["name"].as_str().unwrap_or(""))
+    });
     serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -171,7 +195,10 @@ mod tests {
             s(&["a", "b", "c"]),
         ] {
             let err = parse_vars_args(&bad).expect_err("malformed vars args");
-            assert!(err.starts_with("ERR usage: theme vars"), "got: {err} for {bad:?}");
+            assert!(
+                err.starts_with("ERR usage: theme vars"),
+                "got: {err} for {bad:?}"
+            );
         }
     }
 
@@ -202,11 +229,18 @@ mod tests {
 
     #[test]
     fn theme_render_usage() {
-        for bad in [s(&["render"]), s(&["render", "only"]), s(&["render", "a", "b", "c"])] {
+        for bad in [
+            s(&["render"]),
+            s(&["render", "only"]),
+            s(&["render", "a", "b", "c"]),
+        ] {
             // theme_render is called with args after `render`
             let args_after_render = &bad[1..];
             let out = theme_render(args_after_render);
-            assert!(out.starts_with("ERR usage: theme render"), "got: {out} for {bad:?}");
+            assert!(
+                out.starts_with("ERR usage: theme render"),
+                "got: {out} for {bad:?}"
+            );
         }
     }
 
@@ -215,7 +249,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "alexie-render-test-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

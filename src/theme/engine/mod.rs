@@ -25,13 +25,13 @@
 //! rather than the legacy Nix store paths; `apply` treats an
 //! existing renderer file as "made by a compatible renderer".
 
+pub mod apps;
+pub mod auto;
 pub mod color;
+pub mod doctor;
 pub mod generate;
 pub mod materialise;
 pub mod render_apps;
-pub mod apps;
-pub mod auto;
-pub mod doctor;
 
 // Re-export the dispatcher-facing entry points, so
 // `crate::theme::engine::set_theme` etc. keep working.

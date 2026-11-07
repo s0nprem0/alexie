@@ -1,11 +1,11 @@
 //! Recording state, monitor fps, status collection, indexing.
 
-use std::fs;
-use super::paths::{hyprctl, screenshot_dir, recording_dir};
-use super::open::open;
 use super::assets::{add_asset, check_deleted, list_assets};
 use super::colors::{list_colors, list_ocr};
+use super::open::open;
+use super::paths::{hyprctl, recording_dir, screenshot_dir};
 use super::types::MediaStatus;
+use std::fs;
 
 /// Is a recorder running?
 pub(crate) fn is_recording() -> bool {
@@ -15,7 +15,9 @@ pub(crate) fn is_recording() -> bool {
     if let Ok(entries) = fs::read_dir("/proc") {
         for entry in entries.flatten() {
             let name = entry.file_name();
-            let Some(name_str) = name.to_str() else { continue };
+            let Some(name_str) = name.to_str() else {
+                continue;
+            };
             if !name_str.chars().all(|c| c.is_ascii_digit()) {
                 continue;
             }

@@ -44,7 +44,12 @@ impl MonitorsIface {
         crate::monitors::handle(&["list".to_string()])
     }
     fn set(&self, output: &str, key: &str, value: &str) -> String {
-        let r = crate::monitors::handle(&["set".to_string(), output.to_string(), key.to_string(), value.to_string()]);
+        let r = crate::monitors::handle(&[
+            "set".to_string(),
+            output.to_string(),
+            key.to_string(),
+            value.to_string(),
+        ]);
         emit_monitors_changed();
         r
     }
@@ -59,7 +64,8 @@ impl MonitorsIface {
         r
     }
     fn scale_set(&self, value: f64) -> String {
-        let r = crate::monitors::handle(&["scale".to_string(), "set".to_string(), value.to_string()]);
+        let r =
+            crate::monitors::handle(&["scale".to_string(), "set".to_string(), value.to_string()]);
         emit_monitors_changed();
         r
     }
@@ -72,10 +78,18 @@ impl MonitorsIface {
         crate::monitors::handle(&["brightness".to_string(), "up".to_string(), step.to_string()])
     }
     fn brightness_down(&self, step: i64) -> String {
-        crate::monitors::handle(&["brightness".to_string(), "down".to_string(), step.to_string()])
+        crate::monitors::handle(&[
+            "brightness".to_string(),
+            "down".to_string(),
+            step.to_string(),
+        ])
     }
     fn brightness_set(&self, value: i64) -> String {
-        crate::monitors::handle(&["brightness".to_string(), "set".to_string(), value.to_string()])
+        crate::monitors::handle(&[
+            "brightness".to_string(),
+            "set".to_string(),
+            value.to_string(),
+        ])
     }
     fn brightness_max(&self) -> String {
         crate::monitors::handle(&["brightness".to_string(), "max".to_string()])
@@ -168,10 +182,18 @@ impl PowerIface {
 pub struct ClipboardIface;
 #[interface(name = "org.alexie.Clipboard1")]
 impl ClipboardIface {
-    fn list(&self) -> String { crate::clipboard::handle(&["--list".to_string()]) }
-    fn text(&self, id: &str) -> String { crate::clipboard::handle(&["--text".to_string(), id.to_string()]) }
-    fn delete(&self, id: &str) -> String { crate::clipboard::handle(&["--delete".to_string(), id.to_string()]) }
-    fn wipe(&self) -> String { crate::clipboard::handle(&["--wipe".to_string()]) }
+    fn list(&self) -> String {
+        crate::clipboard::handle(&["--list".to_string()])
+    }
+    fn text(&self, id: &str) -> String {
+        crate::clipboard::handle(&["--text".to_string(), id.to_string()])
+    }
+    fn delete(&self, id: &str) -> String {
+        crate::clipboard::handle(&["--delete".to_string(), id.to_string()])
+    }
+    fn wipe(&self) -> String {
+        crate::clipboard::handle(&["--wipe".to_string()])
+    }
 }
 
 // ---------- Toggle interface ----------
@@ -179,9 +201,15 @@ pub struct ToggleIface;
 #[interface(name = "org.alexie.Toggle1")]
 impl ToggleIface {
     fn status(&self, name: &str) -> String {
-        if name.is_empty() { crate::toggle::handle(&[]) } else { crate::toggle::handle(&[name.to_string()]) }
+        if name.is_empty() {
+            crate::toggle::handle(&[])
+        } else {
+            crate::toggle::handle(&[name.to_string()])
+        }
     }
-    fn list(&self) -> String { crate::toggle::handle(&["list".to_string()]) }
+    fn list(&self) -> String {
+        crate::toggle::handle(&["list".to_string()])
+    }
     fn set(&self, name: &str, state: &str) -> String {
         // Explicit set, not blind toggle: validate, read the current
         // state via state_pub(), and only toggle when it differs.
@@ -206,20 +234,36 @@ impl ToggleIface {
 pub struct ScreentimeIface;
 #[interface(name = "org.alexie.Screentime1")]
 impl ScreentimeIface {
-    fn show(&self) -> String { crate::screentime::handle(&["show".to_string()]) }
-    fn json(&self) -> String { crate::screentime::handle(&["json".to_string()]) }
-    fn reset(&self) -> String { crate::screentime::handle(&["reset".to_string()]) }
-    fn path(&self) -> String { crate::screentime::db_path().to_string_lossy().to_string() }
+    fn show(&self) -> String {
+        crate::screentime::handle(&["show".to_string()])
+    }
+    fn json(&self) -> String {
+        crate::screentime::handle(&["json".to_string()])
+    }
+    fn reset(&self) -> String {
+        crate::screentime::handle(&["reset".to_string()])
+    }
+    fn path(&self) -> String {
+        crate::screentime::db_path().to_string_lossy().to_string()
+    }
 }
 
 // ---------- Status interface ----------
 pub struct StatusIface;
 #[interface(name = "org.alexie.Status1")]
 impl StatusIface {
-    fn network_json(&self) -> String { crate::status::network_json() }
-    fn sysmon_json(&self) -> String { crate::status::sysmon_json() }
-    fn audio_json(&self) -> String { crate::status::audio_json() }
-    fn bluetooth_json(&self) -> String { crate::status::bluetooth_json() }
+    fn network_json(&self) -> String {
+        crate::status::network_json()
+    }
+    fn sysmon_json(&self) -> String {
+        crate::status::sysmon_json()
+    }
+    fn audio_json(&self) -> String {
+        crate::status::audio_json()
+    }
+    fn bluetooth_json(&self) -> String {
+        crate::status::bluetooth_json()
+    }
     fn get(&self, name: &str) -> String {
         match name {
             "network" => crate::status::network_json(),
@@ -231,13 +275,21 @@ impl StatusIface {
     }
 
     #[zbus(property)]
-    fn network(&self) -> String { crate::status::network_json() }
+    fn network(&self) -> String {
+        crate::status::network_json()
+    }
     #[zbus(property)]
-    fn sysmon(&self) -> String { crate::status::sysmon_json() }
+    fn sysmon(&self) -> String {
+        crate::status::sysmon_json()
+    }
     #[zbus(property)]
-    fn audio(&self) -> String { crate::status::audio_json() }
+    fn audio(&self) -> String {
+        crate::status::audio_json()
+    }
     #[zbus(property)]
-    fn bluetooth(&self) -> String { crate::status::bluetooth_json() }
+    fn bluetooth(&self) -> String {
+        crate::status::bluetooth_json()
+    }
 
     #[zbus(signal)]
     async fn changed(ctxt: &zbus::SignalContext<'_>) -> zbus::Result<()>;
@@ -247,7 +299,9 @@ impl StatusIface {
 pub struct AppsIface;
 #[interface(name = "org.alexie.Apps1")]
 impl AppsIface {
-    fn list_json(&self) -> String { crate::apps::list_json() }
+    fn list_json(&self) -> String {
+        crate::apps::list_json()
+    }
     fn launch(&self, name: &str) -> String {
         let r = crate::apps::handle(&["launch".to_string(), name.to_string()]);
         if !r.starts_with("ERR") {
@@ -257,7 +311,9 @@ impl AppsIface {
     }
 
     #[zbus(property)]
-    fn list(&self) -> String { crate::apps::list_json() }
+    fn list(&self) -> String {
+        crate::apps::list_json()
+    }
 
     #[zbus(signal)]
     async fn changed(ctxt: &zbus::SignalContext<'_>) -> zbus::Result<()>;
@@ -267,13 +323,21 @@ impl AppsIface {
 pub struct MediaIface;
 #[interface(name = "org.alexie.Media1")]
 impl MediaIface {
-    fn list_json(&self) -> String { crate::shot::handle(&["db".to_string(), "list".to_string(), "--json".to_string()]) }
-    fn status_json(&self) -> String { crate::shot::handle(&["db".to_string(), "status".to_string(), "--json".to_string()]) }
+    fn list_json(&self) -> String {
+        crate::shot::handle(&["db".to_string(), "list".to_string(), "--json".to_string()])
+    }
+    fn status_json(&self) -> String {
+        crate::shot::handle(&["db".to_string(), "status".to_string(), "--json".to_string()])
+    }
 
     #[zbus(property)]
-    fn list(&self) -> String { crate::shot::handle(&["db".to_string(), "list".to_string(), "--json".to_string()]) }
+    fn list(&self) -> String {
+        crate::shot::handle(&["db".to_string(), "list".to_string(), "--json".to_string()])
+    }
     #[zbus(property)]
-    fn status(&self) -> String { crate::shot::handle(&["db".to_string(), "status".to_string(), "--json".to_string()]) }
+    fn status(&self) -> String {
+        crate::shot::handle(&["db".to_string(), "status".to_string(), "--json".to_string()])
+    }
 }
 
 // ---------- helpers ----------
@@ -285,36 +349,50 @@ fn theme_current() -> String {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         format!("{}/.local/state", home)
     });
-    let p = std::path::PathBuf::from(state).join("anixie").join("theme").join("current");
+    let p = std::path::PathBuf::from(state)
+        .join("anixie")
+        .join("theme")
+        .join("current");
     if let Ok(s) = std::fs::read_to_string(&p) {
         let s = s.trim().to_string();
-        if !s.is_empty() { return s; }
+        if !s.is_empty() {
+            return s;
+        }
     }
     String::new()
 }
 
 fn emit_monitors_changed() {
     if let Some(conn) = CONN.get()
-        && let Ok(iface_ref) = conn.object_server().interface::<_, MonitorsIface>("/org/alexie/Daemon") {
-            let ctxt = iface_ref.signal_context();
-            let _ = zbus::block_on(MonitorsIface::changed(ctxt));
-        }
+        && let Ok(iface_ref) = conn
+            .object_server()
+            .interface::<_, MonitorsIface>("/org/alexie/Daemon")
+    {
+        let ctxt = iface_ref.signal_context();
+        let _ = zbus::block_on(MonitorsIface::changed(ctxt));
+    }
 }
 
 fn emit_theme_changed(name: String) {
     if let Some(conn) = CONN.get()
-        && let Ok(iface_ref) = conn.object_server().interface::<_, ThemeIface>("/org/alexie/Daemon") {
-            let ctxt = iface_ref.signal_context();
-            let _ = zbus::block_on(ThemeIface::changed(ctxt, &name));
-        }
+        && let Ok(iface_ref) = conn
+            .object_server()
+            .interface::<_, ThemeIface>("/org/alexie/Daemon")
+    {
+        let ctxt = iface_ref.signal_context();
+        let _ = zbus::block_on(ThemeIface::changed(ctxt, &name));
+    }
 }
 
 fn emit_apps_changed() {
     if let Some(conn) = CONN.get()
-        && let Ok(iface_ref) = conn.object_server().interface::<_, AppsIface>("/org/alexie/Daemon") {
-            let ctxt = iface_ref.signal_context();
-            let _ = zbus::block_on(AppsIface::changed(ctxt));
-        }
+        && let Ok(iface_ref) = conn
+            .object_server()
+            .interface::<_, AppsIface>("/org/alexie/Daemon")
+    {
+        let ctxt = iface_ref.signal_context();
+        let _ = zbus::block_on(AppsIface::changed(ctxt));
+    }
 }
 
 pub fn run_dbus_server() {
@@ -343,13 +421,19 @@ pub fn run_dbus_server() {
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", PowerIface) {
         eprintln!("dbus: register PowerIface failed: {}", e);
     }
-    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ClipboardIface) {
+    if let Err(e) = conn
+        .object_server()
+        .at("/org/alexie/Daemon", ClipboardIface)
+    {
         eprintln!("dbus: register ClipboardIface failed: {}", e);
     }
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ToggleIface) {
         eprintln!("dbus: register ToggleIface failed: {}", e);
     }
-    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ScreentimeIface) {
+    if let Err(e) = conn
+        .object_server()
+        .at("/org/alexie/Daemon", ScreentimeIface)
+    {
         eprintln!("dbus: register ScreentimeIface failed: {}", e);
     }
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", StatusIface) {
@@ -362,7 +446,9 @@ pub fn run_dbus_server() {
         eprintln!("dbus: register MediaIface failed: {}", e);
     }
     let _ = CONN.set(conn.clone());
-    eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme/Status/Apps/Media interfaces");
+    eprintln!(
+        "alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme/Status/Apps/Media interfaces"
+    );
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }

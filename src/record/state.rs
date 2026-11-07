@@ -1,15 +1,14 @@
 //! Record state: runtime dirs, pid/name/region files, recorder
 //! detection, shell recording IPC, notifications.
 
+use crate::proc::run;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use crate::proc::run;
 
 pub(crate) fn runtime_dir() -> PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-        
         env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
             let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             format!("{}/.local/state", home)
@@ -19,26 +18,52 @@ pub(crate) fn runtime_dir() -> PathBuf {
 }
 
 pub(crate) fn out_dir() -> PathBuf {
-    if let Ok(v) = env::var("SCREENRECORD_DIR") { return PathBuf::from(v); }
-    if let Ok(v) = env::var("XDG_VIDEOS_DIR") { return PathBuf::from(v); }
+    if let Ok(v) = env::var("SCREENRECORD_DIR") {
+        return PathBuf::from(v);
+    }
+    if let Ok(v) = env::var("XDG_VIDEOS_DIR") {
+        return PathBuf::from(v);
+    }
     let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     PathBuf::from(format!("{}/Videos", home))
 }
 
-pub(crate) fn gsr() -> String { env::var("GSR").unwrap_or_else(|_| "gpu-screen-recorder".to_string()) }
-pub(crate) fn ffmpeg() -> String { env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".to_string()) }
+pub(crate) fn gsr() -> String {
+    env::var("GSR").unwrap_or_else(|_| "gpu-screen-recorder".to_string())
+}
+pub(crate) fn ffmpeg() -> String {
+    env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".to_string())
+}
 pub(crate) use crate::proc::notify_send as notify;
-pub(crate) fn notify_raw() -> String { env::var("NOTIFY_SEND_RAW").unwrap_or_else(|_| "notify-send".to_string()) }
-pub(crate) fn shot_pick() -> String { env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string()) }
-pub(crate) fn webcam_overlay() -> String { env::var("WEBCAM_OVERLAY").unwrap_or_else(|_| "webcam-overlay".to_string()) }
+pub(crate) fn notify_raw() -> String {
+    env::var("NOTIFY_SEND_RAW").unwrap_or_else(|_| "notify-send".to_string())
+}
+pub(crate) fn shot_pick() -> String {
+    env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string())
+}
+pub(crate) fn webcam_overlay() -> String {
+    env::var("WEBCAM_OVERLAY").unwrap_or_else(|_| "webcam-overlay".to_string())
+}
 pub(crate) use crate::proc::quickshell as qs;
 
-pub(crate) fn pid_file() -> PathBuf { runtime_dir().join("anixie-record.pid") }
-pub(crate) fn name_file() -> PathBuf { runtime_dir().join("anixie-record.file") }
-pub(crate) fn region_file() -> PathBuf { runtime_dir().join("anixie-record.region") }
-pub(crate) fn cancel_file() -> PathBuf { runtime_dir().join("anixie-record.cancel") }
-pub(crate) fn lock_file() -> PathBuf { runtime_dir().join("anixie-record.lock") }
-pub(crate) fn starting_file() -> PathBuf { runtime_dir().join("anixie-record.starting") }
+pub(crate) fn pid_file() -> PathBuf {
+    runtime_dir().join("anixie-record.pid")
+}
+pub(crate) fn name_file() -> PathBuf {
+    runtime_dir().join("anixie-record.file")
+}
+pub(crate) fn region_file() -> PathBuf {
+    runtime_dir().join("anixie-record.region")
+}
+pub(crate) fn cancel_file() -> PathBuf {
+    runtime_dir().join("anixie-record.cancel")
+}
+pub(crate) fn lock_file() -> PathBuf {
+    runtime_dir().join("anixie-record.lock")
+}
+pub(crate) fn starting_file() -> PathBuf {
+    runtime_dir().join("anixie-record.starting")
+}
 
 pub(crate) fn read_pid() -> Option<i32> {
     fs::read_to_string(pid_file()).ok()?.trim().parse().ok()
@@ -71,10 +96,13 @@ fn same_user(pid: i32, root: &std::path::Path) -> bool {
     let Ok(content) = fs::read_to_string(&status) else {
         return true;
     };
-    let uid = content.lines().find(|l| l.starts_with("Uid:")).and_then(|l| {
-        let fields: Vec<&str> = l.split_whitespace().collect();
-        fields.get(2).or(fields.get(1)).map(|s| s.to_string())
-    });
+    let uid = content
+        .lines()
+        .find(|l| l.starts_with("Uid:"))
+        .and_then(|l| {
+            let fields: Vec<&str> = l.split_whitespace().collect();
+            fields.get(2).or(fields.get(1)).map(|s| s.to_string())
+        });
     match (uid, my_uid()) {
         (Some(uid), Some(me)) => uid.parse::<u32>().ok() == Some(me),
         _ => true,
@@ -101,11 +129,15 @@ pub(crate) fn recorder_pids(wanted: Option<i32>) -> Vec<i32> {
         }
         return Vec::new();
     }
-    let Ok(entries) = fs::read_dir(&root) else { return Vec::new() };
+    let Ok(entries) = fs::read_dir(&root) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for entry in entries.flatten() {
         let name = entry.file_name();
-        let Ok(pid) = name.to_string_lossy().parse::<i32>() else { continue };
+        let Ok(pid) = name.to_string_lossy().parse::<i32>() else {
+            continue;
+        };
         if pid <= 0 {
             continue;
         }
@@ -151,6 +183,8 @@ pub(crate) fn shell_recording(state: &str) {
 }
 
 pub(crate) fn notify_msg(urgency: &str, title: &str, body: &str) {
-    let _ = run(&notify(), &["-u", urgency, "-a", "record", "-G", "f03d", title, body]);
+    let _ = run(
+        &notify(),
+        &["-u", urgency, "-a", "record", "-G", "f03d", title, body],
+    );
 }
-

@@ -25,7 +25,11 @@ pub(crate) fn summary() -> String {
         "network wifi={} connected={} ssid={} signal={}%\n",
         if net.wifi_enabled { "on" } else { "off" },
         if net.connected { "yes" } else { "no" },
-        if net.active_ssid.is_empty() { "-" } else { &net.active_ssid },
+        if net.active_ssid.is_empty() {
+            "-"
+        } else {
+            &net.active_ssid
+        },
         net.active_signal
     ));
     out.push_str(&format!(
@@ -34,11 +38,18 @@ pub(crate) fn summary() -> String {
         sys.cpu_usage,
         sys.ram_used,
         sys.ram_total,
-        if sys.gpu_name.is_empty() { "-" } else { &sys.gpu_name }
+        if sys.gpu_name.is_empty() {
+            "-"
+        } else {
+            &sys.gpu_name
+        }
     ));
     out.push_str(&format!(
         "audio sink={} vol={}% sources={} sinks={}\n",
-        aud.default_sink.as_ref().map(|s| s.description.as_str()).unwrap_or("-"),
+        aud.default_sink
+            .as_ref()
+            .map(|s| s.description.as_str())
+            .unwrap_or("-"),
         aud.default_sink.as_ref().map(|s| s.volume).unwrap_or(0),
         aud.sources.len(),
         aud.sinks.len()
@@ -88,16 +99,32 @@ pub(crate) fn summary_json() -> String {
 }
 
 // D-Bus helpers.
-pub(crate) fn network_json() -> String { network::handle(&["--json".to_string()]) }
-pub(crate) fn sysmon_json() -> String { sysmon::handle(&["--json".to_string()]) }
-pub(crate) fn audio_json() -> String { audio::handle(&["--json".to_string()]) }
-pub(crate) fn bluetooth_json() -> String { bluetooth::handle(&["--json".to_string()]) }
+pub(crate) fn network_json() -> String {
+    network::handle(&["--json".to_string()])
+}
+pub(crate) fn sysmon_json() -> String {
+    sysmon::handle(&["--json".to_string()])
+}
+pub(crate) fn audio_json() -> String {
+    audio::handle(&["--json".to_string()])
+}
+pub(crate) fn bluetooth_json() -> String {
+    bluetooth::handle(&["--json".to_string()])
+}
 
 // Aliases.
-pub(crate) fn network_handle(args: &[String]) -> String { network::handle(args) }
-pub(crate) fn sysmon_handle(args: &[String]) -> String { sysmon::handle(args) }
-pub(crate) fn audio_handle(args: &[String]) -> String { audio::handle(args) }
-pub(crate) fn bluetooth_handle(args: &[String]) -> String { bluetooth::handle(args) }
+pub(crate) fn network_handle(args: &[String]) -> String {
+    network::handle(args)
+}
+pub(crate) fn sysmon_handle(args: &[String]) -> String {
+    sysmon::handle(args)
+}
+pub(crate) fn audio_handle(args: &[String]) -> String {
+    audio::handle(args)
+}
+pub(crate) fn bluetooth_handle(args: &[String]) -> String {
+    bluetooth::handle(args)
+}
 
 #[cfg(test)]
 mod tests {

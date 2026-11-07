@@ -4,32 +4,55 @@
 //! (library.json + library.stamp) keep the legacy names and shape so
 //! the shell/QML readers need no changes.
 
-use super::state::{current_theme, default_wallpaper, generated_file, state_dir, theme_dir, thumbs_dir, wallpaper_recursive, watch_dirs};
+use super::state::{
+    current_theme, default_wallpaper, generated_file, state_dir, theme_dir, thumbs_dir,
+    wallpaper_recursive, watch_dirs,
+};
 use crate::proc::{run, run_with_stdin};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-pub(crate) fn wallpapers_file() -> PathBuf { state_dir().join("wallpapers.json") }
-pub(crate) fn background_file() -> PathBuf { state_dir().join("background.json") }
-pub(crate) fn library_cache_file() -> PathBuf { state_dir().join("library.json") }
-pub(crate) fn library_stamp_file() -> PathBuf { state_dir().join("library.stamp") }
-pub(crate) fn rotation_file() -> PathBuf { state_dir().join("rotation") }
+pub(crate) fn wallpapers_file() -> PathBuf {
+    state_dir().join("wallpapers.json")
+}
+pub(crate) fn background_file() -> PathBuf {
+    state_dir().join("background.json")
+}
+pub(crate) fn library_cache_file() -> PathBuf {
+    state_dir().join("library.json")
+}
+pub(crate) fn library_stamp_file() -> PathBuf {
+    state_dir().join("library.stamp")
+}
+pub(crate) fn rotation_file() -> PathBuf {
+    state_dir().join("rotation")
+}
 
 pub(crate) fn is_video(path: &str) -> bool {
     matches!(
-        path.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str(),
+        path.rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
         "mp4" | "mkv" | "webm" | "mov" | "m4v" | "avi" | "ogv"
     )
 }
 
 pub(crate) fn is_image(path: &str) -> bool {
     matches!(
-        path.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str(),
+        path.rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str(),
         "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "tif" | "tiff" | "avif"
     )
 }
 
-pub(crate) fn is_media(path: &str) -> bool { is_image(path) || is_video(path) }
+pub(crate) fn is_media(path: &str) -> bool {
+    is_image(path) || is_video(path)
+}
 
 /// (path, mtime seconds, size bytes). `generated` sorts first and
 /// carries the gradient file's own stat (or zeroes when absent).
@@ -37,13 +60,21 @@ pub(crate) fn library_scan() -> Vec<(String, String, String)> {
     let mut out: Vec<(String, String, String)> = Vec::new();
     let generated = generated_file("");
     if generated.is_file() {
-        out.push(("generated".to_string(), stat_field(&generated, "%Y"), stat_field(&generated, "%s")));
+        out.push((
+            "generated".to_string(),
+            stat_field(&generated, "%Y"),
+            stat_field(&generated, "%s"),
+        ));
     } else {
         out.push(("generated".to_string(), "0".to_string(), "0".to_string()));
     }
     let default = default_wallpaper();
     if !default.is_empty() && Path::new(&default).is_file() {
-        out.push((default.clone(), stat_field_str(&default, "%Y"), stat_field_str(&default, "%s")));
+        out.push((
+            default.clone(),
+            stat_field_str(&default, "%Y"),
+            stat_field_str(&default, "%s"),
+        ));
     }
     for dir in scan_dirs() {
         scan_dir_meta(&dir, &mut out);
@@ -67,7 +98,9 @@ fn scan_dir_meta(dir: &Path, out: &mut Vec<(String, String, String)>) {
     let recursive = wallpaper_recursive();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let p = entry.path();
             if p.is_dir() {
@@ -75,7 +108,11 @@ fn scan_dir_meta(dir: &Path, out: &mut Vec<(String, String, String)>) {
                     stack.push(p);
                 }
             } else if p.is_file() && is_media(&p.to_string_lossy()) {
-                out.push((p.to_string_lossy().to_string(), stat_field(&p, "%Y"), stat_field(&p, "%s")));
+                out.push((
+                    p.to_string_lossy().to_string(),
+                    stat_field(&p, "%Y"),
+                    stat_field(&p, "%s"),
+                ));
             }
         }
     }
@@ -83,10 +120,16 @@ fn scan_dir_meta(dir: &Path, out: &mut Vec<(String, String, String)>) {
 
 fn stat_field(path: &Path, fmt: &str) -> String {
     let (code, out, _) = run("stat", &["-Lc", fmt, &path.to_string_lossy()]);
-    if code == 0 { out.trim().to_string() } else { "0".to_string() }
+    if code == 0 {
+        out.trim().to_string()
+    } else {
+        "0".to_string()
+    }
 }
 
-fn stat_field_str(path: &str, fmt: &str) -> String { stat_field(Path::new(path), fmt) }
+fn stat_field_str(path: &str, fmt: &str) -> String {
+    stat_field(Path::new(path), fmt)
+}
 
 /// Ordered library paths: generated first, then the default (when
 /// present), then every scanned file, deduplicated.
@@ -131,8 +174,16 @@ pub(crate) fn thumb_for(path: &Path, mtime: &str, size: &str) -> String {
     if !path.is_file() {
         return String::new();
     }
-    let mtime = if mtime.is_empty() { stat_field(path, "%Y") } else { mtime.to_string() };
-    let size = if size.is_empty() { stat_field(path, "%s") } else { size.to_string() };
+    let mtime = if mtime.is_empty() {
+        stat_field(path, "%Y")
+    } else {
+        mtime.to_string()
+    };
+    let size = if size.is_empty() {
+        stat_field(path, "%s")
+    } else {
+        size.to_string()
+    };
     let key = sha256sum_hex(&format!("{}\n{}\n{}\n", path.display(), mtime, size));
     if key.is_empty() {
         return String::new();
@@ -144,8 +195,23 @@ pub(crate) fn thumb_for(path: &Path, mtime: &str, size: &str) -> String {
         let mut source = path.to_path_buf();
         let mut frame = PathBuf::new();
         if is_video(&path.to_string_lossy()) {
-            frame = std::env::temp_dir().join(format!("wallpaper-frame-{}.jpg", std::process::id()));
-            let (code, _, _) = run("ffmpeg", &["-y", "-loglevel", "error", "-i", &path.to_string_lossy(), "-frames:v", "1", "-q:v", "2", &frame.to_string_lossy()]);
+            frame =
+                std::env::temp_dir().join(format!("wallpaper-frame-{}.jpg", std::process::id()));
+            let (code, _, _) = run(
+                "ffmpeg",
+                &[
+                    "-y",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    &path.to_string_lossy(),
+                    "-frames:v",
+                    "1",
+                    "-q:v",
+                    "2",
+                    &frame.to_string_lossy(),
+                ],
+            );
             if code != 0 {
                 let _ = std::fs::remove_file(&frame);
                 return String::new();
@@ -153,7 +219,21 @@ pub(crate) fn thumb_for(path: &Path, mtime: &str, size: &str) -> String {
             source = frame.clone();
         }
         let tmp = thumbs.join(format!(".thumb-{}.tmp.jpg", std::process::id()));
-        let (code, _, _) = run("magick", &[&source.to_string_lossy(), "-thumbnail", "320x180^", "-gravity", "center", "-extent", "320x180", "-quality", "85", &tmp.to_string_lossy()]);
+        let (code, _, _) = run(
+            "magick",
+            &[
+                &source.to_string_lossy(),
+                "-thumbnail",
+                "320x180^",
+                "-gravity",
+                "center",
+                "-extent",
+                "320x180",
+                "-quality",
+                "85",
+                &tmp.to_string_lossy(),
+            ],
+        );
         if code == 0 {
             let _ = std::fs::rename(&tmp, &thumb);
         } else {
@@ -170,11 +250,21 @@ pub(crate) fn thumb_for(path: &Path, mtime: &str, size: &str) -> String {
 /// does not reference (legacy prune_cache rule).
 fn prune_thumb_cache() {
     let cache = library_cache_file();
-    let Ok(content) = std::fs::read_to_string(&cache) else { return };
+    let Ok(content) = std::fs::read_to_string(&cache) else {
+        return;
+    };
     let keep: Vec<String> = match serde_json::from_str::<serde_json::Value>(&content) {
         Ok(v) => v
             .as_array()
-            .map(|a| a.iter().filter_map(|e| e.get("thumb").and_then(|t| t.as_str()).map(|s| s.to_string())).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|e| {
+                        e.get("thumb")
+                            .and_then(|t| t.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .collect()
+            })
             .unwrap_or_default(),
         Err(_) => Vec::new(),
     };
@@ -182,7 +272,9 @@ fn prune_thumb_cache() {
 }
 
 fn prune_cache(dir: &Path, keep: &[String]) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let p = entry.path();
         if keep.iter().any(|k| Path::new(k) == p) {
@@ -211,10 +303,13 @@ pub(crate) fn library_json(refresh: bool) -> String {
     let stamp_file = library_stamp_file();
     if !refresh
         && cache.is_file()
-        && std::fs::read_to_string(&stamp_file).map(|s| s.trim() == stamp).unwrap_or(false)
-        && let Ok(s) = std::fs::read_to_string(&cache) {
-            return s.trim_end().to_string();
-        }
+        && std::fs::read_to_string(&stamp_file)
+            .map(|s| s.trim() == stamp)
+            .unwrap_or(false)
+        && let Ok(s) = std::fs::read_to_string(&cache)
+    {
+        return s.trim_end().to_string();
+    }
     let mut rows: Vec<serde_json::Value> = Vec::new();
     if scan[0].0 == "generated" {
         let thumb = thumb_for(&generated_file(""), "", "");
@@ -230,7 +325,10 @@ pub(crate) fn library_json(refresh: bool) -> String {
         if path == "generated" {
             continue;
         }
-        let name = Path::new(path).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
+        let name = Path::new(path)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.clone());
         let thumb = thumb_for(Path::new(path), mtime, size);
         rows.push(serde_json::json!({
             "name": name,
@@ -256,7 +354,10 @@ pub(crate) fn list_output() -> String {
             if p == "generated" {
                 "generated".to_string()
             } else {
-                Path::new(&p).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or(p)
+                Path::new(&p)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or(p)
             }
         })
         .collect::<Vec<_>>()
@@ -277,7 +378,10 @@ mod tests {
         assert_eq!(scan[0].0, "generated");
         // dedup keeps the first occurrence
         let mut seen = std::collections::HashSet::new();
-        let dedup: Vec<_> = scan.into_iter().filter(|(p, _, _)| seen.insert(p.clone())).collect();
+        let dedup: Vec<_> = scan
+            .into_iter()
+            .filter(|(p, _, _)| seen.insert(p.clone()))
+            .collect();
         assert_eq!(dedup.len(), 2);
     }
 

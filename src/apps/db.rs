@@ -1,12 +1,12 @@
 //! DB open/schema/migration + bookmarks/history/usage CRUD.
 
+use super::paths::{cache_dir, db_path};
+use super::types::{BookmarkItem, FileHistoryItem, WebHistoryItem};
+use super::url::normalize_url;
 use rusqlite::{Connection, params};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use super::paths::{cache_dir, db_path};
-use super::types::{BookmarkItem, FileHistoryItem, WebHistoryItem};
-use super::url::normalize_url;
 
 pub(crate) fn init_db() -> Result<Connection, rusqlite::Error> {
     let db = db_path();
@@ -111,7 +111,10 @@ fn migrate_if_needed(conn: &Connection, cache_dir: &Path) {
             }
         }
         if migrated {
-            let _ = fs::rename(&file_history_path, cache_dir.join("file_history.json.migrated"));
+            let _ = fs::rename(
+                &file_history_path,
+                cache_dir.join("file_history.json.migrated"),
+            );
         }
     }
 
@@ -138,7 +141,10 @@ fn migrate_if_needed(conn: &Connection, cache_dir: &Path) {
             }
         }
         if migrated {
-            let _ = fs::rename(&web_history_path, cache_dir.join("web_search_history.json.migrated"));
+            let _ = fs::rename(
+                &web_history_path,
+                cache_dir.join("web_search_history.json.migrated"),
+            );
         }
     }
 
@@ -178,10 +184,16 @@ pub(crate) fn open_db() -> Result<Connection, rusqlite::Error> {
 }
 
 pub(crate) fn get_bookmarks(conn: &Connection) -> Vec<BookmarkItem> {
-    let Ok(mut stmt) = conn.prepare("SELECT url, name FROM bookmarks ORDER BY created_at DESC") else {
+    let Ok(mut stmt) = conn.prepare("SELECT url, name FROM bookmarks ORDER BY created_at DESC")
+    else {
         return Vec::new();
     };
-    let Ok(rows) = stmt.query_map([], |row| Ok(BookmarkItem { url: row.get(0)?, name: row.get(1)? })) else {
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok(BookmarkItem {
+            url: row.get(0)?,
+            name: row.get(1)?,
+        })
+    }) else {
         return Vec::new();
     };
     rows.filter_map(Result::ok).collect()
@@ -205,7 +217,10 @@ pub(crate) fn add_bookmark(conn: &Connection, url: &str) -> Result<(), rusqlite:
 }
 
 pub(crate) fn delete_bookmark(conn: &Connection, url: &str) -> Result<(), rusqlite::Error> {
-    conn.execute("DELETE FROM bookmarks WHERE url = ?1", params![normalize_url(url)])?;
+    conn.execute(
+        "DELETE FROM bookmarks WHERE url = ?1",
+        params![normalize_url(url)],
+    )?;
     Ok(())
 }
 
@@ -215,11 +230,17 @@ pub(crate) fn clear_bookmarks(conn: &Connection) -> Result<(), rusqlite::Error> 
 }
 
 pub(crate) fn get_file_history(conn: &Connection) -> Vec<FileHistoryItem> {
-    let Ok(mut stmt) = conn.prepare("SELECT path, name, timestamp FROM file_history ORDER BY timestamp DESC LIMIT 30") else {
+    let Ok(mut stmt) = conn
+        .prepare("SELECT path, name, timestamp FROM file_history ORDER BY timestamp DESC LIMIT 30")
+    else {
         return Vec::new();
     };
     let Ok(rows) = stmt.query_map([], |row| {
-        Ok(FileHistoryItem { path: row.get(0)?, name: row.get(1)?, timestamp: row.get(2)? })
+        Ok(FileHistoryItem {
+            path: row.get(0)?,
+            name: row.get(1)?,
+            timestamp: row.get(2)?,
+        })
     }) else {
         return Vec::new();
     };
@@ -245,18 +266,27 @@ pub(crate) fn clear_file_history(conn: &Connection) -> Result<(), rusqlite::Erro
 }
 
 pub(crate) fn get_web_history(conn: &Connection) -> Vec<WebHistoryItem> {
-    let Ok(mut stmt) = conn.prepare("SELECT query, engine, url FROM web_search_history ORDER BY timestamp DESC LIMIT 20") else {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT query, engine, url FROM web_search_history ORDER BY timestamp DESC LIMIT 20",
+    ) else {
         return Vec::new();
     };
     let Ok(rows) = stmt.query_map([], |row| {
-        Ok(WebHistoryItem { query: row.get(0)?, engine: row.get(1)?, url: row.get(2)? })
+        Ok(WebHistoryItem {
+            query: row.get(0)?,
+            engine: row.get(1)?,
+            url: row.get(2)?,
+        })
     }) else {
         return Vec::new();
     };
     rows.filter_map(Result::ok).collect()
 }
 
-pub(crate) fn add_web_history(conn: &Connection, item: &WebHistoryItem) -> Result<(), rusqlite::Error> {
+pub(crate) fn add_web_history(
+    conn: &Connection,
+    item: &WebHistoryItem,
+) -> Result<(), rusqlite::Error> {
     conn.execute(
         "INSERT OR REPLACE INTO web_search_history (query, engine, url, timestamp) VALUES (?1, ?2, ?3, ?4)",
         params![item.query, item.engine, item.url, now_secs()],
@@ -273,13 +303,18 @@ pub(crate) fn get_usage_map(conn: &Connection) -> HashMap<String, u32> {
     let Ok(mut stmt) = conn.prepare("SELECT app_name, count FROM app_usage") else {
         return HashMap::new();
     };
-    let Ok(rows) = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))) else {
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+    }) else {
         return HashMap::new();
     };
     rows.filter_map(Result::ok).collect()
 }
 
-pub(crate) fn increment_app_usage(conn: &Connection, app_name: &str) -> Result<(), rusqlite::Error> {
+pub(crate) fn increment_app_usage(
+    conn: &Connection,
+    app_name: &str,
+) -> Result<(), rusqlite::Error> {
     conn.execute(
         "INSERT INTO app_usage (app_name, count) VALUES (?1, 1) ON CONFLICT(app_name) DO UPDATE SET count = count + 1",
         params![app_name],

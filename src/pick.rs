@@ -10,7 +10,7 @@
 //! time. Picker values must stay free of `'` — handlers validate
 //! what they accept (e.g. emoji `apply`, reminder minutes).
 
-use crate::proc::{run, quickshell as qs};
+use crate::proc::{quickshell as qs, run};
 use std::path::PathBuf;
 
 pub(crate) struct Request {
@@ -46,9 +46,18 @@ pub(crate) fn parse_request(args: &[String]) -> Result<Request, String> {
                 placeholder = v.clone();
                 i += 2;
             }
-            "--input" => { mode = "input".to_string(); i += 1; }
-            "--allow-empty" => { allow_empty = true; i += 1; }
-            "--grouped" => { grouped = true; i += 1; }
+            "--input" => {
+                mode = "input".to_string();
+                i += 1;
+            }
+            "--allow-empty" => {
+                allow_empty = true;
+                i += 1;
+            }
+            "--grouped" => {
+                grouped = true;
+                i += 1;
+            }
             "--on-select" => {
                 let v = args.get(i + 1).ok_or("ERR --on-select needs a command")?;
                 on_select = v.clone();
@@ -114,14 +123,20 @@ fn build_payload(req: &Request, stdin_data: &str) -> serde_json::Value {
 
 fn request_file(payload: &serde_json::Value) -> std::io::Result<PathBuf> {
     let path = crate::proc::tmp_file("pick-request", "json");
-    std::fs::write(&path, serde_json::to_string(payload).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?)?;
+    std::fs::write(
+        &path,
+        serde_json::to_string(payload)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?,
+    )?;
     Ok(path)
 }
 
 pub fn handle_with_stdin(args: &[String], stdin_data: &str) -> String {
     let mut req = match parse_request(args) {
         Ok(r) => r,
-        Err(e) if e == "usage" => return "usage: pick --title TITLE --on-select CMD [entries on stdin]".to_string(),
+        Err(e) if e == "usage" => {
+            return "usage: pick --title TITLE --on-select CMD [entries on stdin]".to_string();
+        }
         Err(e) => return e,
     };
     if req.mode != "input" {
@@ -136,7 +151,10 @@ pub fn handle_with_stdin(args: &[String], stdin_data: &str) -> String {
         Ok(p) => p,
         Err(e) => return format!("ERR {}", e),
     };
-    let (code, out, _err) = run(&qs(), &["ipc", "call", "pick", "open", &req_path.to_string_lossy()]);
+    let (code, out, _err) = run(
+        &qs(),
+        &["ipc", "call", "pick", "open", &req_path.to_string_lossy()],
+    );
     if code != 0 {
         let _ = std::fs::remove_file(&req_path);
         return "ERR the shell is not running".to_string();
@@ -168,9 +186,12 @@ mod tests {
     #[test]
     fn parse_request_basic() {
         let r = parse_request(&[
-            "--title".into(), "t".into(),
-            "--on-select".into(), "theme '{}'".into(),
-        ]).unwrap();
+            "--title".into(),
+            "t".into(),
+            "--on-select".into(),
+            "theme '{}'".into(),
+        ])
+        .unwrap();
         assert_eq!(r.title, "t");
         assert_eq!(r.mode, "list");
     }
@@ -190,7 +211,15 @@ mod tests {
 
     #[test]
     fn empty_entries_fails_fast() {
-        let out = handle_with_stdin(&["--title".into(), "t".into(), "--on-select".into(), "x".into()], "");
+        let out = handle_with_stdin(
+            &[
+                "--title".into(),
+                "t".into(),
+                "--on-select".into(),
+                "x".into(),
+            ],
+            "",
+        );
         assert!(out.starts_with("ERR nothing to pick from"), "got: {out}");
     }
 

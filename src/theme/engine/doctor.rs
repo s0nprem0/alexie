@@ -1,5 +1,5 @@
-use super::apps::{hyprctl_bin, quickshell_bin};
 use super::super::state;
+use super::apps::{hyprctl_bin, quickshell_bin};
 use super::color::{contrast, palette_ok_file};
 use crate::proc;
 use std::env;
@@ -31,13 +31,31 @@ pub(crate) fn doctor() -> String {
             out.push_str("ok       palette\n");
         }
         for file in [
-            "kitty.conf", "helix.toml", "yazi.toml", "hyprlock.conf",
-            "qt6ct-colors.conf", "qt6ct.conf", "qt5ct.conf", "kvantum.kvconfig",
-            "gtk-3.0-settings.ini", "gtk-4.0-settings.ini", "gtk-3.0.css", "gtk-4.0.css",
-            "share-picker.css", "discord.css", "librewolf-userChrome.css", "librewolf-userContent.css",
-            "tmux.conf", "btop.theme", "terminal.zsh",
+            "kitty.conf",
+            "helix.toml",
+            "yazi.toml",
+            "hyprlock.conf",
+            "qt6ct-colors.conf",
+            "qt6ct.conf",
+            "qt5ct.conf",
+            "kvantum.kvconfig",
+            "gtk-3.0-settings.ini",
+            "gtk-4.0-settings.ini",
+            "gtk-3.0.css",
+            "gtk-4.0.css",
+            "share-picker.css",
+            "discord.css",
+            "librewolf-userChrome.css",
+            "librewolf-userContent.css",
+            "tmux.conf",
+            "btop.theme",
+            "terminal.zsh",
         ] {
-            if std::fs::metadata(live.join(file)).map(|m| m.len()).unwrap_or(0) == 0 {
+            if std::fs::metadata(live.join(file))
+                .map(|m| m.len())
+                .unwrap_or(0)
+                == 0
+            {
                 out.push_str(&format!("missing  {}\n", file));
                 failures += 1;
             }
@@ -54,7 +72,12 @@ pub(crate) fn doctor() -> String {
                         let mut tok = String::new();
                         for ch in chars.by_ref() {
                             if ch == '@' {
-                                if in_at && tok.len() >= 2 && tok.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_') {
+                                if in_at
+                                    && tok.len() >= 2
+                                    && tok.chars().all(|c| {
+                                        c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'
+                                    })
+                                {
                                     return true;
                                 }
                                 in_at = !in_at;
@@ -64,10 +87,11 @@ pub(crate) fn doctor() -> String {
                             }
                         }
                         false
-                    }) {
-                        unresolved = true;
-                        break;
-                    }
+                    })
+                {
+                    unresolved = true;
+                    break;
+                }
             }
         }
         if unresolved {
@@ -77,23 +101,28 @@ pub(crate) fn doctor() -> String {
 
         if live.join("palette.json").exists()
             && let Ok(s) = std::fs::read_to_string(live.join("palette.json"))
-                && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-                    for (fg_tok, bg_tok) in [
-                        ("muted", "surface"),
-                        ("muted", "background"),
-                        ("fgLight", "surface"),
-                        ("fgLight", "background"),
-                    ] {
-                        let fg_c = v.get(fg_tok).and_then(|x| x.as_str()).unwrap_or("");
-                        let bg_c = v.get(bg_tok).and_then(|x| x.as_str()).unwrap_or("");
-                        if let (Some(fg_c), Some(bg_c)) = (Some(fg_c), Some(bg_c))
-                            && let Some(ratio) = contrast(fg_c, bg_c)
-                                && ratio < 4.5 {
-                                    out.push_str(&format!("warn     {} vs {} contrast {:.2} < 4.5\n", fg_tok, bg_tok, ratio));
-                                    warnings += 1;
-                                }
-                    }
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
+        {
+            for (fg_tok, bg_tok) in [
+                ("muted", "surface"),
+                ("muted", "background"),
+                ("fgLight", "surface"),
+                ("fgLight", "background"),
+            ] {
+                let fg_c = v.get(fg_tok).and_then(|x| x.as_str()).unwrap_or("");
+                let bg_c = v.get(bg_tok).and_then(|x| x.as_str()).unwrap_or("");
+                if let (Some(fg_c), Some(bg_c)) = (Some(fg_c), Some(bg_c))
+                    && let Some(ratio) = contrast(fg_c, bg_c)
+                    && ratio < 4.5
+                {
+                    out.push_str(&format!(
+                        "warn     {} vs {} contrast {:.2} < 4.5\n",
+                        fg_tok, bg_tok, ratio
+                    ));
+                    warnings += 1;
                 }
+            }
+        }
     }
 
     let config_home = env::var("XDG_CONFIG_HOME")
@@ -135,7 +164,10 @@ pub(crate) fn doctor() -> String {
     }
 
     if failures != 0 {
-        out.push_str(&format!("{} problem(s), {} warning(s)\n", failures, warnings));
+        out.push_str(&format!(
+            "{} problem(s), {} warning(s)\n",
+            failures, warnings
+        ));
         out.trim_end().to_string()
     } else if warnings != 0 {
         out.push_str(&format!("no problems found, {} warning(s)\n", warnings));
@@ -149,4 +181,3 @@ pub(crate) fn doctor() -> String {
 fn which(name: &str) -> Option<PathBuf> {
     crate::proc::find_in_path(name, &env::var("PATH").unwrap_or_default())
 }
-

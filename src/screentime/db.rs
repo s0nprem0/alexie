@@ -23,7 +23,9 @@ pub(crate) fn db_path() -> std::path::PathBuf {
 /// ($state/YYYY-MM-DD.json). The shell (ScreentimeStore) reads this
 /// file; the DB is the tracker's private store.
 pub(crate) fn daily_file_path() -> std::path::PathBuf {
-    state_dir().join("screentime").join(format!("{}.json", today_string()))
+    state_dir()
+        .join("screentime")
+        .join(format!("{}.json", today_string()))
 }
 
 pub(crate) fn open_db() -> Result<Connection, rusqlite::Error> {
@@ -46,7 +48,10 @@ pub(crate) fn open_db() -> Result<Connection, rusqlite::Error> {
         CREATE INDEX IF NOT EXISTS idx_sessions_end ON sessions(end_time);",
     )?;
     // finalize any dangling sessions from a previous (killed) run
-    let _ = conn.execute("UPDATE sessions SET end_time = start_time, duration = 0 WHERE end_time = 0", []);
+    let _ = conn.execute(
+        "UPDATE sessions SET end_time = start_time, duration = 0 WHERE end_time = 0",
+        [],
+    );
     prune_old_sessions(&conn);
     Ok(conn)
 }
@@ -55,21 +60,39 @@ pub(crate) fn open_db() -> Result<Connection, rusqlite::Error> {
 /// so the DB does not grow forever on a long-lived machine.
 fn prune_old_sessions(conn: &Connection) {
     let cutoff = now_secs() - 30 * 24 * 60 * 60;
-    let _ = conn.execute("DELETE FROM sessions WHERE start_time < ?1", params![cutoff]);
+    let _ = conn.execute(
+        "DELETE FROM sessions WHERE start_time < ?1",
+        params![cutoff],
+    );
 }
 
 pub(crate) fn active_window() -> Option<(String, String)> {
-    let out = Command::new("hyprctl").args(["activewindow", "-j"]).output().ok()?;
-    if !out.status.success() { return None; }
+    let out = Command::new("hyprctl")
+        .args(["activewindow", "-j"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
     let v: Value = serde_json::from_slice(&out.stdout).ok()?;
     let class = v.get("class")?.as_str()?.to_string();
-    let title = v.get("title").and_then(|t| t.as_str()).unwrap_or("").to_string();
-    if class.is_empty() { None } else { Some((class, title)) }
+    let title = v
+        .get("title")
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string();
+    if class.is_empty() {
+        None
+    } else {
+        Some((class, title))
+    }
 }
 
 pub(crate) fn write_daily_json(conn: &Connection) {
     let day = today_string();
-    if day.is_empty() { return; }
+    if day.is_empty() {
+        return;
+    }
     let dir = state_dir().join("screentime");
     let _ = fs::create_dir_all(&dir);
     let file = dir.join(format!("{}.json", day));
@@ -78,13 +101,14 @@ pub(crate) fn write_daily_json(conn: &Connection) {
     let mut total: i64 = 0;
     if let Ok(mut stmt) = conn.prepare(
         "SELECT app_class, SUM(duration) FROM sessions WHERE start_time >= ?1 GROUP BY app_class",
-    )
-        && let Ok(iter) = stmt.query_map(params![ts], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
-            for (k, v) in iter.filter_map(|r| r.ok()) {
-                apps.insert(k, serde_json::json!(v));
-                total += v;
-            }
+    ) && let Ok(iter) = stmt.query_map(params![ts], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+    }) {
+        for (k, v) in iter.filter_map(|r| r.ok()) {
+            apps.insert(k, serde_json::json!(v));
+            total += v;
         }
+    }
     let obj = serde_json::json!({"date": day, "apps": apps, "idle": 0, "active": total});
     let _ = fs::write(&file, obj.to_string());
 }
@@ -129,4 +153,3 @@ mod tests {
         assert_eq!(count("new-app"), 1, "recent session should be kept");
     }
 }
-

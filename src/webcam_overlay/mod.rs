@@ -15,7 +15,6 @@ use std::path::PathBuf;
 
 fn runtime_dir() -> PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-        
         env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
             let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             format!("{}/.local/state", home)
@@ -24,9 +23,15 @@ fn runtime_dir() -> PathBuf {
     PathBuf::from(rt).join("anixie")
 }
 
-fn gsr() -> String { env::var("GSR").unwrap_or_else(|_| "gpu-screen-recorder".to_string()) }
-fn hyprctl() -> String { "hyprctl".to_string() }
-fn mpv() -> String { env::var("MPV").unwrap_or_else(|_| "mpv".to_string()) }
+fn gsr() -> String {
+    env::var("GSR").unwrap_or_else(|_| "gpu-screen-recorder".to_string())
+}
+fn hyprctl() -> String {
+    "hyprctl".to_string()
+}
+fn mpv() -> String {
+    env::var("MPV").unwrap_or_else(|_| "mpv".to_string())
+}
 
 pub(crate) const MARGIN: i64 = 40;
 
@@ -47,8 +52,14 @@ pub fn handle(args: &[String]) -> String {
         "stop" => stop_overlay(),
         "resize" => {
             let action = args.get(1).cloned().unwrap_or_else(|| "reset".to_string());
-            if !matches!(action.as_str(), "small" | "medium" | "large" | "smaller" | "larger" | "reset") {
-                return format!("ERR unknown resize action: {} (try: small, medium, large, smaller, larger, reset)", action);
+            if !matches!(
+                action.as_str(),
+                "small" | "medium" | "large" | "smaller" | "larger" | "reset"
+            ) {
+                return format!(
+                    "ERR unknown resize action: {} (try: small, medium, large, smaller, larger, reset)",
+                    action
+                );
             }
             resize(&action)
         }
@@ -65,14 +76,29 @@ mod tests {
         let small = (100, 90);
         let medium = (200, 180);
         let large = (300, 270);
-        assert_eq!(resize_target("small", 0, 0, small, medium, large), Some(small));
-        assert_eq!(resize_target("reset", 999, 999, small, medium, large), Some(medium));
+        assert_eq!(
+            resize_target("small", 0, 0, small, medium, large),
+            Some(small)
+        );
+        assert_eq!(
+            resize_target("reset", 999, 999, small, medium, large),
+            Some(medium)
+        );
         assert_eq!(resize_target("bogus", 0, 0, small, medium, large), None);
         // smaller/larger step by width, skipping the current size
-        assert_eq!(resize_target("smaller", 250, 225, small, medium, large), Some(medium));
-        assert_eq!(resize_target("larger", 150, 135, small, medium, large), Some(medium));
+        assert_eq!(
+            resize_target("smaller", 250, 225, small, medium, large),
+            Some(medium)
+        );
+        assert_eq!(
+            resize_target("larger", 150, 135, small, medium, large),
+            Some(medium)
+        );
         // already smallest/largest: unchanged
-        assert_eq!(resize_target("smaller", 100, 90, small, medium, large), Some((100, 90)));
+        assert_eq!(
+            resize_target("smaller", 100, 90, small, medium, large),
+            Some((100, 90))
+        );
     }
 
     #[test]

@@ -24,7 +24,11 @@ pub(crate) fn templates_dir() -> Option<PathBuf> {
         return Some(PathBuf::from(v));
     }
     let v = crate::config::get_str(&["theme", "templates_dir"], "");
-    if v.trim().is_empty() { None } else { Some(PathBuf::from(v)) }
+    if v.trim().is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(v))
+    }
 }
 
 /// (template filename, output filename, required)
@@ -46,8 +50,16 @@ pub(crate) fn template_manifest() -> Vec<(&'static str, &'static str, bool)> {
         ("foot.ini", "foot.ini", true),
         ("vscode.json", "vscode.json", true),
         ("obsidian.css", "obsidian.css", true),
-        ("librewolf-userChrome.css", "librewolf-userChrome.css", false),
-        ("librewolf-userContent.css", "librewolf-userContent.css", false),
+        (
+            "librewolf-userChrome.css",
+            "librewolf-userChrome.css",
+            false,
+        ),
+        (
+            "librewolf-userContent.css",
+            "librewolf-userContent.css",
+            false,
+        ),
         ("mpv.conf", "mpv.conf", true),
         ("zathurarc", "zathurarc", true),
         ("eza-theme.yml", "eza-theme.yml", true),
@@ -79,7 +91,12 @@ pub(crate) fn renderer_id() -> String {
     let m = template_manifest();
     let mut h = format!("v1:{}", m.len());
     for (tmpl, out, req) in &m {
-        h.push_str(&format!("|{}->{}{}", tmpl, out, if *req { '!' } else { '?' }));
+        h.push_str(&format!(
+            "|{}->{}{}",
+            tmpl,
+            out,
+            if *req { '!' } else { '?' }
+        ));
     }
     h
 }
@@ -91,7 +108,10 @@ mod tests {
     #[test]
     fn manifest_includes_librewolf_as_optional() {
         let m = template_manifest();
-        let lw: Vec<_> = m.iter().filter(|(t, _, _)| t.contains("librewolf")).collect();
+        let lw: Vec<_> = m
+            .iter()
+            .filter(|(t, _, _)| t.contains("librewolf"))
+            .collect();
         assert_eq!(lw.len(), 2);
         assert!(lw.iter().all(|(_, _, req)| !*req));
     }

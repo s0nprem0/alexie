@@ -27,11 +27,17 @@ pub fn tool(env_name: &str, default: &str) -> String {
     std::env::var(env_name).unwrap_or_else(|_| default.to_string())
 }
 
-pub fn wl_copy() -> String { tool("WL_COPY", "wl-copy") }
+pub fn wl_copy() -> String {
+    tool("WL_COPY", "wl-copy")
+}
 
-pub fn quickshell() -> String { tool("QUICKSHELL", "quickshell") }
+pub fn quickshell() -> String {
+    tool("QUICKSHELL", "quickshell")
+}
 
-pub fn notify_send() -> String { tool("NOTIFY_SEND", "notify-send") }
+pub fn notify_send() -> String {
+    tool("NOTIFY_SEND", "notify-send")
+}
 
 fn is_executable(p: &std::path::Path) -> bool {
     #[cfg(unix)]
@@ -63,4 +69,3 @@ pub fn resolve_tool(name: &str) -> String {
     }
     name.to_string()
 }
-

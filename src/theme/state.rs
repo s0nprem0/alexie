@@ -39,32 +39,52 @@ pub(crate) fn current_theme() -> String {
     let p = state_dir().join("current");
     if let Ok(s) = std::fs::read_to_string(&p) {
         let s = s.trim().to_string();
-        if !s.is_empty() { return s; }
+        if !s.is_empty() {
+            return s;
+        }
     }
     // fallback: state.json theme field
     let sp = state_dir().join("state.json");
     if let Ok(s) = std::fs::read_to_string(&sp)
         && let Ok(value) = serde_json::from_str::<serde_json::Value>(&s)
-            && let Some(theme) = value.get("theme").and_then(|t| t.as_str()) {
-                return theme.to_string();
-            }
+        && let Some(theme) = value.get("theme").and_then(|t| t.as_str())
+    {
+        return theme.to_string();
+    }
     String::new()
 }
 
-pub(crate) fn state_file() -> PathBuf { state_dir().join("state.json") }
-pub(crate) fn current_file() -> PathBuf { state_dir().join("current") }
-pub(crate) fn mode_file() -> PathBuf { state_dir().join("mode") }
-pub(crate) fn wallpaper_mode_file() -> PathBuf { state_dir().join("wallpaper-mode") }
-pub(crate) fn cursor_file() -> PathBuf { state_dir().join("cursor-size") }
-pub(crate) fn generated_file() -> PathBuf { state_dir().join("palette.json") }
-pub(crate) fn live_link() -> PathBuf { state_dir().join("live") }
-pub(crate) fn generations_dir() -> PathBuf { state_dir().join("generations") }
+pub(crate) fn state_file() -> PathBuf {
+    state_dir().join("state.json")
+}
+pub(crate) fn current_file() -> PathBuf {
+    state_dir().join("current")
+}
+pub(crate) fn mode_file() -> PathBuf {
+    state_dir().join("mode")
+}
+pub(crate) fn wallpaper_mode_file() -> PathBuf {
+    state_dir().join("wallpaper-mode")
+}
+pub(crate) fn cursor_file() -> PathBuf {
+    state_dir().join("cursor-size")
+}
+pub(crate) fn generated_file() -> PathBuf {
+    state_dir().join("palette.json")
+}
+pub(crate) fn live_link() -> PathBuf {
+    state_dir().join("live")
+}
+pub(crate) fn generations_dir() -> PathBuf {
+    state_dir().join("generations")
+}
 
 pub(crate) fn write_atomic(path: &PathBuf, content: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
-        }
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
     let tmp = path.with_extension(format!("tmp{}", std::process::id()));
     std::fs::write(&tmp, content)?;
     if std::fs::rename(&tmp, path).is_err() {
@@ -84,7 +104,11 @@ pub(crate) fn palettes_path() -> Option<PathBuf> {
         return Some(PathBuf::from(v));
     }
     let v = crate::config::get_str(&["theme", "palettes_json"], "");
-    if v.trim().is_empty() { None } else { Some(PathBuf::from(v)) }
+    if v.trim().is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(v))
+    }
 }
 
 pub(crate) fn palettes() -> serde_json::Value {
@@ -120,9 +144,10 @@ pub(crate) fn current_mode() -> String {
     if current_theme() == "wallpaper" {
         if let Ok(s) = fs::read_to_string(generated_file())
             && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
-                && let Some(m) = v.get("_mode").and_then(|x| x.as_str()) {
-                    return m.to_string();
-                }
+            && let Some(m) = v.get("_mode").and_then(|x| x.as_str())
+        {
+            return m.to_string();
+        }
         return "dark".to_string();
     }
     mode_of(&current_theme())
@@ -154,7 +179,11 @@ pub(crate) fn migrated_state_json() -> serde_json::Value {
         .ok()
         .filter(|s| has_theme(s) || s == "wallpaper")
         .unwrap_or_else(|| "tokyo-night".to_string());
-    let source = if theme == "wallpaper" { "wallpaper" } else { "preset" };
+    let source = if theme == "wallpaper" {
+        "wallpaper"
+    } else {
+        "preset"
+    };
     serde_json::json!({
         "version": 1,
         "source": source,
@@ -181,8 +210,11 @@ pub(crate) fn state_ensure() -> Result<(), String> {
     }
     fs::create_dir_all(state_dir()).map_err(|e| e.to_string())?;
     let json = migrated_state_json();
-    write_atomic(&state_file(), &serde_json::to_string_pretty(&json).unwrap_or_else(|_| "{}".to_string()))
-        .map_err(|e| e.to_string())
+    write_atomic(
+        &state_file(),
+        &serde_json::to_string_pretty(&json).unwrap_or_else(|_| "{}".to_string()),
+    )
+    .map_err(|e| e.to_string())
 }
 
 pub(crate) fn state_set_theme(name: &str, source: &str) -> Result<(), String> {
@@ -192,18 +224,29 @@ pub(crate) fn state_set_theme(name: &str, source: &str) -> Result<(), String> {
         obj.insert("version".into(), serde_json::json!(1));
         obj.insert("source".into(), serde_json::json!(source));
         obj.insert("theme".into(), serde_json::json!(name));
-        obj.insert("followWallpaper".into(), serde_json::json!(source == "wallpaper"));
+        obj.insert(
+            "followWallpaper".into(),
+            serde_json::json!(source == "wallpaper"),
+        );
         let mut recent: Vec<serde_json::Value> = obj
             .get("recent")
             .and_then(|r| r.as_array())
-            .map(|a| a.iter().filter(|v| v.as_str() != Some(name)).cloned().collect())
+            .map(|a| {
+                a.iter()
+                    .filter(|v| v.as_str() != Some(name))
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default();
         recent.insert(0, serde_json::json!(name));
         recent.truncate(10);
         obj.insert("recent".into(), serde_json::Value::Array(recent));
     }
-    write_atomic(&state_file(), &serde_json::to_string_pretty(&state).unwrap_or_else(|_| "{}".to_string()))
-        .map_err(|e| e.to_string())
+    write_atomic(
+        &state_file(),
+        &serde_json::to_string_pretty(&state).unwrap_or_else(|_| "{}".to_string()),
+    )
+    .map_err(|e| e.to_string())
 }
 
 pub(crate) fn state_set_generation(gen_dir: &str) -> Result<(), String> {
@@ -213,10 +256,12 @@ pub(crate) fn state_set_generation(gen_dir: &str) -> Result<(), String> {
         obj.insert("version".into(), serde_json::json!(1));
         obj.insert("generation".into(), serde_json::json!(gen_dir));
     }
-    write_atomic(&state_file(), &serde_json::to_string_pretty(&state).unwrap_or_else(|_| "{}".to_string()))
-        .map_err(|e| e.to_string())
+    write_atomic(
+        &state_file(),
+        &serde_json::to_string_pretty(&state).unwrap_or_else(|_| "{}".to_string()),
+    )
+    .map_err(|e| e.to_string())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -257,5 +302,4 @@ mod tests {
             dir.display()
         );
     }
-
 }

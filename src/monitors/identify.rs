@@ -8,14 +8,28 @@ pub(crate) fn identify_action(snap: &Snapshot, args: &[String]) -> String {
         Err(e) => return e,
     };
     let payload = identify_descriptions(snap);
-    let (_, out, err) = run(&state::qs(), &["ipc", "call", "identify", "flash", &duration, &payload]);
+    let (_, out, err) = run(
+        &state::qs(),
+        &["ipc", "call", "identify", "flash", &duration, &payload],
+    );
     if identify_reply_ok(&out) {
         return "OK".to_string();
     }
     let detail = out.trim();
-    let detail = if detail.is_empty() { err.trim() } else { detail };
-    let detail = if detail.is_empty() { "no reply" } else { detail };
-    format!("ERR could not ask the running shell to identify the displays ({})", detail)
+    let detail = if detail.is_empty() {
+        err.trim()
+    } else {
+        detail
+    };
+    let detail = if detail.is_empty() {
+        "no reply"
+    } else {
+        detail
+    };
+    format!(
+        "ERR could not ask the running shell to identify the displays ({})",
+        detail
+    )
 }
 
 // `ipc call` exits zero even when the target does not exist (it prints
@@ -28,7 +42,9 @@ pub(crate) fn identify_reply_ok(out: &str) -> bool {
 // Milliseconds to keep the overlay up. The shell defaults and clamps too;
 // parsing here only rejects a non-numeric argument early.
 pub(crate) fn parse_identify_duration(args: &[String]) -> Result<i64, String> {
-    let Some(raw) = args.get(1) else { return Ok(3000) };
+    let Some(raw) = args.get(1) else {
+        return Ok(3000);
+    };
     match raw.parse::<i64>() {
         Ok(ms) => Ok(ms.clamp(500, 10_000)),
         Err(_) => Err("ERR usage: monitors identify [MS]".to_string()),
@@ -40,12 +56,18 @@ pub(crate) fn parse_identify_duration(args: &[String]) -> Result<i64, String> {
 pub(crate) fn identify_descriptions(snap: &Snapshot) -> String {
     let mut map = Map::new();
     for m in &snap.all {
-        let Some(name) = m.get("name").and_then(|x| x.as_str()) else { continue };
+        let Some(name) = m.get("name").and_then(|x| x.as_str()) else {
+            continue;
+        };
         let make = m.get("make").and_then(|x| x.as_str()).unwrap_or("").trim();
         let model = m.get("model").and_then(|x| x.as_str()).unwrap_or("").trim();
         let label = format!("{} {}", make, model).trim().to_string();
         let label = if label.is_empty() {
-            m.get("description").and_then(|x| x.as_str()).unwrap_or("").trim().to_string()
+            m.get("description")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string()
         } else {
             label
         };
@@ -60,7 +82,9 @@ pub(crate) fn identities_action(snap: &Snapshot) -> String {
     let arr = &snap.all;
     let mut obj = Map::new();
     for m in arr {
-        let Some(name) = m.get("name").and_then(|x| x.as_str()) else { continue };
+        let Some(name) = m.get("name").and_then(|x| x.as_str()) else {
+            continue;
+        };
         let mut inner = Map::new();
         for key in ["make", "model", "serial", "description"] {
             if let Some(val) = m.get(key) {
@@ -75,10 +99,12 @@ pub(crate) fn identities_action(snap: &Snapshot) -> String {
 pub(crate) fn sync_identities_action(snap: &Snapshot) -> String {
     let out = identities_action(snap);
     let _ = std::fs::create_dir_all(state::state_dir());
-    let _ = std::fs::write(state::state_dir().join("monitor_identities.json"), format!("{}\n", out.trim()));
+    let _ = std::fs::write(
+        state::state_dir().join("monitor_identities.json"),
+        format!("{}\n", out.trim()),
+    );
     "identities saved".to_string()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -96,9 +122,18 @@ mod tests {
     #[test]
     fn identify_duration_defaults_clamps_and_rejects() {
         assert_eq!(parse_identify_duration(&["identify".to_string()]), Ok(3000));
-        assert_eq!(parse_identify_duration(&["identify".to_string(), "5000".to_string()]), Ok(5000));
-        assert_eq!(parse_identify_duration(&["identify".to_string(), "10".to_string()]), Ok(500));
-        assert_eq!(parse_identify_duration(&["identify".to_string(), "99999".to_string()]), Ok(10_000));
+        assert_eq!(
+            parse_identify_duration(&["identify".to_string(), "5000".to_string()]),
+            Ok(5000)
+        );
+        assert_eq!(
+            parse_identify_duration(&["identify".to_string(), "10".to_string()]),
+            Ok(500)
+        );
+        assert_eq!(
+            parse_identify_duration(&["identify".to_string(), "99999".to_string()]),
+            Ok(10_000)
+        );
         assert!(parse_identify_duration(&["identify".to_string(), "soon".to_string()]).is_err());
     }
 
@@ -113,7 +148,8 @@ mod tests {
             by_name: std::collections::HashMap::new(),
             id_to_name: std::collections::HashMap::new(),
         };
-        let payload: serde_json::Value = serde_json::from_str(&identify_descriptions(&snap)).unwrap();
+        let payload: serde_json::Value =
+            serde_json::from_str(&identify_descriptions(&snap)).unwrap();
         assert_eq!(payload["HDMI-A-1"], "GWD ARZOPA");
         assert_eq!(payload["eDP-1"], "Chimei Innolux Corporation 0x15E7");
         assert!(payload.get("DP-1").is_none());

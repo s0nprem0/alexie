@@ -10,7 +10,13 @@ use std::path::Path;
 
 /// Pick the next entry after `here` in the library list, wrapping.
 /// Pure, so it can be tested without a filesystem.
-pub(crate) fn step_target(list: &[String], here: &str, direction: &str, random: bool, salt: u64) -> Option<String> {
+pub(crate) fn step_target(
+    list: &[String],
+    here: &str,
+    direction: &str,
+    random: bool,
+    salt: u64,
+) -> Option<String> {
     if list.is_empty() {
         return None;
     }
@@ -23,7 +29,11 @@ pub(crate) fn step_target(list: &[String], here: &str, direction: &str, random: 
         return Some(candidates[idx].clone());
     }
     let len = list.len();
-    let at = list.iter().position(|p| p == here).map(|i| i + 1).unwrap_or(1);
+    let at = list
+        .iter()
+        .position(|p| p == here)
+        .map(|i| i + 1)
+        .unwrap_or(1);
     let next = if direction == "next" {
         (at % len) + 1
     } else {
@@ -54,7 +64,13 @@ pub(crate) fn step(direction: &str, arg: Option<&str>) -> String {
 /// source of truth (the shell owns the timer).
 pub(crate) fn rotation_minutes() -> i64 {
     std::fs::read_to_string(rotation_file())
-        .map(|s| s.chars().filter(|c| c.is_ascii_digit()).collect::<String>().parse::<i64>().unwrap_or(0))
+        .map(|s| {
+            s.chars()
+                .filter(|c| c.is_ascii_digit())
+                .collect::<String>()
+                .parse::<i64>()
+                .unwrap_or(0)
+        })
         .unwrap_or(0)
 }
 
@@ -86,13 +102,24 @@ pub(crate) fn pick_one() -> String {
         if path == "generated" {
             continue;
         }
-        let name = Path::new(&path).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
+        let name = Path::new(&path)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.clone());
         let thumb = thumb_for(Path::new(&path), "", "");
         lines.push(format!("{}\t{}\t\t\t{}", name, path, thumb));
     }
     let data = lines.join("\n") + "\n";
     let title = format!("wallpaper — {}", theme);
-    crate::pick::handle_with_stdin(&["--title".to_string(), title, "--on-select".to_string(), "wallpaper use '{}'".to_string()], &data)
+    crate::pick::handle_with_stdin(
+        &[
+            "--title".to_string(),
+            title,
+            "--on-select".to_string(),
+            "wallpaper use '{}'".to_string(),
+        ],
+        &data,
+    )
 }
 
 #[cfg(test)]
@@ -100,15 +127,31 @@ mod tests {
     use super::*;
 
     fn list() -> Vec<String> {
-        vec!["generated".to_string(), "/pics/a.jpg".to_string(), "/pics/b.jpg".to_string()]
+        vec![
+            "generated".to_string(),
+            "/pics/a.jpg".to_string(),
+            "/pics/b.jpg".to_string(),
+        ]
     }
 
     #[test]
     fn step_wraps_both_ways() {
-        assert_eq!(step_target(&list(), "generated", "next", false, 0), Some("/pics/a.jpg".to_string()));
-        assert_eq!(step_target(&list(), "/pics/b.jpg", "next", false, 0), Some("generated".to_string()));
-        assert_eq!(step_target(&list(), "generated", "prev", false, 0), Some("/pics/b.jpg".to_string()));
-        assert_eq!(step_target(&list(), "/nope", "next", false, 0), Some("/pics/a.jpg".to_string()));
+        assert_eq!(
+            step_target(&list(), "generated", "next", false, 0),
+            Some("/pics/a.jpg".to_string())
+        );
+        assert_eq!(
+            step_target(&list(), "/pics/b.jpg", "next", false, 0),
+            Some("generated".to_string())
+        );
+        assert_eq!(
+            step_target(&list(), "generated", "prev", false, 0),
+            Some("/pics/b.jpg".to_string())
+        );
+        assert_eq!(
+            step_target(&list(), "/nope", "next", false, 0),
+            Some("/pics/a.jpg".to_string())
+        );
         assert_eq!(step_target(&[], "generated", "next", false, 0), None);
     }
 
@@ -118,6 +161,9 @@ mod tests {
             let target = step_target(&list(), "/pics/a.jpg", "next", true, salt).unwrap();
             assert_ne!(target, "/pics/a.jpg");
         }
-        assert_eq!(step_target(&["only".to_string()], "only", "next", true, 0), None);
+        assert_eq!(
+            step_target(&["only".to_string()], "only", "next", true, 0),
+            None
+        );
     }
 }

@@ -1,14 +1,22 @@
+use super::super::state::{
+    generated_file, saved_wallpaper_mode, state_dir, wallpaper_mode_file, write_atomic,
+};
+use super::apps::{run_hooks, tell_apps};
 use super::color::{palette_fix_value, palette_ok_file, palette_ok_value};
 use super::materialise::{StateLock, materialise};
-use super::apps::{tell_apps, run_hooks};
-use super::super::state::{generated_file, state_dir, saved_wallpaper_mode, wallpaper_mode_file, write_atomic};
 use crate::proc::{run, tool};
 use std::env;
 use std::path::Path;
 
-fn matugen_bin() -> String { tool("MATUGEN", "matugen") }
-fn magick_bin() -> String { tool("MAGICK", "magick") }
-fn ffmpeg_bin() -> String { tool("FFMPEG", "ffmpeg") }
+fn matugen_bin() -> String {
+    tool("MATUGEN", "matugen")
+}
+fn magick_bin() -> String {
+    tool("MAGICK", "magick")
+}
+fn ffmpeg_bin() -> String {
+    tool("FFMPEG", "ffmpeg")
+}
 
 // ---------- matugen palette transform (port of palette.jq) ----------
 
@@ -24,19 +32,31 @@ fn mc(m: &serde_json::Value, name: &str) -> String {
 
 pub(crate) fn matugen_to_palette(m: &serde_json::Value, fallback: &str) -> serde_json::Value {
     let mode = m.get("mode").and_then(|v| v.as_str()).unwrap_or(fallback);
-    let mode = if mode == "light" || mode == "dark" { mode.to_string() } else { "dark".to_string() };
+    let mode = if mode == "light" || mode == "dark" {
+        mode.to_string()
+    } else {
+        "dark".to_string()
+    };
     let (success, yellow) = if mode == "light" {
         ("#2f7d32", "#9a6700")
     } else {
         ("#a6e3a1", "#f0c674")
     };
     let (bg_dark, bg_light) = if mode == "light" {
-        (mc(m, "surface_container_highest"), mc(m, "surface_container_lowest"))
+        (
+            mc(m, "surface_container_highest"),
+            mc(m, "surface_container_lowest"),
+        )
     } else {
-        (mc(m, "surface_container_lowest"), mc(m, "surface_container_highest"))
+        (
+            mc(m, "surface_container_lowest"),
+            mc(m, "surface_container_highest"),
+        )
     };
     let mut obj = serde_json::Map::new();
-    let mut ins = |k: &str, v: String| { obj.insert(k.to_string(), serde_json::json!(v)); };
+    let mut ins = |k: &str, v: String| {
+        obj.insert(k.to_string(), serde_json::json!(v));
+    };
     ins("background", mc(m, "background"));
     ins("surface", mc(m, "surface_container"));
     ins("surfaceContainer", mc(m, "surface_container_high"));
@@ -92,7 +112,11 @@ pub(crate) fn matugen_to_palette(m: &serde_json::Value, fallback: &str) -> serde
 
 fn matugen_version() -> String {
     let (code, out, _) = run(&matugen_bin(), &["--version"]);
-    if code == 0 { out.lines().next().unwrap_or("").to_string() } else { String::new() }
+    if code == 0 {
+        out.lines().next().unwrap_or("").to_string()
+    } else {
+        String::new()
+    }
 }
 
 fn file_mtime(path: &Path) -> u64 {
@@ -120,13 +144,23 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
         return Err("ERR no picture to read a palette from — set one with 'wallpaper set FILE', or name one: 'theme wallpaper FILE'".to_string());
     }
     let wallpaper_png = state_dir().join("wallpaper.png");
-    if let (Ok(a), Ok(b)) = (std::fs::canonicalize(&wp_path), std::fs::canonicalize(&wallpaper_png))
-        && a == b {
-            return Err("ERR the current background is generated from the palette; set a picture with 'wallpaper set FILE' first".to_string());
-        }
+    if let (Ok(a), Ok(b)) = (
+        std::fs::canonicalize(&wp_path),
+        std::fs::canonicalize(&wallpaper_png),
+    ) && a == b
+    {
+        return Err("ERR the current background is generated from the palette; set a picture with 'wallpaper set FILE' first".to_string());
+    }
 
     let mtime = file_mtime(Path::new(&wp_path));
-    let key_material = format!("{}\n{}\n{}\n{}\n{}", wp_path, mtime, requested, "1", matugen_version());
+    let key_material = format!(
+        "{}\n{}\n{}\n{}\n{}",
+        wp_path,
+        mtime,
+        requested,
+        "1",
+        matugen_version()
+    );
     let key = {
         use std::hash::{DefaultHasher, Hash, Hasher};
         let mut h = DefaultHasher::new();
@@ -141,16 +175,25 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
         for entry in read.flatten() {
             if let Ok(m) = entry.metadata()
                 && let Ok(modified) = m.modified()
-                    && modified.elapsed().map(|d| d.as_secs() > 30 * 86400).unwrap_or(false) {
-                        let _ = std::fs::remove_file(entry.path());
-                    }
+                && modified
+                    .elapsed()
+                    .map(|d| d.as_secs() > 30 * 86400)
+                    .unwrap_or(false)
+            {
+                let _ = std::fs::remove_file(entry.path());
+            }
         }
     }
     if cache.exists() && palette_ok_file(&cache) {
         let ok_mode = std::fs::read_to_string(&cache)
             .ok()
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .map(|v| v.get("_mode").and_then(|m| m.as_str()).map(|s| s == "dark" || s == "light").unwrap_or(false))
+            .map(|v| {
+                v.get("_mode")
+                    .and_then(|m| m.as_str())
+                    .map(|s| s == "dark" || s == "light")
+                    .unwrap_or(false)
+            })
             .unwrap_or(false);
         if ok_mode {
             std::fs::copy(&cache, generated_file()).map_err(|e| e.to_string())?;
@@ -159,21 +202,63 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
         let _ = std::fs::remove_file(&cache);
     }
 
-    let ext = Path::new(&wp_path).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let ext = Path::new(&wp_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
     let mut source = wp_path.clone();
-    if matches!(ext.as_str(), "mp4" | "m4v" | "mov" | "webm" | "mkv" | "avi" | "ogv") {
+    if matches!(
+        ext.as_str(),
+        "mp4" | "m4v" | "mov" | "webm" | "mkv" | "avi" | "ogv"
+    ) {
         let frame = cache_dir.join(format!("frame-{}.jpg", key));
         if !frame.exists() {
-            let (code, _, err) = run(&ffmpeg_bin(), &["-y", "-loglevel", "error", "-i", &wp_path, "-frames:v", "1", "-q:v", "2", frame.to_string_lossy().as_ref()]);
+            let (code, _, err) = run(
+                &ffmpeg_bin(),
+                &[
+                    "-y",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    &wp_path,
+                    "-frames:v",
+                    "1",
+                    "-q:v",
+                    "2",
+                    frame.to_string_lossy().as_ref(),
+                ],
+            );
             if code != 0 {
-                return Err(format!("ERR could not read a frame from {}: {}", wp_path, err.trim()));
+                return Err(format!(
+                    "ERR could not read a frame from {}: {}",
+                    wp_path,
+                    err.trim()
+                ));
             }
         }
         source = frame.to_string_lossy().to_string();
     }
 
-    let (sat_code, sat_out, _) = run(&magick_bin(), &[&source, "-colorspace", "HSL", "-channel", "G", "-separate", "-format", "%[fx:mean]", "info:"]);
-    let saturation: f64 = if sat_code == 0 { sat_out.trim().parse().unwrap_or(1.0) } else { 1.0 };
+    let (sat_code, sat_out, _) = run(
+        &magick_bin(),
+        &[
+            &source,
+            "-colorspace",
+            "HSL",
+            "-channel",
+            "G",
+            "-separate",
+            "-format",
+            "%[fx:mean]",
+            "info:",
+        ],
+    );
+    let saturation: f64 = if sat_code == 0 {
+        sat_out.trim().parse().unwrap_or(1.0)
+    } else {
+        1.0
+    };
     let mono = saturation < 0.08;
 
     // Doty-style brightness detection: for auto/smart mode, decide light vs
@@ -181,15 +266,38 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
     // internal heuristics, so the choice is deterministic and inspectable.
     let effective_mode = match requested {
         "auto" | "smart" => {
-            let (b_code, b_out, _) = run(&magick_bin(), &[&source, "-colorspace", "Gray", "-format", "%[fx:mean]", "info:"]);
-            let brightness: f64 = if b_code == 0 { b_out.trim().parse().unwrap_or(0.5) } else { 0.5 };
+            let (b_code, b_out, _) = run(
+                &magick_bin(),
+                &[
+                    &source,
+                    "-colorspace",
+                    "Gray",
+                    "-format",
+                    "%[fx:mean]",
+                    "info:",
+                ],
+            );
+            let brightness: f64 = if b_code == 0 {
+                b_out.trim().parse().unwrap_or(0.5)
+            } else {
+                0.5
+            };
             if brightness > 0.55 { "light" } else { "dark" }
         }
         other => other,
     };
 
     let mut cmd = std::process::Command::new(matugen_bin());
-    cmd.args(["image", &source, "--mode", effective_mode, "--source-color-index", "0", "--json", "hex"]);
+    cmd.args([
+        "image",
+        &source,
+        "--mode",
+        effective_mode,
+        "--source-color-index",
+        "0",
+        "--json",
+        "hex",
+    ]);
     if mono {
         cmd.args(["--type", "scheme-monochrome"]);
     }
@@ -201,7 +309,8 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
     if json_str.trim().is_empty() {
         return Err("ERR matugen wrote no palette".to_string());
     }
-    let matugen_json: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+    let matugen_json: serde_json::Value =
+        serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
     let palette = matugen_to_palette(&matugen_json, requested);
     if !palette_ok_value(&palette) {
         return Err("ERR matugen returned an incomplete palette".to_string());
@@ -221,7 +330,9 @@ pub(crate) fn wallpaper_theme(wp: &str, requested: &str) -> String {
     wallpaper_theme_mode(
         wp,
         requested,
-        env::var("ANIXIE_WALLPAPER_RECORDED").map(|v| v == "1").unwrap_or(false),
+        env::var("ANIXIE_WALLPAPER_RECORDED")
+            .map(|v| v == "1")
+            .unwrap_or(false),
     )
 }
 
@@ -267,7 +378,6 @@ fn wallpaper_theme_mode(wp: &str, requested: &str, recorded: bool) -> String {
     "Theme: wallpaper".to_string()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,4 +412,3 @@ mod tests {
         assert!(super::super::color::palette_ok_value(&p), "got: {p}");
     }
 }
-

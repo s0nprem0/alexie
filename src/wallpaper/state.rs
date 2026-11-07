@@ -24,20 +24,25 @@ pub(crate) fn current_theme() -> String {
     let p = state_dir().join("current");
     if let Ok(s) = fs::read_to_string(&p) {
         let s = s.trim().to_string();
-        if !s.is_empty() { return s; }
+        if !s.is_empty() {
+            return s;
+        }
     }
     String::new()
 }
 
 pub(crate) fn home_dir() -> PathBuf {
-    env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp"))
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
 }
 
 pub(crate) fn cache_dir() -> PathBuf {
     if let Ok(v) = env::var("WALLPAPER_THUMB_CACHE") {
         return PathBuf::from(v);
     }
-    let base = env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", home_dir().display()));
+    let base =
+        env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", home_dir().display()));
     PathBuf::from(base).join("alexie").join("wallpaper-thumbs")
 }
 
@@ -70,9 +75,15 @@ pub(crate) fn wallpaper_recursive() -> bool {
     }
 }
 
-pub(crate) fn thumbs_dir() -> PathBuf { state_dir().join("thumbs") }
-pub(crate) fn posters_dir() -> PathBuf { state_dir().join("posters") }
-pub(crate) fn generated_dir() -> PathBuf { state_dir().join("wallpapers") }
+pub(crate) fn thumbs_dir() -> PathBuf {
+    state_dir().join("thumbs")
+}
+pub(crate) fn posters_dir() -> PathBuf {
+    state_dir().join("posters")
+}
+pub(crate) fn generated_dir() -> PathBuf {
+    state_dir().join("wallpapers")
+}
 
 /// The palette-gradient wallpaper file for a theme and optional
 /// output: `<theme>-wallpaper.png`, or `<theme>-<output>.png` with
@@ -85,7 +96,13 @@ pub(crate) fn generated_file(output: &str) -> PathBuf {
     } else {
         let safe: String = output
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         generated_dir().join(format!("{}-{}.png", theme, safe))
     }
@@ -93,15 +110,20 @@ pub(crate) fn generated_file(output: &str) -> PathBuf {
 
 pub(crate) fn watch_dirs() -> Vec<PathBuf> {
     if let Ok(v) = env::var("WALLPAPER_WATCH_DIRS") {
-        return v.split(':').filter(|p| !p.trim().is_empty()).map(PathBuf::from).collect();
+        return v
+            .split(':')
+            .filter(|p| !p.trim().is_empty())
+            .map(PathBuf::from)
+            .collect();
     }
     if let Ok(v) = env::var("WALLPAPER_DIR") {
         return vec![PathBuf::from(v)];
     }
     if let Some(list) = crate::config::get_str_list(&["wallpaper", "dirs"])
-        && !list.is_empty() {
-            return list.into_iter().map(PathBuf::from).collect();
-        }
+        && !list.is_empty()
+    {
+        return list.into_iter().map(PathBuf::from).collect();
+    }
     // Legacy defaults (anixie.theme.wallpaper.dirs).
     vec![
         home_dir().join("Pictures").join("Wallpapers"),
@@ -109,7 +131,6 @@ pub(crate) fn watch_dirs() -> Vec<PathBuf> {
         data_dir().join("backgrounds"),
     ]
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -129,5 +150,4 @@ mod tests {
             dir.display()
         );
     }
-
 }

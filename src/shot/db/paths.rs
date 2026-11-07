@@ -4,13 +4,23 @@ use std::env;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub(crate) fn ffprobe() -> String { env::var("FFPROBE").unwrap_or_else(|_| "ffprobe".to_string()) }
-pub(crate) fn ffmpeg() -> String { env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".to_string()) }
-pub(crate) fn hyprctl() -> String { env::var("HYPRCTL").unwrap_or_else(|_| "hyprctl".to_string()) }
-pub(crate) fn hyprpicker() -> String { env::var("HYPRPICKER").unwrap_or_else(|_| "hyprpicker".to_string()) }
+pub(crate) fn ffprobe() -> String {
+    env::var("FFPROBE").unwrap_or_else(|_| "ffprobe".to_string())
+}
+pub(crate) fn ffmpeg() -> String {
+    env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".to_string())
+}
+pub(crate) fn hyprctl() -> String {
+    env::var("HYPRCTL").unwrap_or_else(|_| "hyprctl".to_string())
+}
+pub(crate) fn hyprpicker() -> String {
+    env::var("HYPRPICKER").unwrap_or_else(|_| "hyprpicker".to_string())
+}
 
 pub(crate) fn home_dir() -> PathBuf {
-    env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp"))
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
 }
 
 pub(crate) fn state_dir() -> PathBuf {
@@ -22,27 +32,31 @@ pub(crate) fn state_dir() -> PathBuf {
 }
 
 pub(crate) fn cache_dir() -> PathBuf {
-    let base = env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", home_dir().display()));
+    let base =
+        env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", home_dir().display()));
     PathBuf::from(base).join("anixie")
 }
 
 pub(crate) fn db_path() -> PathBuf {
     if let Ok(v) = env::var("SHOT_DB_PATH")
-        && !v.is_empty() {
-            return PathBuf::from(v);
-        }
+        && !v.is_empty()
+    {
+        return PathBuf::from(v);
+    }
     if let Ok(v) = env::var("ASSETS_DB")
-        && !v.is_empty() {
-            return PathBuf::from(v);
-        }
+        && !v.is_empty()
+    {
+        return PathBuf::from(v);
+    }
     state_dir().join("assets.db")
 }
 
 pub(crate) fn thumbnails_dir() -> PathBuf {
     if let Ok(v) = env::var("SHOT_THUMB_DIR")
-        && !v.is_empty() {
-            return PathBuf::from(v);
-        }
+        && !v.is_empty()
+    {
+        return PathBuf::from(v);
+    }
     cache_dir().join("thumbnails")
 }
 

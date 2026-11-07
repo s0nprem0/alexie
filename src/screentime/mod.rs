@@ -21,8 +21,12 @@ use time::{format_seconds, today_start, today_string};
 
 pub use watch::watch;
 
-pub fn db_path() -> std::path::PathBuf { db::db_path() }
-pub fn daily_file_path() -> std::path::PathBuf { db::daily_file_path() }
+pub fn db_path() -> std::path::PathBuf {
+    db::db_path()
+}
+pub fn daily_file_path() -> std::path::PathBuf {
+    db::daily_file_path()
+}
 
 pub fn handle(args: &[String]) -> String {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("show");
@@ -47,7 +51,11 @@ pub fn handle(args: &[String]) -> String {
                 return format!("ERR (exit {}) {}", code, err.trim());
             }
             let reply = out.trim();
-            return if reply.is_empty() || reply == "ok" { "OK".to_string() } else { reply.to_string() };
+            return if reply.is_empty() || reply == "ok" {
+                "OK".to_string()
+            } else {
+                reply.to_string()
+            };
         }
         _ => {}
     }
@@ -77,12 +85,16 @@ pub fn handle(args: &[String]) -> String {
                 .unwrap_or_default();
             let total: i64 = rows.iter().map(|(_, d)| *d).sum();
             if rows.is_empty() {
-                return "No screen time recorded today. (run `alexie screentime watch`)".to_string();
+                return "No screen time recorded today. (run `alexie screentime watch`)"
+                    .to_string();
             }
             let mut out = String::new();
             out.push_str(&format!("active: {}\n", format_seconds(total)));
             out.push('\n');
-            let rows: Vec<Vec<String>> = rows.into_iter().map(|(app, secs)| vec![app, format_seconds(secs)]).collect();
+            let rows: Vec<Vec<String>> = rows
+                .into_iter()
+                .map(|(app, secs)| vec![app, format_seconds(secs)])
+                .collect();
             out.push_str(&crate::table::render(&["App", "Time"], &rows));
             out.trim_end().to_string()
         }
@@ -95,7 +107,9 @@ pub fn handle(args: &[String]) -> String {
                 Err(e) => return format!("ERR: {}", e),
             };
             let mut apps = serde_json::Map::new();
-            if let Ok(iter) = stmt.query_map(params![ts], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
+            if let Ok(iter) = stmt.query_map(params![ts], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            }) {
                 for (k, v) in iter.filter_map(|r| r.ok()) {
                     apps.insert(k, serde_json::json!(v));
                 }

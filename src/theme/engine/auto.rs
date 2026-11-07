@@ -1,6 +1,6 @@
+use super::super::state::{self};
 use super::apps::set_theme;
 use super::generate::wallpaper_theme;
-use super::super::state::{self};
 use crate::proc::run;
 use std::env;
 use std::path::Path;
@@ -17,7 +17,11 @@ fn auto_minutes(s: &str) -> i64 {
 pub(crate) fn auto_mode(light: &str, dark: &str) -> String {
     auto_mode_at(light, dark, &{
         let (code, out, _) = run("date", &["+%H:%M"]);
-        if code == 0 { out.trim().to_string() } else { "12:00".to_string() }
+        if code == 0 {
+            out.trim().to_string()
+        } else {
+            "12:00".to_string()
+        }
     })
 }
 
@@ -26,7 +30,11 @@ fn auto_mode_at(light: &str, dark: &str, now: &str) -> String {
     let dark_at = auto_minutes(dark);
     let now_at = auto_minutes(now);
     if light_at <= dark_at {
-        if now_at >= light_at && now_at < dark_at { "light".into() } else { "dark".into() }
+        if now_at >= light_at && now_at < dark_at {
+            "light".into()
+        } else {
+            "dark".into()
+        }
     } else if now_at >= light_at || now_at < dark_at {
         "light".into()
     } else {
@@ -37,15 +45,26 @@ fn auto_mode_at(light: &str, dark: &str, now: &str) -> String {
 /// Find the paired/family/mode theme for auto switching, in order:
 /// explicit _pair, then same family + target mode, then any target
 /// mode theme (legacy falls back with a stderr note).
-pub(crate) fn find_auto_pair(palettes: &serde_json::Value, current: &str, target_mode: &str) -> Option<String> {
+pub(crate) fn find_auto_pair(
+    palettes: &serde_json::Value,
+    current: &str,
+    target_mode: &str,
+) -> Option<String> {
     let obj = palettes.as_object()?;
     let cur_entry = obj.get(current)?;
-    let pair = cur_entry.get("_pair").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
+    let pair = cur_entry
+        .get("_pair")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty());
     if let Some(p) = pair
-        && obj.contains_key(p) {
-            return Some(p.to_string());
-        }
-    let family = cur_entry.get("_family").and_then(|v| v.as_str()).unwrap_or("");
+        && obj.contains_key(p)
+    {
+        return Some(p.to_string());
+    }
+    let family = cur_entry
+        .get("_family")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     // same family + target mode, sorted for determinism
     let mut candidates: Vec<&String> = obj.keys().filter(|k| *k != current).collect();
     candidates.sort();
@@ -73,7 +92,9 @@ fn config_auto(light_key: &str, dark_key: &str) -> (String, String, bool) {
         .unwrap_or_else(|_| crate::config::get_str(&["theme", "auto", "dark"], "19:00"));
     let enabled = env::var("AUTO_SCHEDULE")
         .map(|v| v == "true")
-        .unwrap_or_else(|_| crate::config::get_bool(&["theme", "auto", "schedule", "enabled"], false));
+        .unwrap_or_else(|_| {
+            crate::config::get_bool(&["theme", "auto", "schedule", "enabled"], false)
+        });
     let _ = (light_key, dark_key);
     (light, dark, enabled)
 }
@@ -85,7 +106,12 @@ pub(crate) fn apply_auto() -> String {
         return "OK".to_string();
     }
     let state = state::read_state_json();
-    if state.as_ref().and_then(|s| s.get("pinned")).and_then(|p| p.as_bool()).unwrap_or(false) {
+    if state
+        .as_ref()
+        .and_then(|s| s.get("pinned"))
+        .and_then(|p| p.as_bool())
+        .unwrap_or(false)
+    {
         return "OK".to_string();
     }
     let target = auto_mode(&light, &dark);
@@ -113,12 +139,12 @@ pub(crate) fn apply_auto() -> String {
         return "OK".to_string();
     }
     if let Some(pair) = find_auto_pair(&state::palettes(), &name, &target)
-        && state::has_theme(&pair) {
-            return set_theme(&pair);
-        }
+        && state::has_theme(&pair)
+    {
+        return set_theme(&pair);
+    }
     "OK".to_string()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -141,13 +167,18 @@ mod tests {
             "other-light": {"_mode": "light", "_family": "other"},
             "other-dark": {"_mode": "dark", "_family": "other"}
         });
-        assert_eq!(find_auto_pair(&pals, "cur-dark", "light"), Some("paired-light".to_string()));
+        assert_eq!(
+            find_auto_pair(&pals, "cur-dark", "light"),
+            Some("paired-light".to_string())
+        );
         let pals2 = serde_json::json!({
             "cur-dark": {"_mode": "dark", "_family": "fam"},
             "fam-light": {"_mode": "light", "_family": "fam"},
             "other-light": {"_mode": "light", "_family": "other"}
         });
-        assert_eq!(find_auto_pair(&pals2, "cur-dark", "light"), Some("fam-light".to_string()));
+        assert_eq!(
+            find_auto_pair(&pals2, "cur-dark", "light"),
+            Some("fam-light".to_string())
+        );
     }
 }
-

@@ -69,7 +69,10 @@ fn disk_io_rates(dev: &str) -> (f64, f64) {
 }
 
 fn disk_usage(dev: &str) -> (f64, f64, f64, i32) {
-    let output = run_out(&lsblk(), &["-lnb", "-o", "FSSIZE,FSUSED", &format!("/dev/{dev}")]);
+    let output = run_out(
+        &lsblk(),
+        &["-lnb", "-o", "FSSIZE,FSUSED", &format!("/dev/{dev}")],
+    );
 
     let mut agg_total: u64 = 0;
     let mut agg_used: u64 = 0;

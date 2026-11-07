@@ -2,13 +2,19 @@ use std::env;
 use std::path::PathBuf;
 
 pub(crate) fn home_dir() -> PathBuf {
-    env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/tmp"))
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
 }
 
 pub(crate) fn presets_dir() -> PathBuf {
-    if let Ok(v) = env::var("THEME_PRESETS_DIR") { return PathBuf::from(v); }
+    if let Ok(v) = env::var("THEME_PRESETS_DIR") {
+        return PathBuf::from(v);
+    }
     let cfg = crate::config::get_str(&["theme", "presets_dir"], "");
-    if !cfg.is_empty() { return PathBuf::from(cfg); }
+    if !cfg.is_empty() {
+        return PathBuf::from(cfg);
+    }
     home_dir().join(".config/alexie/presets")
 }
 
@@ -38,15 +44,28 @@ pub(crate) fn switch_theme(wallpaper: &str, mode: &str) -> String {
         },
         _ => false,
     };
-    if cache_path.exists() && cache_fresh
-        && let Ok(s) = std::fs::read_to_string(&cache_path) {
-            return s;
-        }
+    if cache_path.exists()
+        && cache_fresh
+        && let Ok(s) = std::fs::read_to_string(&cache_path)
+    {
+        return s;
+    }
     let mut cmd = std::process::Command::new("matugen");
-    cmd.args(["image", path.to_str().unwrap_or(""), "--json", "hex", "--source-color-index", "0"]);
+    cmd.args([
+        "image",
+        path.to_str().unwrap_or(""),
+        "--json",
+        "hex",
+        "--source-color-index",
+        "0",
+    ]);
     match mode {
-        "light" => { cmd.args(["--mode", "light"]); }
-        "dark" => { cmd.args(["--mode", "dark"]); }
+        "light" => {
+            cmd.args(["--mode", "light"]);
+        }
+        "dark" => {
+            cmd.args(["--mode", "dark"]);
+        }
         _ => {}
     }
     let out = match cmd.output() {
@@ -89,29 +108,48 @@ pub(crate) fn load_preset_palette(name: &str) -> Option<std::collections::HashMa
     load_preset_palette_from(&presets_dir(), name)
 }
 
-pub(crate) fn get_matugen_palette(path: &std::path::Path, mode: &str) -> Option<std::collections::HashMap<String, String>> {
+pub(crate) fn get_matugen_palette(
+    path: &std::path::Path,
+    mode: &str,
+) -> Option<std::collections::HashMap<String, String>> {
     use std::process::Command;
     let mut cmd = Command::new("matugen");
-    cmd.args(["image", path.to_str()?, "--json", "hex", "--source-color-index", "0"]);
+    cmd.args([
+        "image",
+        path.to_str()?,
+        "--json",
+        "hex",
+        "--source-color-index",
+        "0",
+    ]);
     match mode {
-        "light" => { cmd.args(["--mode", "light"]); }
-        "dark" => { cmd.args(["--mode", "dark"]); }
+        "light" => {
+            cmd.args(["--mode", "light"]);
+        }
+        "dark" => {
+            cmd.args(["--mode", "dark"]);
+        }
         _ => {}
     }
     let out = cmd.output().ok()?;
-    if !out.status.success() { return None; }
+    if !out.status.success() {
+        return None;
+    }
     let json = String::from_utf8_lossy(&out.stdout);
     let data: serde_json::Value = serde_json::from_str(&json).ok()?;
     let colors = data.get("colors")?.as_object()?;
     let mut palette = std::collections::HashMap::new();
     for (name, modev) in colors {
-        if let Some(color) = modev.get("default").and_then(|d| d.get("color")).and_then(|c| c.as_str()) {
+        if let Some(color) = modev
+            .get("default")
+            .and_then(|d| d.get("color"))
+            .and_then(|c| c.as_str())
+        {
             palette.insert(name.clone(), color.to_string());
         }
     }
     Some(palette)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -122,7 +160,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "alexie-preset-test-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();

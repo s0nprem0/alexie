@@ -10,7 +10,6 @@ pub(crate) fn socket_path() -> PathBuf {
     PathBuf::from(runtime).join("alexie").join("daemon.sock")
 }
 
-
 /// Socket protocol: one JSON object per line,
 /// `{"args":[...],"stdin":"..."}`. Falls back to a whitespace-
 /// joined plain string for back-compat (e.g. `echo ping | socat -`).
@@ -29,18 +28,19 @@ pub(crate) fn encode_request(args: &[String], stdin_data: &str) -> String {
 pub(crate) fn decode_request(line: &str) -> WireRequest {
     let trimmed = line.trim();
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed)
-        && let Some(args) = value.get("args").and_then(|a| a.as_array()) {
-            let argv: Vec<String> = args
-                .iter()
-                .filter_map(|a| a.as_str().map(|s| s.to_string()))
-                .collect();
-            let stdin = value
-                .get("stdin")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string();
-            return WireRequest { args: argv, stdin };
-        }
+        && let Some(args) = value.get("args").and_then(|a| a.as_array())
+    {
+        let argv: Vec<String> = args
+            .iter()
+            .filter_map(|a| a.as_str().map(|s| s.to_string()))
+            .collect();
+        let stdin = value
+            .get("stdin")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+        return WireRequest { args: argv, stdin };
+    }
     WireRequest {
         args: trimmed.split_whitespace().map(|s| s.to_string()).collect(),
         stdin: String::new(),
@@ -99,7 +99,9 @@ pub(crate) fn run_daemon() {
 }
 
 fn handle_stream(mut stream: UnixStream) {
-    let Ok(clone) = stream.try_clone() else { return; };
+    let Ok(clone) = stream.try_clone() else {
+        return;
+    };
     let reader = BufReader::new(clone);
     for line in reader.lines() {
         let line = match line {
@@ -117,7 +119,6 @@ fn handle_stream(mut stream: UnixStream) {
         break;
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -184,10 +185,6 @@ mod tests {
         }
         server.join().unwrap();
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(
-            lines.join("\n").contains("http://"),
-            "got: {:?}",
-            lines
-        );
+        assert!(lines.join("\n").contains("http://"), "got: {:?}", lines);
     }
 }

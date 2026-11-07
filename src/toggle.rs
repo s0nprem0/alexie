@@ -1,16 +1,22 @@
 use crate::proc::run;
 
-
 fn hyprctl_temp() -> String {
     let (code, out, _) = run("hyprctl", &["hyprsunset", "temperature"]);
-    if code == 0 { out.trim().to_string() } else { String::new() }
+    if code == 0 {
+        out.trim().to_string()
+    } else {
+        String::new()
+    }
 }
 
 fn nightlight_state() -> &'static str {
     let t = hyprctl_temp();
     if !t.is_empty()
         && let Ok(n) = t.parse::<i64>()
-            && n < 6000 { return "on"; }
+        && n < 6000
+    {
+        return "on";
+    }
     "off"
 }
 
@@ -21,12 +27,25 @@ fn nightlight_toggle() {
         let _ = run("hyprctl", &["hyprsunset", "temperature", "4000"]);
     }
     let t = hyprctl_temp();
-    let _ = run("quickshell", &["ipc", "call", "indicator", "nightlight", &if t.is_empty() { "0".to_string() } else { t }]);
+    let _ = run(
+        "quickshell",
+        &[
+            "ipc",
+            "call",
+            "indicator",
+            "nightlight",
+            &if t.is_empty() { "0".to_string() } else { t },
+        ],
+    );
 }
 
 fn idle_state() -> &'static str {
     let (code, out, _) = run("quickshell", &["ipc", "call", "idle", "status"]);
-    if code == 0 && out.trim() == "on" { "on" } else { "off" }
+    if code == 0 && out.trim() == "on" {
+        "on"
+    } else {
+        "off"
+    }
 }
 
 fn idle_toggle() {
@@ -35,7 +54,11 @@ fn idle_toggle() {
 
 fn dnd_state() -> &'static str {
     let (code, out, _) = run("quickshell", &["ipc", "call", "notify", "status"]);
-    if code == 0 && out.trim() == "on" { "on" } else { "off" }
+    if code == 0 && out.trim() == "on" {
+        "on"
+    } else {
+        "off"
+    }
 }
 
 fn dnd_toggle() {
@@ -43,7 +66,10 @@ fn dnd_toggle() {
 }
 
 fn stayawake_state() -> &'static str {
-    let (code, _, _) = run("systemctl", &["--user", "is-active", "--quiet", "anixie-stayawake"]);
+    let (code, _, _) = run(
+        "systemctl",
+        &["--user", "is-active", "--quiet", "anixie-stayawake"],
+    );
     if code == 0 { "on" } else { "off" }
 }
 
@@ -53,7 +79,10 @@ fn stayawake_toggle() {
     } else {
         let _ = run("systemctl", &["--user", "start", "anixie-stayawake"]);
     }
-    let _ = run("quickshell", &["ipc", "call", "indicator", "stayawake", stayawake_state()]);
+    let _ = run(
+        "quickshell",
+        &["ipc", "call", "indicator", "stayawake", stayawake_state()],
+    );
 }
 
 fn label(name: &str) -> &'static str {
@@ -66,7 +95,9 @@ fn label(name: &str) -> &'static str {
     }
 }
 
-pub fn label_pub(name: &str) -> &'static str { label(name) }
+pub fn label_pub(name: &str) -> &'static str {
+    label(name)
+}
 
 pub fn is_toggle(name: &str) -> bool {
     matches!(name, "nightlight" | "idle" | "dnd" | "stayawake")
@@ -82,7 +113,9 @@ fn state_of(name: &str) -> String {
     }
 }
 
-pub fn state_pub(name: &str) -> String { state_of(name) }
+pub fn state_pub(name: &str) -> String {
+    state_of(name)
+}
 
 fn toggle_one(name: &str) {
     match name {

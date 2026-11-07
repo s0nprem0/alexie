@@ -70,7 +70,8 @@ fn transition(conn: &Connection, current: Session, aw: Option<(String, String)>)
 fn event_listener(tx: mpsc::Sender<()>) {
     loop {
         let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").unwrap_or_default();
-        let runtime = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".to_string());
+        let runtime =
+            std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/run/user/1000".to_string());
         let sock = format!("{}/hypr/{}/.socket2.sock", runtime, sig);
         let sock = if Path::new(&sock).exists() {
             sock
@@ -78,16 +79,18 @@ fn event_listener(tx: mpsc::Sender<()>) {
             format!("/tmp/hypr/{}/.socket2.sock", sig)
         };
         if Path::new(&sock).exists()
-            && let Ok(stream) = UnixStream::connect(&sock) {
-                let reader = BufReader::new(stream);
-                for line in reader.lines() {
-                    let Ok(line) = line else { break };
-                    if (line.starts_with("activewindow>>") || line.starts_with("activewindowv2>>"))
-                        && tx.send(()).is_err() {
-                            return;
-                        }
+            && let Ok(stream) = UnixStream::connect(&sock)
+        {
+            let reader = BufReader::new(stream);
+            for line in reader.lines() {
+                let Ok(line) = line else { break };
+                if (line.starts_with("activewindow>>") || line.starts_with("activewindowv2>>"))
+                    && tx.send(()).is_err()
+                {
+                    return;
                 }
             }
+        }
         thread::sleep(Duration::from_secs(2));
     }
 }
@@ -95,7 +98,10 @@ fn event_listener(tx: mpsc::Sender<()>) {
 pub fn watch() {
     let conn = match open_db() {
         Ok(c) => c,
-        Err(e) => { eprintln!("screentime: cannot open db: {}", e); return; }
+        Err(e) => {
+            eprintln!("screentime: cannot open db: {}", e);
+            return;
+        }
     };
     let (tx, rx) = mpsc::channel::<()>();
     thread::spawn(move || event_listener(tx));

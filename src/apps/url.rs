@@ -62,16 +62,36 @@ pub(crate) fn parse_web_search(query: &str) -> Option<WebHistoryItem> {
     };
 
     let (engine_name, search_url, query_text) = if trigger == "!yt" || trigger == "!youtube" {
-        ("youtube".to_string(), "https://www.youtube.com/results?search_query=".to_string(), search_text.to_string())
+        (
+            "youtube".to_string(),
+            "https://www.youtube.com/results?search_query=".to_string(),
+            search_text.to_string(),
+        )
     } else if trigger == "!g" || trigger == "!google" {
-        ("google".to_string(), "https://www.google.com/search?q=".to_string(), search_text.to_string())
+        (
+            "google".to_string(),
+            "https://www.google.com/search?q=".to_string(),
+            search_text.to_string(),
+        )
     } else if trigger == "!gh" || trigger == "!github" {
-        ("github".to_string(), "https://github.com/search?q=".to_string(), search_text.to_string())
+        (
+            "github".to_string(),
+            "https://github.com/search?q=".to_string(),
+            search_text.to_string(),
+        )
     } else if trigger == "!w" || trigger == "!wiki" || trigger == "!wikipedia" {
-        ("wikipedia".to_string(), "https://en.wikipedia.org/wiki/Special:Search?search=".to_string(), search_text.to_string())
+        (
+            "wikipedia".to_string(),
+            "https://en.wikipedia.org/wiki/Special:Search?search=".to_string(),
+            search_text.to_string(),
+        )
     } else {
         let q_text = q[1..].to_string();
-        ("duckduckgo".to_string(), "https://duckduckgo.com/?q=".to_string(), q_text)
+        (
+            "duckduckgo".to_string(),
+            "https://duckduckgo.com/?q=".to_string(),
+            q_text,
+        )
     };
 
     if query_text.is_empty() {
@@ -79,7 +99,11 @@ pub(crate) fn parse_web_search(query: &str) -> Option<WebHistoryItem> {
     }
 
     let encoded_query = url_encode(&query_text);
-    Some(WebHistoryItem { query: query_text, engine: engine_name, url: format!("{}{}", search_url, encoded_query) })
+    Some(WebHistoryItem {
+        query: query_text,
+        engine: engine_name,
+        url: format!("{}{}", search_url, encoded_query),
+    })
 }
 
 pub(crate) fn parse_desktop_file(path: &Path) -> Option<AppInfo> {
@@ -126,7 +150,12 @@ pub(crate) fn parse_desktop_file(path: &Path) -> Option<AppInfo> {
     }
 
     if let (Some(n), Some(e)) = (name, exec) {
-        Some(AppInfo { name: n, exec: e, icon: icon.unwrap_or_default(), count: 0 })
+        Some(AppInfo {
+            name: n,
+            exec: e,
+            icon: icon.unwrap_or_default(),
+            count: 0,
+        })
     } else {
         None
     }

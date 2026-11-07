@@ -8,40 +8,40 @@
 //!
 //! `main()` below is just argument routing between those.
 
-mod client;
-mod daemon;
-mod dbus;
 mod apps;
 mod capture;
+mod client;
 mod clipboard;
 mod color;
 mod config;
+mod daemon;
+mod dbus;
 mod dispatch;
 mod emoji;
 mod focus;
 mod help;
+mod menu;
+mod monitors;
 mod pick;
+mod power;
+mod power_watch;
+mod proc;
+mod record;
 mod reminder;
+mod screentime;
 mod share;
 mod share_picker;
 mod shortcuts;
-mod snapshot;
-mod table;
-mod webapp;
-mod menu;
-mod webcam_overlay;
-mod transcode;
-mod record;
-mod proc;
-mod monitors;
-mod power;
-mod power_watch;
-mod screentime;
 mod shot;
+mod snapshot;
 mod status;
+mod table;
 mod theme;
 mod toggle;
+mod transcode;
 mod wallpaper;
+mod webapp;
+mod webcam_overlay;
 
 // Back-compat for dbus.rs (`crate::handle_command`).
 pub use dispatch::handle_command;

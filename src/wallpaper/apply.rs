@@ -5,20 +5,36 @@
 //! here; the shell draws stills from background.json it watches.
 
 use super::catalog::is_video;
-use crate::theme::state::write_atomic as write_atomic_state;
 use super::select::wallpapers_ensure;
 use super::state::{current_theme, generated_file, posters_dir, state_dir};
 use crate::proc::{run, tool};
+use crate::theme::state::write_atomic as write_atomic_state;
 use std::path::Path;
 
-fn magick() -> String { tool("MAGICK", "magick") }
-fn ffmpeg() -> String { tool("FFMPEG", "ffmpeg") }
-fn mpvpaper() -> String { tool("MPVPAPER", "mpvpaper") }
-fn hyprctl() -> String { tool("HYPRCTL", "hyprctl") }
-fn quickshell() -> String { tool("QUICKSHELL", "quickshell") }
-fn sha256sum() -> String { tool("SHA256SUM", "sha256sum") }
-fn stat_bin() -> String { tool("STAT", "stat") }
-fn pkill() -> String { tool("PKILL", "pkill") }
+fn magick() -> String {
+    tool("MAGICK", "magick")
+}
+fn ffmpeg() -> String {
+    tool("FFMPEG", "ffmpeg")
+}
+fn mpvpaper() -> String {
+    tool("MPVPAPER", "mpvpaper")
+}
+fn hyprctl() -> String {
+    tool("HYPRCTL", "hyprctl")
+}
+fn quickshell() -> String {
+    tool("QUICKSHELL", "quickshell")
+}
+fn sha256sum() -> String {
+    tool("SHA256SUM", "sha256sum")
+}
+fn stat_bin() -> String {
+    tool("STAT", "stat")
+}
+fn pkill() -> String {
+    tool("PKILL", "pkill")
+}
 
 /// A palette colour by the legacy fallback chain: the live
 /// generation first, then the saved palette, then the preset.
@@ -26,19 +42,19 @@ pub(crate) fn colour(key: &str) -> String {
     let live = crate::theme::state::live_link().join("palette.json");
     if live.is_file()
         && let Ok(s) = std::fs::read_to_string(&live)
-            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
-            && let Some(c) = v.get(key).and_then(|x| x.as_str())
-        {
-            return c.to_string();
-        }
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
+        && let Some(c) = v.get(key).and_then(|x| x.as_str())
+    {
+        return c.to_string();
+    }
     let saved = crate::theme::state::generated_file();
     if saved.is_file()
         && let Ok(s) = std::fs::read_to_string(&saved)
-            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
-            && let Some(c) = v.get(key).and_then(|x| x.as_str())
-        {
-            return c.to_string();
-        }
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
+        && let Some(c) = v.get(key).and_then(|x| x.as_str())
+    {
+        return c.to_string();
+    }
     let theme = current_theme();
     let theme = if theme == "wallpaper" {
         crate::config::get_str(&["theme", "default"], "tokyo-night")
@@ -56,7 +72,15 @@ fn output_names() -> Vec<String> {
     serde_json::from_str::<serde_json::Value>(&out)
         .ok()
         .and_then(|v| v.as_array().cloned())
-        .map(|arr| arr.iter().filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string())).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    m.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -91,7 +115,10 @@ fn selection_json(theme: &str, output: &str) -> Option<serde_json::Value> {
     let value: serde_json::Value = serde_json::from_str(&content).ok()?;
     let theme_entry = value.get("themes")?.get(theme)?;
     let selected = if !output.is_empty() {
-        theme_entry.get("outputs").and_then(|o| o.get(output)).or_else(|| theme_entry.get("fallback"))
+        theme_entry
+            .get("outputs")
+            .and_then(|o| o.get(output))
+            .or_else(|| theme_entry.get("fallback"))
     } else {
         theme_entry.get("fallback")
     };
@@ -105,8 +132,16 @@ fn selection(theme: &str, output: &str) -> (String, String, bool) {
     if let Some(sel) = selection_json(theme, output)
         && !sel.is_null()
     {
-        let mode = sel.get("mode").and_then(|m| m.as_str()).unwrap_or("file").to_string();
-        let path = sel.get("path").and_then(|p| p.as_str()).unwrap_or("").to_string();
+        let mode = sel
+            .get("mode")
+            .and_then(|m| m.as_str())
+            .unwrap_or("file")
+            .to_string();
+        let path = sel
+            .get("path")
+            .and_then(|p| p.as_str())
+            .unwrap_or("")
+            .to_string();
         let video = sel.get("video").and_then(|v| v.as_bool()).unwrap_or(false);
         return (mode, path, video);
     }
@@ -121,17 +156,46 @@ fn selection(theme: &str, output: &str) -> (String, String, bool) {
 
 fn stat_field(path: &Path, fmt: &str) -> String {
     let (code, out, _) = run(&stat_bin(), &["-Lc", fmt, &path.to_string_lossy()]);
-    if code == 0 { out.trim().to_string() } else { "0".to_string() }
+    if code == 0 {
+        out.trim().to_string()
+    } else {
+        "0".to_string()
+    }
 }
 
 fn sha256_hex(input: &str) -> String {
     let (code, out, _) = crate::proc::run_with_stdin(&sha256sum(), &[], input);
-    if code == 0 { out.split_whitespace().next().unwrap_or("").to_string() } else { String::new() }
+    if code == 0 {
+        out.split_whitespace().next().unwrap_or("").to_string()
+    } else {
+        String::new()
+    }
 }
 
 fn poster_frame(path: &Path, w: &str, h: &str, out: &Path) -> bool {
     for seek in ["1", "0"] {
-        let (code, _, _) = run(&ffmpeg(), &["-y", "-loglevel", "error", "-ss", seek, "-i", &path.to_string_lossy(), "-frames:v", "1", "-vf", &format!("scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}", w, h, w, h), "-q:v", "2", &out.to_string_lossy()]);
+        let (code, _, _) = run(
+            &ffmpeg(),
+            &[
+                "-y",
+                "-loglevel",
+                "error",
+                "-ss",
+                seek,
+                "-i",
+                &path.to_string_lossy(),
+                "-frames:v",
+                "1",
+                "-vf",
+                &format!(
+                    "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}",
+                    w, h, w, h
+                ),
+                "-q:v",
+                "2",
+                &out.to_string_lossy(),
+            ],
+        );
         if code == 0 && std::fs::metadata(out).map(|m| m.len()).unwrap_or(0) > 0 {
             return true;
         }
@@ -169,7 +233,11 @@ fn poster_for(path: &Path, output: &str) -> String {
             let _ = std::fs::remove_file(&tmp);
         }
     }
-    if poster.is_file() { poster.to_string_lossy().to_string() } else { String::new() }
+    if poster.is_file() {
+        poster.to_string_lossy().to_string()
+    } else {
+        String::new()
+    }
 }
 
 /// The palette gradient for one output. Pure function of palette +
@@ -183,9 +251,19 @@ fn generate(output: &str) -> Result<(), String> {
     }
     let palette = crate::theme::state::live_link().join("palette.json");
     if file.is_file()
-        && std::fs::read_to_string(file.with_extension("png.size")).map(|s| s.trim() == size).unwrap_or(false)
+        && std::fs::read_to_string(file.with_extension("png.size"))
+            .map(|s| s.trim() == size)
+            .unwrap_or(false)
         && palette.is_file()
-        && std::fs::metadata(&file).ok().and_then(|m| m.modified().ok()).map(|t| t >= std::fs::metadata(&palette).and_then(|m| m.modified()).unwrap_or(t)).unwrap_or(false)
+        && std::fs::metadata(&file)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .map(|t| {
+                t >= std::fs::metadata(&palette)
+                    .and_then(|m| m.modified())
+                    .unwrap_or(t)
+            })
+            .unwrap_or(false)
     {
         return Ok(());
     }
@@ -193,16 +271,31 @@ fn generate(output: &str) -> Result<(), String> {
     let surface = colour("surface");
     let primary = colour("primary");
     let tmp = file.with_extension(format!("generate-{}.tmp.png", std::process::id()));
-    let (code, _, err) = run(&magick(), &[
-        "-size", &size,
-        &format!("gradient:{}-{}", bg, surface),
-        "-size", &size,
-        &format!("radial-gradient:none-{}", primary),
-        "-alpha", "set", "-channel", "A", "-evaluate", "multiply", "0.10", "+channel",
-        "-compose", "over", "-composite",
-        "-depth", "8",
-        &tmp.to_string_lossy(),
-    ]);
+    let (code, _, err) = run(
+        &magick(),
+        &[
+            "-size",
+            &size,
+            &format!("gradient:{}-{}", bg, surface),
+            "-size",
+            &size,
+            &format!("radial-gradient:none-{}", primary),
+            "-alpha",
+            "set",
+            "-channel",
+            "A",
+            "-evaluate",
+            "multiply",
+            "0.10",
+            "+channel",
+            "-compose",
+            "over",
+            "-composite",
+            "-depth",
+            "8",
+            &tmp.to_string_lossy(),
+        ],
+    );
     if code != 0 {
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("generate failed: {}", err.trim()));
@@ -213,7 +306,9 @@ fn generate(output: &str) -> Result<(), String> {
 }
 
 fn prune_poster_cache(background: &Path) {
-    let Ok(content) = std::fs::read_to_string(background) else { return };
+    let Ok(content) = std::fs::read_to_string(background) else {
+        return;
+    };
     let keep: Vec<String> = serde_json::from_str::<serde_json::Value>(&content)
         .ok()
         .map(|v| {
@@ -225,7 +320,11 @@ fn prune_poster_cache(background: &Path) {
                     }
                 }
             }
-            if let Some(p) = v.get("fallback").and_then(|f| f.get("poster")).and_then(|p| p.as_str()) {
+            if let Some(p) = v
+                .get("fallback")
+                .and_then(|f| f.get("poster"))
+                .and_then(|p| p.as_str())
+            {
                 keep.push(p.to_string());
             }
             keep
@@ -235,7 +334,9 @@ fn prune_poster_cache(background: &Path) {
 }
 
 fn prune_cache(dir: &Path, keep: &[String]) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let p = entry.path();
         if keep.iter().any(|k| Path::new(k) == p) {
@@ -266,7 +367,12 @@ fn prune_generated(outputs: &[String]) {
     }
     let fallback = generated_file("");
     keep.push(fallback.to_string_lossy().to_string());
-    keep.push(fallback.with_extension("png.size").to_string_lossy().to_string());
+    keep.push(
+        fallback
+            .with_extension("png.size")
+            .to_string_lossy()
+            .to_string(),
+    );
     prune_cache(&dir, &keep);
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
@@ -295,10 +401,18 @@ pub(crate) fn apply() -> String {
     if fallback_mode == "generated" || !Path::new(&fallback_path).is_file() {
         let _ = generate("");
         let generated = generated_file("");
-        fallback_path = if generated.is_file() { generated.to_string_lossy().to_string() } else { String::new() };
+        fallback_path = if generated.is_file() {
+            generated.to_string_lossy().to_string()
+        } else {
+            String::new()
+        };
         fallback_video = false;
     }
-    let fallback_poster = if fallback_video { poster_for(Path::new(&fallback_path), "") } else { String::new() };
+    let fallback_poster = if fallback_video {
+        poster_for(Path::new(&fallback_path), "")
+    } else {
+        String::new()
+    };
 
     let mut rows: Vec<(String, String, bool, String)> = Vec::new();
     for output in &outputs {
@@ -308,7 +422,11 @@ pub(crate) fn apply() -> String {
         if mode == "generated" || !Path::new(&path).is_file() {
             let _ = generate(output);
             let generated = generated_file(output);
-            path = if generated.is_file() { generated.to_string_lossy().to_string() } else { String::new() };
+            path = if generated.is_file() {
+                generated.to_string_lossy().to_string()
+            } else {
+                String::new()
+            };
             video = false;
         }
         let poster = if video {
@@ -328,18 +446,31 @@ pub(crate) fn apply() -> String {
         rows.push((output.clone(), path, video, poster));
     }
     if outputs.is_empty() {
-        rows.push((String::new(), fallback_path.clone(), fallback_video, fallback_poster.clone()));
+        rows.push((
+            String::new(),
+            fallback_path.clone(),
+            fallback_video,
+            fallback_poster.clone(),
+        ));
     }
 
     let mut map = serde_json::Map::new();
     for (output, path, video, poster) in &rows {
-        map.insert(output.clone(), serde_json::json!({"path": path, "video": video, "poster": poster}));
+        map.insert(
+            output.clone(),
+            serde_json::json!({"path": path, "video": video, "poster": poster}),
+        );
     }
     let value = serde_json::json!({
         "outputs": serde_json::Value::Object(map),
         "fallback": {"path": fallback_path, "video": fallback_video, "poster": fallback_poster},
     });
-    if write_atomic_state(&background, &serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".to_string())).is_err() {
+    if write_atomic_state(
+        &background,
+        &serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".to_string()),
+    )
+    .is_err()
+    {
         return "ERR could not write background.json".to_string();
     }
 
@@ -373,12 +504,17 @@ pub(crate) fn chosen() -> String {
         && !path.is_empty()
     {
         let mode = value
-            .get("themes").and_then(|t| t.get(&theme))
+            .get("themes")
+            .and_then(|t| t.get(&theme))
             .and_then(|t| t.get("fallback"))
             .and_then(|f| f.get("mode"))
             .and_then(|m| m.as_str())
             .unwrap_or("file");
-        return if mode == "generated" { "generated".to_string() } else { path.to_string() };
+        return if mode == "generated" {
+            "generated".to_string()
+        } else {
+            path.to_string()
+        };
     }
     let file = state_dir().join(format!("wallpaper.{}", theme));
     if let Ok(s) = std::fs::read_to_string(&file) {

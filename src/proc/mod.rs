@@ -8,13 +8,13 @@
 //! All public names are re-exported here so `crate::proc::*`
 //! callers are unchanged.
 
-mod tool;
 mod exec;
 mod file;
+mod tool;
 
 pub use exec::{run, run_bytes_with_stdin, run_with_stdin, shell_quote};
-pub use tool::{find_in_path, notify_send, quickshell, resolve_tool, tool, wl_copy};
 pub use file::{copy_file_to_clipboard, copy_text_to_clipboard, run_stdout_to_file, tmp_file};
+pub use tool::{find_in_path, notify_send, quickshell, resolve_tool, tool, wl_copy};
 
 #[cfg(test)]
 mod tests {
@@ -43,7 +43,10 @@ mod tests {
         let dir0 = std::env::temp_dir().join(format!(
             "alexie-copy-wl-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&dir0).unwrap();
         let wl = dir0.join("wl-copy");
@@ -61,7 +64,9 @@ mod tests {
         let mut code = -1;
         for _ in 0..5 {
             code = copy_text_to_clipboard(&wl, "text/plain", "hello", &[]);
-            if code == 0 { break; }
+            if code == 0 {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert_eq!(code, 0);
@@ -69,7 +74,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "alexie-copy-test-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let f = dir.join("data.bin");
@@ -88,14 +96,19 @@ mod tests {
         let mut code = -1;
         for _ in 0..5 {
             code = copy_file_to_clipboard(&wl1.to_string_lossy(), "image/png", &f);
-            if code == 0 { break; }
+            if code == 0 {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert_eq!(code, 0);
         let f_str = f.to_string_lossy();
         let (code, _err) = run_stdout_to_file("cat", &[f_str.as_ref()], &dir.join("out.bin"));
         assert_eq!(code, 0);
-        assert_eq!(std::fs::read(dir.join("out.bin")).unwrap(), b"\x89PNG\r\n\x1a\n");
+        assert_eq!(
+            std::fs::read(dir.join("out.bin")).unwrap(),
+            b"\x89PNG\r\n\x1a\n"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

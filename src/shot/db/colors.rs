@@ -1,8 +1,8 @@
 //! Picked colors + OCR history.
 
-use rusqlite::{Connection, params};
 use super::paths::now_millis;
 use super::types::{OcrItem, PickedColor};
+use rusqlite::{Connection, params};
 
 pub fn add_color(conn: &Connection, hex: &str) -> Result<i64, String> {
     let hex = hex.trim().to_lowercase();
@@ -19,7 +19,9 @@ pub fn add_color(conn: &Connection, hex: &str) -> Result<i64, String> {
 }
 
 pub fn remove_color(conn: &Connection, id: i64) -> Result<(), String> {
-    let rows = conn.execute("DELETE FROM colors WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+    let rows = conn
+        .execute("DELETE FROM colors WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
     if rows == 0 {
         return Err(format!("color id {id} not found"));
     }
@@ -27,7 +29,8 @@ pub fn remove_color(conn: &Connection, id: i64) -> Result<(), String> {
 }
 
 pub fn clear_colors(conn: &Connection) -> Result<(), String> {
-    conn.execute("DELETE FROM colors", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM colors", [])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -37,7 +40,11 @@ pub fn list_colors(conn: &Connection, limit: i64) -> Result<Vec<PickedColor>, St
         .map_err(|e| e.to_string())?;
     let iter = stmt
         .query_map(params![limit], |r| {
-            Ok(PickedColor { id: r.get(0)?, hex: r.get(1)?, picked_at: r.get(2)? })
+            Ok(PickedColor {
+                id: r.get(0)?,
+                hex: r.get(1)?,
+                picked_at: r.get(2)?,
+            })
         })
         .map_err(|e| e.to_string())?;
     Ok(iter.flatten().collect())
@@ -59,13 +66,19 @@ pub fn list_ocr(conn: &Connection, limit: i64) -> Result<Vec<OcrItem>, String> {
         .map_err(|e| e.to_string())?;
     let iter = stmt
         .query_map(params![limit], |r| {
-            Ok(OcrItem { id: r.get(0)?, item_type: "ocr".to_string(), detail: r.get(1)?, created_at: r.get(2)? })
+            Ok(OcrItem {
+                id: r.get(0)?,
+                item_type: "ocr".to_string(),
+                detail: r.get(1)?,
+                created_at: r.get(2)?,
+            })
         })
         .map_err(|e| e.to_string())?;
     Ok(iter.flatten().collect())
 }
 
 pub fn clear_ocr(conn: &Connection) -> Result<(), String> {
-    conn.execute("DELETE FROM ocr_history", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM ocr_history", [])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }

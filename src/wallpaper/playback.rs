@@ -61,7 +61,11 @@ pub(crate) fn status_video() -> String {
 }
 
 pub(crate) fn watch_wallpapers(args: &[String]) -> ! {
-    let dirs = if args.len() > 1 { vec![PathBuf::from(&args[1])] } else { watch_dirs() };
+    let dirs = if args.len() > 1 {
+        vec![PathBuf::from(&args[1])]
+    } else {
+        watch_dirs()
+    };
     let interval: u64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(2);
     // Run in foreground; generate thumbnails and search index.
     loop {
@@ -71,7 +75,10 @@ pub(crate) fn watch_wallpapers(args: &[String]) -> ! {
         let mut entries = Vec::new();
         for path in files {
             let tp = super::library::thumb_path(&cache_dir(), &path);
-            let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let stem = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             entries.push(serde_json::json!({
                 "path": path.to_string_lossy(),
                 "thumb": tp.to_string_lossy(),
@@ -86,7 +93,6 @@ pub(crate) fn watch_wallpapers(args: &[String]) -> ! {
         std::thread::sleep(std::time::Duration::from_secs(interval));
     }
 }
-
 
 #[cfg(test)]
 mod tests {

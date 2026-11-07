@@ -1,13 +1,26 @@
 pub(crate) fn transform_index(name: &str) -> Option<usize> {
-    let names = ["normal","90","180","270","flipped","flipped-90","flipped-180","flipped-270"];
+    let names = [
+        "normal",
+        "90",
+        "180",
+        "270",
+        "flipped",
+        "flipped-90",
+        "flipped-180",
+        "flipped-270",
+    ];
     names.iter().position(|&n| n == name)
 }
 
-
 pub(crate) fn parse_transform(v: &str) -> Option<usize> {
-    if let Some(i) = transform_index(v) { return Some(i); }
+    if let Some(i) = transform_index(v) {
+        return Some(i);
+    }
     if let Ok(i) = v.parse::<usize>()
-        && i < 8 { return Some(i); }
+        && i < 8
+    {
+        return Some(i);
+    }
     None
 }
 
@@ -17,31 +30,55 @@ pub(crate) fn valid_int(s: &str) -> bool {
 }
 
 pub(crate) fn valid_mode(v: &str) -> bool {
-    if matches!(v, "preferred" | "highres" | "highrr" | "maxwidth") { return true; }
+    if matches!(v, "preferred" | "highres" | "highrr" | "maxwidth") {
+        return true;
+    }
     let mut at = v.splitn(2, '@');
     let base = at.next().unwrap_or("");
     let rate = at.next();
-    if at.count() > 0 { return false; }
+    if at.count() > 0 {
+        return false;
+    }
     let mut xb = base.splitn(2, 'x');
     let w = xb.next().unwrap_or("");
     let h = xb.next().unwrap_or("");
-    if xb.count() > 0 { return false; }
-    if w.is_empty() || !w.chars().all(|c| c.is_ascii_digit()) { return false; }
-    if h.is_empty() || !h.chars().all(|c| c.is_ascii_digit()) { return false; }
+    if xb.count() > 0 {
+        return false;
+    }
+    if w.is_empty() || !w.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    if h.is_empty() || !h.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
     if let Some(r) = rate
-        && (r.is_empty() || !r.chars().all(|c| c.is_ascii_digit() || c == '.')) { return false; }
+        && (r.is_empty() || !r.chars().all(|c| c.is_ascii_digit() || c == '.'))
+    {
+        return false;
+    }
     // ensure at most one '@'
-    if v.matches('@').count() > 1 { return false; }
+    if v.matches('@').count() > 1 {
+        return false;
+    }
     true
 }
 
 pub(crate) fn valid_position(v: &str) -> bool {
-    if matches!(v, "auto" | "auto-left" | "auto-right" | "auto-up" | "auto-down") { return true; }
+    if matches!(
+        v,
+        "auto" | "auto-left" | "auto-right" | "auto-up" | "auto-down"
+    ) {
+        return true;
+    }
     let mut xb = v.splitn(2, 'x');
     let x = xb.next().unwrap_or("");
     let y = xb.next().unwrap_or("");
-    if xb.count() > 0 { return false; }
-    if !v.contains('x') { return false; }
+    if xb.count() > 0 {
+        return false;
+    }
+    if !v.contains('x') {
+        return false;
+    }
     valid_int(x) && valid_int(y)
 }
 
@@ -94,7 +131,6 @@ pub(crate) fn validate_setting(key: &str, value: &str) -> Result<String, String>
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,8 +170,14 @@ mod tests {
     fn validate_setting_normalizes() {
         assert_eq!(validate_setting("scale", "1.5").unwrap(), "1.5");
         assert_eq!(validate_setting("transform", "flipped-90").unwrap(), "5");
-        assert_eq!(validate_setting("mode", "1920x1080@60Hz").unwrap(), "1920x1080@60");
-        assert_eq!(validate_setting("position", "auto-left").unwrap(), "auto-left");
+        assert_eq!(
+            validate_setting("mode", "1920x1080@60Hz").unwrap(),
+            "1920x1080@60"
+        );
+        assert_eq!(
+            validate_setting("position", "auto-left").unwrap(),
+            "auto-left"
+        );
         assert!(validate_setting("scale", "99").is_err());
         assert!(validate_setting("mode", "notamode").is_err());
     }
@@ -144,11 +186,16 @@ mod tests {
     fn parse_output_name_validation() {
         // valid names
         for n in ["eDP-1", "HDMI-A-1", "DP-2", "Virtual-1"] {
-            assert!(n.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.'));
+            assert!(
+                n.chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+            );
         }
         // invalid
         for n in ["", "eDP 1", "hdmi;rm", "a/b"] {
-            let valid = !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.');
+            let valid = !n.is_empty()
+                && n.chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.');
             assert!(!valid, "{} should be invalid", n);
         }
     }

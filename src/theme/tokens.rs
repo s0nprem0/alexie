@@ -44,9 +44,17 @@ impl TokenSpec {
         let alphas = v
             .get("alphas")
             .and_then(|a| a.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default();
-        Ok(Self { colors, derived, alphas })
+        Ok(Self {
+            colors,
+            derived,
+            alphas,
+        })
     }
 
     pub(crate) fn embedded() -> Self {
@@ -63,7 +71,11 @@ pub(crate) fn tokens_path() -> Option<PathBuf> {
         return Some(PathBuf::from(v));
     }
     let v = crate::config::get_str(&["theme", "tokens_json"], "");
-    if v.trim().is_empty() { None } else { Some(PathBuf::from(v)) }
+    if v.trim().is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(v))
+    }
 }
 
 pub(crate) fn load_spec() -> TokenSpec {
@@ -87,7 +99,10 @@ fn token_name(spec: &TokenSpec, key: &str) -> Option<String> {
     }
 }
 
-fn palette_value(palette: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<String> {
+fn palette_value(
+    palette: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Option<String> {
     palette
         .get(key)
         .and_then(|v| v.as_str())
@@ -109,16 +124,28 @@ pub(crate) fn substitution_map(
         out.insert(format!("@{token}_HEX@"), hex.clone());
         for alpha in &spec.alphas {
             let lower = alpha.to_ascii_lowercase();
-            out.insert(format!("@{token}_ALPHA_{alpha}@"), format!("#{}{}", hex, lower));
-            out.insert(format!("@{token}_BARE_{alpha}@"), format!("{}{}", hex, lower));
-            out.insert(format!("@{token}_RGBA_{alpha}@"), format!("rgba({}{})", hex, lower));
+            out.insert(
+                format!("@{token}_ALPHA_{alpha}@"),
+                format!("#{}{}", hex, lower),
+            );
+            out.insert(
+                format!("@{token}_BARE_{alpha}@"),
+                format!("{}{}", hex, lower),
+            );
+            out.insert(
+                format!("@{token}_RGBA_{alpha}@"),
+                format!("rgba({}{})", hex, lower),
+            );
         }
         let _ = key;
     };
 
     // Base colors: palette key -> token.
     for key in spec.colors.keys() {
-        let token = match token_name(spec, key) { Some(t) => t, None => continue };
+        let token = match token_name(spec, key) {
+            Some(t) => t,
+            None => continue,
+        };
         let value = match palette_value(palette, key) {
             Some(v) => v,
             None => {
@@ -132,7 +159,10 @@ pub(crate) fn substitution_map(
     }
     // Derived (ANSI) tokens: derived key -> source palette key.
     for (dkey, src) in &spec.derived {
-        let token = match token_name(spec, dkey) { Some(t) => t, None => continue };
+        let token = match token_name(spec, dkey) {
+            Some(t) => t,
+            None => continue,
+        };
         // Prefer an explicit palette value for the derived key, else the source.
         let value = palette_value(palette, dkey).or_else(|| palette_value(palette, src));
         if let Some(v) = value {
@@ -165,18 +195,30 @@ mod tests {
         let m = substitution_map(&palette(), &spec(), &BTreeMap::new());
         assert_eq!(m.get("@BG@").map(String::as_str), Some("#0f111a"));
         assert_eq!(m.get("@BG_HEX@").map(String::as_str), Some("0f111a"));
-        assert_eq!(m.get("@BG_ALPHA_AA@").map(String::as_str), Some("#0f111aaa"));
+        assert_eq!(
+            m.get("@BG_ALPHA_AA@").map(String::as_str),
+            Some("#0f111aaa")
+        );
         assert_eq!(m.get("@BG_BARE_AA@").map(String::as_str), Some("0f111aaa"));
-        assert_eq!(m.get("@BG_RGBA_AA@").map(String::as_str), Some("rgba(0f111aaa)"));
+        assert_eq!(
+            m.get("@BG_RGBA_AA@").map(String::as_str),
+            Some("rgba(0f111aaa)")
+        );
         // derived ANSI_4 from primary
         assert_eq!(m.get("@ANSI_4@").map(String::as_str), Some("#82aaff"));
     }
 
     #[test]
     fn extras_passthrough() {
-        let extras = BTreeMap::from([("HELIX_PARENT".to_string(), "base16_default_dark".to_string())]);
+        let extras = BTreeMap::from([(
+            "HELIX_PARENT".to_string(),
+            "base16_default_dark".to_string(),
+        )]);
         let m = substitution_map(&palette(), &spec(), &extras);
-        assert_eq!(m.get("@HELIX_PARENT@").map(String::as_str), Some("base16_default_dark"));
+        assert_eq!(
+            m.get("@HELIX_PARENT@").map(String::as_str),
+            Some("base16_default_dark")
+        );
     }
 
     #[test]

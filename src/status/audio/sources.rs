@@ -1,11 +1,15 @@
 //! Media sources via playerctl.
 
 use super::super::common::playerctl;
-use super::types::{load_current_player, MediaInfo, MediaSource};
+use super::types::{MediaInfo, MediaSource, load_current_player};
 pub(crate) fn get_all_media_sources() -> Vec<MediaSource> {
     let players_str = {
         let (code, out, _) = crate::proc::run(&playerctl(), &["-l"]);
-        if code == 0 { out } else { return Vec::new(); }
+        if code == 0 {
+            out
+        } else {
+            return Vec::new();
+        }
     };
     let mut sources: Vec<MediaSource> = Vec::new();
     for line in players_str.lines() {
@@ -15,7 +19,11 @@ pub(crate) fn get_all_media_sources() -> Vec<MediaSource> {
         }
         let status = {
             let (code, out, _) = crate::proc::run(&playerctl(), &["--player", player, "status"]);
-            if code == 0 { out.trim().to_string() } else { "Stopped".to_string() }
+            if code == 0 {
+                out.trim().to_string()
+            } else {
+                "Stopped".to_string()
+            }
         };
         let title = playerctl_metadata(player, "{{title}}").unwrap_or_default();
         let artist = playerctl_metadata(player, "{{artist}}").unwrap_or_default();
@@ -49,7 +57,10 @@ pub(crate) fn resolve_current_player(sources: &[MediaSource]) -> Option<String> 
 }
 
 pub(crate) fn playerctl_metadata(player: &str, format: &str) -> Option<String> {
-    let (code, out, _) = crate::proc::run(&playerctl(), &["--player", player, "metadata", "--format", format]);
+    let (code, out, _) = crate::proc::run(
+        &playerctl(),
+        &["--player", player, "metadata", "--format", format],
+    );
     if code == 0 {
         Some(out.trim().to_string())
     } else {
@@ -69,7 +80,13 @@ pub(crate) fn playerctl_position(player: &str) -> f64 {
 pub(crate) fn playerctl_length(player: &str) -> f64 {
     let (code, out, _) = crate::proc::run(
         &playerctl(),
-        &["--player", player, "metadata", "--format", "{{mpris:length}}"],
+        &[
+            "--player",
+            player,
+            "metadata",
+            "--format",
+            "{{mpris:length}}",
+        ],
     );
     if code == 0 {
         out.trim()
@@ -85,7 +102,11 @@ pub(crate) fn get_media_info_for(player: Option<&str>) -> Option<MediaInfo> {
     let target_player = player?;
     let status_out = {
         let (code, out, _) = crate::proc::run(&playerctl(), &["--player", target_player, "status"]);
-        if code == 0 { out.trim().to_string() } else { "Stopped".to_string() }
+        if code == 0 {
+            out.trim().to_string()
+        } else {
+            "Stopped".to_string()
+        }
     };
     let player_name = playerctl_metadata(target_player, "{{playerName}}")
         .unwrap_or_else(|| target_player.to_string());

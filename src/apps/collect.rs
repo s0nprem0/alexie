@@ -1,14 +1,14 @@
 //! Desktop-app collection + usage aggregation.
 
+use super::db::{get_bookmarks, get_file_history, get_usage_map, get_web_history};
+use super::paths::home_dir_str;
+use super::types::{AppInfo, AppsResponse};
+use super::url::parse_desktop_file;
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::Path;
-use super::db::{get_bookmarks, get_file_history, get_usage_map, get_web_history};
-use super::types::{AppInfo, AppsResponse};
-use super::url::parse_desktop_file;
-use super::paths::home_dir_str;
 
 pub(crate) fn collect_apps(conn: &Connection) -> (Vec<AppInfo>, Vec<AppInfo>) {
     let home = home_dir_str();
@@ -19,11 +19,15 @@ pub(crate) fn collect_apps(conn: &Connection) -> (Vec<AppInfo>, Vec<AppInfo>) {
     let mut paths: Vec<String> = Vec::new();
 
     // 1. XDG_DATA_HOME / ~/.local/share/applications (highest priority)
-    let xdg_data_home = env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{}/.local/share", home));
+    let xdg_data_home =
+        env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{}/.local/share", home));
     paths.push(format!("{}/applications", xdg_data_home));
 
     // 2. Flatpak user
-    paths.push(format!("{}/.local/share/flatpak/exports/share/applications", home));
+    paths.push(format!(
+        "{}/.local/share/flatpak/exports/share/applications",
+        home
+    ));
 
     // 3. XDG_DATA_DIRS
     if let Ok(xdg_data_dirs) = env::var("XDG_DATA_DIRS") {
@@ -50,12 +54,13 @@ pub(crate) fn collect_apps(conn: &Connection) -> (Vec<AppInfo>, Vec<AppInfo>) {
                 let p = entry.path();
                 if p.extension().is_some_and(|ext| ext == "desktop")
                     && let Some(file_name) = p.file_name().and_then(|f| f.to_str())
-                        && let Some(mut app_info) = parse_desktop_file(&p) {
-                            if let Some(&count) = usage_map.get(&app_info.name) {
-                                app_info.count = count;
-                            }
-                            apps.entry(file_name.to_string()).or_insert(app_info);
-                        }
+                    && let Some(mut app_info) = parse_desktop_file(&p)
+                {
+                    if let Some(&count) = usage_map.get(&app_info.name) {
+                        app_info.count = count;
+                    }
+                    apps.entry(file_name.to_string()).or_insert(app_info);
+                }
             }
         }
     }
@@ -63,8 +68,16 @@ pub(crate) fn collect_apps(conn: &Connection) -> (Vec<AppInfo>, Vec<AppInfo>) {
     let mut all_apps: Vec<AppInfo> = apps.into_values().collect();
     all_apps.sort_by_key(|a| a.name.to_lowercase());
 
-    let mut most_used: Vec<AppInfo> = all_apps.iter().filter(|app| app.count > 0).cloned().collect();
-    most_used.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    let mut most_used: Vec<AppInfo> = all_apps
+        .iter()
+        .filter(|app| app.count > 0)
+        .cloned()
+        .collect();
+    most_used.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
     most_used.truncate(5);
 
     (all_apps, most_used)

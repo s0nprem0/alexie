@@ -5,12 +5,24 @@ pub(crate) fn read_saved_map() -> std::collections::HashMap<String, (String, Str
     let mut map = std::collections::HashMap::new();
     if let Ok(content) = std::fs::read_to_string(state_file()) {
         for line in content.lines() {
-            if line.starts_with('#') { continue; }
+            if line.starts_with('#') {
+                continue;
+            }
             let t: Vec<&str> = line.split_whitespace().collect();
-            if t.is_empty() { continue; }
+            if t.is_empty() {
+                continue;
+            }
             let name = t[0].to_string();
-            let position = t.get(5).filter(|s| !s.is_empty()).unwrap_or(&"auto").to_string();
-            let mode = t.get(6).filter(|s| !s.is_empty()).unwrap_or(&"preferred").to_string();
+            let position = t
+                .get(5)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&"auto")
+                .to_string();
+            let mode = t
+                .get(6)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&"preferred")
+                .to_string();
             // normalize a saved disabled/mode that an older or broken port left
             let mode = mode.strip_suffix("Hz").unwrap_or(&mode).to_string();
             map.insert(name, (position, mode));
@@ -32,24 +44,40 @@ pub(crate) fn list_action(snap: &Snapshot) -> String {
     let saved = read_saved_map();
 
     for m in arr.iter_mut() {
-        let name = m.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let name = m
+            .get("name")
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string();
 
         // resolve mirrorOf (id -> name)
         let mirror_raw = m.get("mirrorOf").cloned().unwrap_or(Value::Null);
         let mut mirror = match mirror_raw {
             Value::String(s) => s,
             Value::Number(n) => n.to_string(),
-            Value::Bool(b) => if b { "true".to_string() } else { "none".to_string() },
+            Value::Bool(b) => {
+                if b {
+                    "true".to_string()
+                } else {
+                    "none".to_string()
+                }
+            }
             _ => "none".to_string(),
         };
-        if mirror.is_empty() { mirror = "none".to_string(); }
+        if mirror.is_empty() {
+            mirror = "none".to_string();
+        }
         if mirror != "none"
             && let Ok(id) = mirror.parse::<i64>()
-                && let Some(n) = id_to_name.get(&id) {
-                    mirror = n.clone();
-                }
+            && let Some(n) = id_to_name.get(&id)
+        {
+            mirror = n.clone();
+        }
 
-        let (pos, mode) = saved.get(&name).cloned().unwrap_or_else(|| ("auto".to_string(), "preferred".to_string()));
+        let (pos, mode) = saved
+            .get(&name)
+            .cloned()
+            .unwrap_or_else(|| ("auto".to_string(), "preferred".to_string()));
 
         // availableModes: strip trailing Hz, unique
         let mut seen = std::collections::HashSet::new();

@@ -1,6 +1,9 @@
 //! Collect wifi networks, VPNs, details, warp/tailscale.
 
-use super::super::common::{active_wifi_device, cache_dir, cidr_to_netmask, iw, nmcli, run_out, split_nmcli_t_line, tailscale, warp_cli};
+use super::super::common::{
+    active_wifi_device, cache_dir, cidr_to_netmask, iw, nmcli, run_out, split_nmcli_t_line,
+    tailscale, warp_cli,
+};
 use super::types::{ConnectionDetails, NetworkStatus, VpnConnection, WifiNetwork};
 use super::wifi::{is_airplane_mode, is_wifi_enabled, parse_wifi_line, wifi_saved_connections};
 use std::collections::HashSet;
@@ -111,7 +114,10 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
         }
 
         if !connected {
-            let dev_out = run_out(&nmcli(), &["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev"]);
+            let dev_out = run_out(
+                &nmcli(),
+                &["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev"],
+            );
             for line in dev_out.lines() {
                 let parts = split_nmcli_t_line(line);
                 if parts.len() >= 4
@@ -199,7 +205,10 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
         }
     }
 
-    let conns_out = run_out(&nmcli(), &["-t", "-f", "NAME,TYPE,DEVICE,STATE", "connection", "show"]);
+    let conns_out = run_out(
+        &nmcli(),
+        &["-t", "-f", "NAME,TYPE,DEVICE,STATE", "connection", "show"],
+    );
     for line in conns_out.lines() {
         let parts = split_nmcli_t_line(line);
         if parts.len() >= 4 {

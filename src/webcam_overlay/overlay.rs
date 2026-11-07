@@ -1,8 +1,8 @@
 //! Overlay lifecycle: device listing, resolution choice,
 //! start/stop.
 
-use super::{gsr, hyprctl, mpv, runtime_dir};
 use super::resize::resize;
+use super::{gsr, hyprctl, mpv, runtime_dir};
 use crate::proc::run;
 use serde_json::Value;
 use std::fs;
@@ -12,19 +12,25 @@ use std::time::Duration;
 
 pub(crate) fn list_devices() -> String {
     let (code, out, _) = run(&gsr(), &["--list-v4l2-devices"]);
-    if code != 0 { return String::new(); }
+    if code != 0 {
+        return String::new();
+    }
     let mut seen = std::collections::HashSet::new();
     let mut lines = Vec::new();
     for line in out.lines() {
         let dev = line.split('|').next().unwrap_or("").trim();
-        if !dev.is_empty() && seen.insert(dev.to_string()) { lines.push(dev.to_string()); }
+        if !dev.is_empty() && seen.insert(dev.to_string()) {
+            lines.push(dev.to_string());
+        }
     }
     lines.join("\n")
 }
 
 pub(crate) fn choose_resolution(device: &str) -> String {
     let (code, out, _) = run(&gsr(), &["--list-v4l2-devices"]);
-    if code != 0 { return String::new(); }
+    if code != 0 {
+        return String::new();
+    }
     let mut formats = String::new();
     for line in out.lines() {
         let mut parts = line.split('|');
@@ -34,20 +40,27 @@ pub(crate) fn choose_resolution(device: &str) -> String {
         }
     }
     for res in ["640x360", "1280x720", "1920x1080"] {
-        if formats.contains(&format!("{}@", res)) { return res.to_string(); }
+        if formats.contains(&format!("{}@", res)) {
+            return res.to_string();
+        }
     }
     formats.split('@').next().unwrap_or("").to_string()
 }
 
 pub(crate) fn overlay_address() -> String {
     let (code, out, _) = run(&hyprctl(), &["clients", "-j"]);
-    if code != 0 { return String::new(); }
+    if code != 0 {
+        return String::new();
+    }
     let v: Value = serde_json::from_str(&out).unwrap_or(Value::Null);
     if let Some(arr) = v.as_array() {
         for c in arr {
             if let Some(cls) = c.get("class").and_then(|x| x.as_str())
                 && cls.starts_with("WebcamOverlay-")
-                    && let Some(addr) = c.get("address").and_then(|x| x.as_str()) { return addr.to_string(); }
+                && let Some(addr) = c.get("address").and_then(|x| x.as_str())
+            {
+                return addr.to_string();
+            }
         }
     }
     String::new()
@@ -78,18 +91,28 @@ pub(crate) fn start_overlay(size: &str, device: &str, target: &str) -> String {
         let _ = fs::remove_file(&region_file);
     }
     let mut cmd = Command::new(mpv());
-    cmd.args(["av://v4l2:".to_string() + &dev,
-        "--profile=low-latency".to_string(), "--untimed".to_string(), "--no-cache".to_string(),
+    cmd.args([
+        "av://v4l2:".to_string() + &dev,
+        "--profile=low-latency".to_string(),
+        "--untimed".to_string(),
+        "--no-cache".to_string(),
         format!("--demuxer-lavf-o={}", capture_options),
         "--vf=lavfi=[crop=ih*8/9:ih]".to_string(),
         "--title=WebcamOverlay".to_string(),
         format!("--wayland-app-id=WebcamOverlay-{}", size),
-        "--no-border".to_string(), "--no-audio".to_string(), "--no-osc".to_string(),
-        "--osd-level=0".to_string(), "--really-quiet".to_string()]);
+        "--no-border".to_string(),
+        "--no-audio".to_string(),
+        "--no-osc".to_string(),
+        "--osd-level=0".to_string(),
+        "--really-quiet".to_string(),
+    ]);
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::null());
     cmd.stderr(std::process::Stdio::null());
-    let child = match cmd.spawn() { Ok(c) => c, Err(e) => return format!("ERR spawn mpv: {}", e) };
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => return format!("ERR spawn mpv: {}", e),
+    };
     let overlay_pid = child.id();
     let mut waited = 0;
     while waited < 40 && overlay_address().is_empty() {
@@ -97,7 +120,11 @@ pub(crate) fn start_overlay(size: &str, device: &str, target: &str) -> String {
         waited += 1;
     }
     let _ = resize(size);
-    let alive = Command::new("kill").args(["-0", &overlay_pid.to_string()]).status().map(|s| s.success()).unwrap_or(false);
+    let alive = Command::new("kill")
+        .args(["-0", &overlay_pid.to_string()])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
     if !alive && overlay_address().is_empty() {
         return format!("ERR mpv could not open {}", dev);
     }
@@ -106,8 +133,9 @@ pub(crate) fn start_overlay(size: &str, device: &str, target: &str) -> String {
 }
 
 pub(crate) fn stop_overlay() -> String {
-    let _ = Command::new("pkill").args(["-f", "wayland-app-id=WebcamOverlay"]).status();
+    let _ = Command::new("pkill")
+        .args(["-f", "wayland-app-id=WebcamOverlay"])
+        .status();
     let _ = fs::remove_file(runtime_dir().join("anixie-record.region"));
     "OK".to_string()
 }
-

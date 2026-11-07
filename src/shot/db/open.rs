@@ -1,12 +1,12 @@
 //! DB open + schema + legacy migration.
 
+use super::assets::add_asset;
+use super::paths::{db_path, home_dir, thumbnails_dir};
+use super::types::SCHEMA_VERSION;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use super::assets::add_asset;
-use super::paths::{db_path, home_dir, thumbnails_dir};
-use super::types::SCHEMA_VERSION;
 
 pub fn open() -> Result<Connection, rusqlite::Error> {
     open_at(&db_path(), &thumbnails_dir())
@@ -59,7 +59,9 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
 
     let version: Option<i32> = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .optional()?;
     let needs_migration = version.is_none() || version.unwrap_or(0) < SCHEMA_VERSION;
 
@@ -75,7 +77,8 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
 
 fn migrate_legacy(conn: &Connection) {
     let legacy_path = {
-        let base = env::var("XDG_CACHE_HOME").unwrap_or_else(|_| format!("{}/.cache", home_dir().display()));
+        let base = env::var("XDG_CACHE_HOME")
+            .unwrap_or_else(|_| format!("{}/.cache", home_dir().display()));
         PathBuf::from(base).join("quickshell_media_history.json")
     };
     if !legacy_path.exists() {

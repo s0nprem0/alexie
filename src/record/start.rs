@@ -1,6 +1,9 @@
 //! Start: resolve the capture target, spawn gpu-screen-recorder.
 
-use super::state::{cancel_file, gsr, notify_msg, out_dir, pid_file, name_file, region_file, shell_recording, shot_pick, webcam_overlay};
+use super::state::{
+    cancel_file, gsr, name_file, notify_msg, out_dir, pid_file, region_file, shell_recording,
+    shot_pick, webcam_overlay,
+};
 use crate::proc::run;
 use std::env;
 use std::fs;
@@ -8,11 +11,21 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
-pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, webcam_device: &str, target: Option<String>) -> String {
+pub(crate) fn start_recording(
+    fullscreen: bool,
+    audio: &str,
+    webcam_size: &str,
+    webcam_device: &str,
+    target: Option<String>,
+) -> String {
     let _ = fs::remove_file(pid_file());
     let od = out_dir();
     if fs::create_dir_all(&od).is_err() {
-        notify_msg("critical", "Recording failed", &format!("Could not create {}.", od.display()));
+        notify_msg(
+            "critical",
+            "Recording failed",
+            &format!("Could not create {}.", od.display()),
+        );
         return format!("ERR could not create {}", od.display());
     }
 
@@ -22,16 +35,22 @@ pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, 
             let sp = shot_pick();
             if fullscreen {
                 let (code, out, _) = run(&sp, &["fullscreen", "--match-monitor"]);
-                if code != 0 { return "ERR picker failed".to_string(); }
+                if code != 0 {
+                    return "ERR picker failed".to_string();
+                }
                 out.trim().to_string()
             } else {
                 let (code, out, _) = run(&sp, &["smart", "--match-monitor"]);
-                if code != 0 { return "ERR picker failed".to_string(); }
+                if code != 0 {
+                    return "ERR picker failed".to_string();
+                }
                 out.trim().to_string()
             }
         }
     };
-    if tgt.is_empty() { return "ERR no target".to_string(); }
+    if tgt.is_empty() {
+        return "ERR no target".to_string();
+    }
 
     let mut capture_args: Vec<String> = Vec::new();
     match tgt.as_str() {
@@ -48,29 +67,61 @@ pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, 
             capture_args.push(t[7..].to_string());
         }
         _ => {
-            notify_msg("critical", "Recording failed", &format!("Unexpected picker result: {}", tgt));
+            notify_msg(
+                "critical",
+                "Recording failed",
+                &format!("Unexpected picker result: {}", tgt),
+            );
             return format!("ERR unexpected picker result: {}", tgt);
         }
     }
 
     if audio == "desktop+mic+webcam" {
-        let (code, _, _) = run(&webcam_overlay(), &["start", webcam_size, webcam_device, &tgt]);
+        let (code, _, _) = run(
+            &webcam_overlay(),
+            &["start", webcam_size, webcam_device, &tgt],
+        );
         if code != 0 {
-            notify_msg("critical", "Recording failed", "Could not start the webcam overlay.");
+            notify_msg(
+                "critical",
+                "Recording failed",
+                "Could not start the webcam overlay.",
+            );
             return "ERR could not start the webcam overlay".to_string();
         }
     }
 
     let name = format!("{}/screenrecording-{}.mp4", od.display(), chrono_stamp());
     let audio_flags: Vec<String> = match audio {
-        "desktop" => vec!["-a".to_string(), "default_output".to_string(), "-ac".to_string(), "aac".to_string()],
-        "desktop+mic" | "desktop+mic+webcam" => vec!["-a".to_string(), "default_output|default_input".to_string(), "-ac".to_string(), "aac".to_string()],
+        "desktop" => vec![
+            "-a".to_string(),
+            "default_output".to_string(),
+            "-ac".to_string(),
+            "aac".to_string(),
+        ],
+        "desktop+mic" | "desktop+mic+webcam" => vec![
+            "-a".to_string(),
+            "default_output|default_input".to_string(),
+            "-ac".to_string(),
+            "aac".to_string(),
+        ],
         _ => vec![],
     };
 
     let mut cmd = Command::new(gsr());
     cmd.args(&capture_args);
-    cmd.args(["-k", "auto", "-f", "60", "-fm", "cfr", "-fallback-cpu-encoding", "yes", "-o", &name]);
+    cmd.args([
+        "-k",
+        "auto",
+        "-f",
+        "60",
+        "-fm",
+        "cfr",
+        "-fallback-cpu-encoding",
+        "yes",
+        "-o",
+        &name,
+    ]);
     cmd.args(&audio_flags);
     cmd.stdin(std::process::Stdio::null());
     // redirect stderr to log
@@ -82,7 +133,11 @@ pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, 
     let child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            notify_msg("critical", "Recording failed", &format!("Could not start recorder: {}", e));
+            notify_msg(
+                "critical",
+                "Recording failed",
+                &format!("Could not start recorder: {}", e),
+            );
             return format!("ERR could not start recorder: {}", e);
         }
     };
@@ -93,10 +148,17 @@ pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, 
     let mut ticks = 0;
     let mut ready = false;
     while ticks < 75 {
-        if cancel.exists() { break; }
+        if cancel.exists() {
+            break;
+        }
         if !std::path::Path::new(&name).exists() {
             // check process alive
-            if !Command::new("kill").args(["-0", &pid.to_string()]).status().map(|s| s.success()).unwrap_or(false) {
+            if !Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+            {
                 break;
             }
             thread::sleep(Duration::from_millis(200));
@@ -108,7 +170,9 @@ pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, 
     }
 
     if cancel.exists() {
-        let _ = Command::new("kill").args(["-INT", &pid.to_string()]).status();
+        let _ = Command::new("kill")
+            .args(["-INT", &pid.to_string()])
+            .status();
         let _ = fs::remove_file(&name);
         let _ = run(&webcam_overlay(), &["stop"]);
         let _ = fs::remove_file(cancel_file());
@@ -116,18 +180,33 @@ pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, 
     }
 
     if !ready {
-        let _ = Command::new("kill").args(["-INT", &pid.to_string()]).status();
+        let _ = Command::new("kill")
+            .args(["-INT", &pid.to_string()])
+            .status();
         let _ = fs::remove_file(&name);
         let _ = run(&webcam_overlay(), &["stop"]);
-        notify_msg("critical", "Recording failed", "gpu-screen-recorder did not start.");
+        notify_msg(
+            "critical",
+            "Recording failed",
+            "gpu-screen-recorder did not start.",
+        );
         return "ERR gpu-screen-recorder did not start".to_string();
     }
 
     // process alive?
-    if !Command::new("kill").args(["-0", &pid.to_string()]).status().map(|s| s.success()).unwrap_or(false) {
+    if !Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+    {
         let _ = fs::remove_file(&name);
         let _ = run(&webcam_overlay(), &["stop"]);
-        notify_msg("critical", "Recording failed", "gpu-screen-recorder exited before it started.");
+        notify_msg(
+            "critical",
+            "Recording failed",
+            "gpu-screen-recorder exited before it started.",
+        );
         return "ERR gpu-screen-recorder exited before it started".to_string();
     }
 
@@ -143,6 +222,9 @@ pub(crate) fn start_recording(fullscreen: bool, audio: &str, webcam_size: &str, 
 
 pub(crate) fn chrono_stamp() -> String {
     let (code, out, _) = run("date", &["+%Y-%m-%d_%H-%M-%S"]);
-    if code == 0 { out.trim().to_string() } else { "0".to_string() }
+    if code == 0 {
+        out.trim().to_string()
+    } else {
+        "0".to_string()
+    }
 }
-

@@ -7,9 +7,9 @@
 //!
 //! `to_json()`/`render_text()`/`handle()` below just orchestrate.
 
+pub(crate) mod collect;
 pub(crate) mod types;
 pub(crate) mod wifi;
-pub(crate) mod collect;
 
 #[allow(unused_imports)] // re-exported for public API compat
 pub use types::{ConnectionDetails, NetworkStatus, VpnConnection, WifiNetwork};
@@ -30,26 +30,56 @@ pub(crate) fn render_text(s: &NetworkStatus) -> String {
         if s.wifi_enabled { "on" } else { "off" },
         if s.airplane_mode { "on" } else { "off" },
         if s.connected { "yes" } else { "no" },
-        if s.active_ssid.is_empty() { "-" } else { &s.active_ssid },
+        if s.active_ssid.is_empty() {
+            "-"
+        } else {
+            &s.active_ssid
+        },
         s.active_signal,
-        if s.active_speed.is_empty() { "-" } else { &s.active_speed },
+        if s.active_speed.is_empty() {
+            "-"
+        } else {
+            &s.active_speed
+        },
     ));
     if !s.details.ip_address.is_empty() {
         out.push_str(&format!(
             "ip {}  gw {}  dns {}  subnet {}\n",
             s.details.ip_address,
-            if s.details.gateway.is_empty() { "-" } else { &s.details.gateway },
-            if s.details.dns.is_empty() { "-" } else { &s.details.dns },
-            if s.details.subnet.is_empty() { "-" } else { &s.details.subnet },
+            if s.details.gateway.is_empty() {
+                "-"
+            } else {
+                &s.details.gateway
+            },
+            if s.details.dns.is_empty() {
+                "-"
+            } else {
+                &s.details.dns
+            },
+            if s.details.subnet.is_empty() {
+                "-"
+            } else {
+                &s.details.subnet
+            },
         ));
     }
     if !s.vpns.is_empty() {
         let rows: Vec<Vec<String>> = s
             .vpns
             .iter()
-            .map(|v| vec![v.name.clone(), v.vpn_type.clone(), v.device.clone(), if v.active { "yes".into() } else { "no".into() }])
+            .map(|v| {
+                vec![
+                    v.name.clone(),
+                    v.vpn_type.clone(),
+                    v.device.clone(),
+                    if v.active { "yes".into() } else { "no".into() },
+                ]
+            })
             .collect();
-        out.push_str(&crate::table::render(&["VPN", "Type", "Device", "Active"], &rows));
+        out.push_str(&crate::table::render(
+            &["VPN", "Type", "Device", "Active"],
+            &rows,
+        ));
         out.push('\n');
     }
     if !s.networks.is_empty() {
@@ -67,7 +97,10 @@ pub(crate) fn render_text(s: &NetworkStatus) -> String {
                 ]
             })
             .collect();
-        out.push_str(&crate::table::render(&["SSID", "Signal", "Rate", "Security", "Active", "Saved"], &rows));
+        out.push_str(&crate::table::render(
+            &["SSID", "Signal", "Rate", "Security", "Active", "Saved"],
+            &rows,
+        ));
     }
     if out.trim().is_empty() {
         out.push_str("network: no data (nmcli unavailable or wifi off)");

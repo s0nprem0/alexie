@@ -1,6 +1,9 @@
 //! Stop/finalise: signal the recorder, trim and announce.
 
-use super::state::{cancel_file, ffmpeg, name_file, notify_msg, notify_raw, pid_file, recorder_pids, region_file, shell_recording, signal_recorders, webcam_overlay};
+use super::state::{
+    cancel_file, ffmpeg, name_file, notify_msg, notify_raw, pid_file, recorder_pids, region_file,
+    shell_recording, signal_recorders, webcam_overlay,
+};
 use crate::proc::run;
 use std::fs;
 use std::process::Command;
@@ -8,7 +11,10 @@ use std::thread;
 use std::time::Duration;
 
 fn recorder_pids_at(pids: &[i32]) -> Vec<i32> {
-    pids.iter().cloned().filter(|pid| !recorder_pids(Some(*pid)).is_empty()).collect()
+    pids.iter()
+        .cloned()
+        .filter(|pid| !recorder_pids(Some(*pid)).is_empty())
+        .collect()
 }
 
 fn recorded_or_any() -> Vec<i32> {
@@ -47,13 +53,42 @@ pub(crate) fn stop_recording() -> String {
             if !name.is_empty() && std::path::Path::new(&name).exists() {
                 // finalize: trim first 0.1s
                 let processed = format!("{}-processed.mp4", name.trim_end_matches(".mp4"));
-                let _ = Command::new(ffmpeg()).args(["-y", "-ss", "0.1", "-i", &name, "-c:v", "copy", "-movflags", "+faststart", &processed]).status();
+                let _ = Command::new(ffmpeg())
+                    .args([
+                        "-y",
+                        "-ss",
+                        "0.1",
+                        "-i",
+                        &name,
+                        "-c:v",
+                        "copy",
+                        "-movflags",
+                        "+faststart",
+                        &processed,
+                    ])
+                    .status();
                 if std::path::Path::new(&processed).exists() {
                     let _ = fs::rename(&processed, &name);
                 }
                 crate::shot::db::index_recording(&name);
                 // announce
-                let _ = run(&notify_raw(), &["-a", "record", "-u", "normal", "-t", "10000", "-G", "f03d", "-A", "default=Play", "Recording saved", &name]);
+                let _ = run(
+                    &notify_raw(),
+                    &[
+                        "-a",
+                        "record",
+                        "-u",
+                        "normal",
+                        "-t",
+                        "10000",
+                        "-G",
+                        "f03d",
+                        "-A",
+                        "default=Play",
+                        "Recording saved",
+                        &name,
+                    ],
+                );
             }
         }
     }
@@ -64,4 +99,3 @@ pub(crate) fn stop_recording() -> String {
     shell_recording("stop");
     "OK".to_string()
 }
-

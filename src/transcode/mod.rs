@@ -6,19 +6,25 @@
 //!
 //! `handle()` below is just argument parsing/dispatch.
 
-pub(crate) mod pick;
 pub(crate) mod convert;
+pub(crate) mod pick;
 
-use convert::{format_size_options, media_type, output_path, transcode_picture, transcode_video, validate_format_resolution};
-use pick::prompt_pick;
 use crate::proc::{shell_quote, wl_copy};
+use convert::{
+    format_size_options, media_type, output_path, transcode_picture, transcode_video,
+    validate_format_resolution,
+};
+use pick::prompt_pick;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 
 fn search_paths() -> Vec<PathBuf> {
     let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    vec![PathBuf::from(format!("{}/Pictures", home)), PathBuf::from(format!("{}/Videos", home))]
+    vec![
+        PathBuf::from(format!("{}/Pictures", home)),
+        PathBuf::from(format!("{}/Videos", home)),
+    ]
 }
 
 pub fn handle(args: &[String]) -> String {
@@ -27,11 +33,25 @@ pub fn handle(args: &[String]) -> String {
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--path" {
-            if i + 1 < args.len() { search_paths = vec![PathBuf::from(&args[i+1])]; i += 2; continue; }
-            else { return "ERR --path needs a directory".to_string(); }
+            if i + 1 < args.len() {
+                search_paths = vec![PathBuf::from(&args[i + 1])];
+                i += 2;
+                continue;
+            } else {
+                return "ERR --path needs a directory".to_string();
+            }
         }
-        if args[i] == "--" { i += 1; while i < args.len() { positional.push(args[i].clone()); i += 1; } break; }
-        if args[i].starts_with('-') { return format!("ERR unknown option: {}", args[i]); }
+        if args[i] == "--" {
+            i += 1;
+            while i < args.len() {
+                positional.push(args[i].clone());
+                i += 1;
+            }
+            break;
+        }
+        if args[i].starts_with('-') {
+            return format!("ERR unknown option: {}", args[i]);
+        }
         positional.push(args[i].clone());
         i += 1;
     }
@@ -43,13 +63,33 @@ pub fn handle(args: &[String]) -> String {
         let mut candidates = Vec::new();
         for dir in &search_paths {
             fn walk(dir: &PathBuf, depth: usize, out: &mut Vec<String>) {
-                if depth == 0 { return; }
+                if depth == 0 {
+                    return;
+                }
                 if let Ok(entries) = fs::read_dir(dir) {
                     for e in entries.flatten() {
                         let p = e.path();
                         if p.is_file() {
-                            let ext = p.extension().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
-                            if matches!(ext.as_str(), "png"|"jpg"|"jpeg"|"webp"|"heic"|"tiff"|"bmp"|"mp4"|"mov"|"mkv"|"webm"|"avi") {
+                            let ext = p
+                                .extension()
+                                .and_then(|x| x.to_str())
+                                .unwrap_or("")
+                                .to_lowercase();
+                            if matches!(
+                                ext.as_str(),
+                                "png"
+                                    | "jpg"
+                                    | "jpeg"
+                                    | "webp"
+                                    | "heic"
+                                    | "tiff"
+                                    | "bmp"
+                                    | "mp4"
+                                    | "mov"
+                                    | "mkv"
+                                    | "webm"
+                                    | "avi"
+                            ) {
                                 out.push(p.to_string_lossy().to_string());
                             }
                         } else if p.is_dir() && depth > 1 {
@@ -62,8 +102,14 @@ pub fn handle(args: &[String]) -> String {
         }
         candidates.sort();
         candidates.dedup();
-        if candidates.is_empty() { return "ERR no pictures or videos found".to_string(); }
-        return prompt_pick("transcode", &candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>(), &format!("transcode {}", shell_quote("{}")));
+        if candidates.is_empty() {
+            return "ERR no pictures or videos found".to_string();
+        }
+        return prompt_pick(
+            "transcode",
+            &candidates.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            &format!("transcode {}", shell_quote("{}")),
+        );
     }
 
     if !std::path::Path::new(&input).is_file() {
@@ -88,12 +134,21 @@ pub fn handle(args: &[String]) -> String {
         // Validate format before offering sizes, like legacy's
         // transcode_picture/transcode_video die on unknown format.
         if !formats.contains(&format.as_str()) {
-            return format!("ERR unknown {} format: {} (try: {})", mtype, format, formats.join(", "));
+            return format!(
+                "ERR unknown {} format: {} (try: {})",
+                mtype,
+                format,
+                formats.join(", ")
+            );
         }
         return prompt_pick(
             "size",
             sizes,
-            &format!("transcode {} {} '{{}}'", shell_quote(&input), shell_quote(&format)),
+            &format!(
+                "transcode {} {} '{{}}'",
+                shell_quote(&input),
+                shell_quote(&format)
+            ),
         );
     }
 
@@ -108,24 +163,39 @@ pub fn handle(args: &[String]) -> String {
     } else {
         transcode_video(&input, &format, &resolution, &output)
     };
-    if !ok { return "ERR conversion failed".to_string(); }
-    if !std::path::Path::new(&output).exists() { return "ERR conversion produced nothing".to_string(); }
+    if !ok {
+        return "ERR conversion failed".to_string();
+    }
+    if !std::path::Path::new(&output).exists() {
+        return "ERR conversion produced nothing".to_string();
+    }
 
     let uri = format!("file://{}", output);
-    let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/uri-list", &format!("{}\n", uri), &[]);
+    let _ = crate::proc::copy_text_to_clipboard(
+        &wl_copy(),
+        "text/uri-list",
+        &format!("{}\n", uri),
+        &[],
+    );
     format!("Saved {}", output)
 }
 
-
-
 #[cfg(test)]
 mod tests {
-    use super::convert::{format_size_options, media_type_from_mime, output_path, validate_format_resolution};
+    use super::convert::{
+        format_size_options, media_type_from_mime, output_path, validate_format_resolution,
+    };
     use super::pick::prompt_pick_with;
     #[test]
     fn output_path_basic() {
-        assert_eq!(output_path("/tmp/demo.mp4", "mp4", "1080p"), "/tmp/demo-1080p.mp4");
-        assert_eq!(output_path("/tmp/demo.png", "jpg", "low"), "/tmp/demo-low.jpg");
+        assert_eq!(
+            output_path("/tmp/demo.mp4", "mp4", "1080p"),
+            "/tmp/demo-1080p.mp4"
+        );
+        assert_eq!(
+            output_path("/tmp/demo.png", "jpg", "low"),
+            "/tmp/demo-low.jpg"
+        );
     }
 
     #[test]
@@ -156,11 +226,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let log = dir.join("pick-stdin.log");
         let pick = dir.join("pick");
-        std::fs::write(
-            &pick,
-            format!("#!/bin/sh\ncat > {}\n", log.display()),
-        )
-        .unwrap();
+        std::fs::write(&pick, format!("#!/bin/sh\ncat > {}\n", log.display())).unwrap();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

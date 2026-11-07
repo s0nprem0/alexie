@@ -9,26 +9,26 @@
 //!
 //! `collect()`/`render_text()`/`handle()` below just orchestrate.
 
-pub(crate) mod types;
 pub(crate) mod cpu;
+pub(crate) mod disk;
 pub(crate) mod gpu;
 pub(crate) mod mem;
-pub(crate) mod disk;
+pub(crate) mod types;
 
 #[allow(unused_imports)] // re-exported for public API compat
 pub use types::{DiskInfo, SysmonStatus};
 
-use cpu::{cpu_power_estimate, get_cpu_freq, get_cpu_name, get_cpu_temp, get_cpu_usage};
-use gpu::{get_gpu_memory, get_gpu_name, get_gpu_power, get_gpu_temp, get_gpu_usage};
-use mem::{get_ram_usage_info, get_static_ram_info};
-use disk::{discover_disks, get_disk_info};
 use super::common::print_json;
 #[cfg(test)]
 use cpu::{clean_cpu_name, cpu_usage_from, parse_cpu_freqs, parse_cpu_times_line};
-#[cfg(test)]
-use mem::parse_mem_line;
+use cpu::{cpu_power_estimate, get_cpu_freq, get_cpu_name, get_cpu_temp, get_cpu_usage};
 #[cfg(test)]
 use disk::parse_disk_stat;
+use disk::{discover_disks, get_disk_info};
+use gpu::{get_gpu_memory, get_gpu_name, get_gpu_power, get_gpu_temp, get_gpu_usage};
+#[cfg(test)]
+use mem::parse_mem_line;
+use mem::{get_ram_usage_info, get_static_ram_info};
 
 pub(crate) fn collect() -> SysmonStatus {
     let cpu_n = get_cpu_name();
@@ -89,7 +89,11 @@ pub(crate) fn render_text(s: &SysmonStatus) -> String {
         s.ram_speed,
         s.ram_total,
         s.ram_used,
-        if s.ram_total > 0.0 { (s.ram_used / s.ram_total * 100.0).round() as i32 } else { 0 }
+        if s.ram_total > 0.0 {
+            (s.ram_used / s.ram_total * 100.0).round() as i32
+        } else {
+            0
+        }
     ));
     if !s.disks.is_empty() {
         let rows: Vec<Vec<String>> = s
@@ -106,7 +110,10 @@ pub(crate) fn render_text(s: &SysmonStatus) -> String {
                 ]
             })
             .collect();
-        out.push_str(&crate::table::render(&["Disk", "Read", "Write", "Total", "Used", "Usage"], &rows));
+        out.push_str(&crate::table::render(
+            &["Disk", "Read", "Write", "Total", "Used", "Usage"],
+            &rows,
+        ));
     }
     out.trim_end().to_string()
 }

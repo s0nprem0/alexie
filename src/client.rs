@@ -49,7 +49,11 @@ pub(crate) fn run_client(args: &[String]) {
             // Daemon not running: execute locally so timers and scripts still work.
             let resp = handle_args(args.to_vec(), &stdin_data);
             let is_err = resp.starts_with("ERR");
-            if is_err { println!("{}", color::red(&resp)); } else { println!("{}", resp); }
+            if is_err {
+                println!("{}", color::red(&resp));
+            } else {
+                println!("{}", resp);
+            }
             std::process::exit(if is_err { 1 } else { 0 });
         }
     };
@@ -76,4 +80,3 @@ pub(crate) fn run_client(args: &[String]) {
         std::process::exit(1);
     }
 }
-

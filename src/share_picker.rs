@@ -8,9 +8,10 @@ use std::path::PathBuf;
 
 fn picker_bin() -> String {
     if let Ok(v) = env::var("SHARE_PICKER_BIN")
-        && !v.is_empty() {
-            return v;
-        }
+        && !v.is_empty()
+    {
+        return v;
+    }
     let path = env::var("PATH").unwrap_or_default();
     find_in_path("hyprland-preview-share-picker", &path)
         .map(|p| p.to_string_lossy().to_string())
@@ -19,9 +20,10 @@ fn picker_bin() -> String {
 
 fn slurp_bin() -> String {
     if let Ok(v) = env::var("SLURP")
-        && !v.is_empty() {
-            return v;
-        }
+        && !v.is_empty()
+    {
+        return v;
+    }
     let path = env::var("PATH").unwrap_or_default();
     find_in_path("slurp", &path)
         .map(|p| p.to_string_lossy().to_string())
@@ -36,8 +38,12 @@ fn config_dir() -> PathBuf {
     PathBuf::from(base).join("hyprland-preview-share-picker")
 }
 
-pub(crate) fn style_path() -> PathBuf { config_dir().join("style.css") }
-pub(crate) fn config_path() -> PathBuf { config_dir().join("config.yaml") }
+pub(crate) fn style_path() -> PathBuf {
+    config_dir().join("style.css")
+}
+pub(crate) fn config_path() -> PathBuf {
+    config_dir().join("config.yaml")
+}
 
 pub(crate) fn xdph_path() -> PathBuf {
     let base = env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
@@ -55,10 +61,7 @@ pub(crate) fn render_config(style: &str, slurp: &str) -> String {
 }
 
 pub(crate) fn render_xdph(picker: &str) -> String {
-    format!(
-        "screencopy {{\n  custom_picker_binary = {}\n}}\n",
-        picker
-    )
+    format!("screencopy {{\n  custom_picker_binary = {}\n}}\n", picker)
 }
 
 #[derive(Serialize)]
@@ -125,10 +128,42 @@ fn apply() -> String {
 fn check() -> String {
     let picker_path = PathBuf::from(picker_bin());
     let mut out = String::new();
-    out.push_str(&format!("picker: {} ({})\n", picker_bin(), if picker_path.exists() { "found" } else { "missing" }));
-    out.push_str(&format!("config: {} ({})\n", config_path().display(), if config_path().is_file() { "found" } else { "missing" }));
-    out.push_str(&format!("xdph: {} ({})\n", xdph_path().display(), if xdph_path().is_file() { "found" } else { "missing" }));
-    out.push_str(&format!("style: {} ({})\n", style_path().display(), if style_path().exists() { "found" } else { "missing" }));
+    out.push_str(&format!(
+        "picker: {} ({})\n",
+        picker_bin(),
+        if picker_path.exists() {
+            "found"
+        } else {
+            "missing"
+        }
+    ));
+    out.push_str(&format!(
+        "config: {} ({})\n",
+        config_path().display(),
+        if config_path().is_file() {
+            "found"
+        } else {
+            "missing"
+        }
+    ));
+    out.push_str(&format!(
+        "xdph: {} ({})\n",
+        xdph_path().display(),
+        if xdph_path().is_file() {
+            "found"
+        } else {
+            "missing"
+        }
+    ));
+    out.push_str(&format!(
+        "style: {} ({})\n",
+        style_path().display(),
+        if style_path().exists() {
+            "found"
+        } else {
+            "missing"
+        }
+    ));
     out.trim_end().to_string()
 }
 

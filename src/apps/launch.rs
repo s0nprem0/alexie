@@ -1,12 +1,12 @@
 //! Browser/file launching + file index/search + rendering.
 
+use super::db::{add_file_history, open_db};
+use super::paths::{cache_dir, fd, fzf, home_dir_str, hyprctl, thunar, xdg_open};
+use super::types::{AppsResponse, FileIndexEntry, WebHistoryItem};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::Stdio;
-use super::db::{add_file_history, open_db};
-use super::paths::{cache_dir, fd, fzf, home_dir_str, hyprctl, thunar, xdg_open};
-use super::types::{AppsResponse, FileIndexEntry, WebHistoryItem};
 
 pub(crate) fn open_browser(item: &WebHistoryItem) {
     let _ = crate::proc::run(&xdg_open(), &[&item.url]);
@@ -27,10 +27,19 @@ pub(crate) fn index_files() -> String {
     // Run fd with cwd=$HOME.
     let output = std::process::Command::new(crate::proc::resolve_tool(&fd()))
         .args([
-            "--type", "f", "--hidden",
-            "--exclude", ".git", "--exclude", "node_modules",
-            "--exclude", ".cache", "--exclude", "target",
-            "--max-depth", "8",
+            "--type",
+            "f",
+            "--hidden",
+            "--exclude",
+            ".git",
+            "--exclude",
+            "node_modules",
+            "--exclude",
+            ".cache",
+            "--exclude",
+            "target",
+            "--max-depth",
+            "8",
         ])
         .current_dir(&home)
         .output();
@@ -42,8 +51,15 @@ pub(crate) fn index_files() -> String {
     let mut entries: Vec<FileIndexEntry> = Vec::new();
     for line in stdout.lines() {
         let display_path = format!("~/{}", line);
-        let name = Path::new(line).file_name().and_then(|f| f.to_str()).unwrap_or(line).to_string();
-        entries.push(FileIndexEntry { path: display_path, name });
+        let name = Path::new(line)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(line)
+            .to_string();
+        entries.push(FileIndexEntry {
+            path: display_path,
+            name,
+        });
     }
     if let Ok(serialized) = serde_json::to_string(&entries) {
         let _ = fs::write(&index_path, serialized);
@@ -57,8 +73,12 @@ pub(crate) fn search_files(query: &str) -> String {
     if !index_path.exists() {
         return "[]".to_string();
     }
-    let Ok(content) = fs::read_to_string(&index_path) else { return "[]".to_string() };
-    let Ok(entries) = serde_json::from_str::<Vec<FileIndexEntry>>(&content) else { return "[]".to_string() };
+    let Ok(content) = fs::read_to_string(&index_path) else {
+        return "[]".to_string();
+    };
+    let Ok(entries) = serde_json::from_str::<Vec<FileIndexEntry>>(&content) else {
+        return "[]".to_string();
+    };
 
     // Prefer fzf, fall back to substring.
     let mut child = std::process::Command::new(crate::proc::resolve_tool(&fzf()))
@@ -78,10 +98,15 @@ pub(crate) fn search_files(query: &str) -> String {
             }
             if let Some(c2) = child
                 && let Ok(output) = c2.wait_with_output()
-                    && output.status.success()
-                {
-                    fzf_lines = Some(String::from_utf8_lossy(&output.stdout).lines().map(|s| s.to_string()).collect());
-                }
+                && output.status.success()
+            {
+                fzf_lines = Some(
+                    String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .map(|s| s.to_string())
+                        .collect(),
+                );
+            }
         }
         fzf_lines
     };
@@ -90,7 +115,11 @@ pub(crate) fn search_files(query: &str) -> String {
         Some(lines) => lines,
         None => {
             let q = query.to_lowercase();
-            entries.iter().map(|e| e.path.clone()).filter(|p| p.to_lowercase().contains(&q)).collect()
+            entries
+                .iter()
+                .map(|e| e.path.clone())
+                .filter(|p| p.to_lowercase().contains(&q))
+                .collect()
         }
     };
 
@@ -104,7 +133,9 @@ pub(crate) fn search_files(query: &str) -> String {
 
 pub(crate) fn open_file(file_path: &str) -> String {
     let home = home_dir_str();
-    let Ok(conn) = open_db() else { return "ERR db: open failed".to_string() };
+    let Ok(conn) = open_db() else {
+        return "ERR db: open failed".to_string();
+    };
     if let Err(e) = add_file_history(&conn, file_path) {
         eprintln!("Error adding file to history: {}", e);
     }
@@ -114,7 +145,11 @@ pub(crate) fn open_file(file_path: &str) -> String {
         file_path.to_string()
     };
     let (code, _, err) = crate::proc::run(&thunar(), &[&open_path]);
-    if code == 0 { "OK".to_string() } else { format!("ERR thunar: {}", err.trim()) }
+    if code == 0 {
+        "OK".to_string()
+    } else {
+        format!("ERR thunar: {}", err.trim())
+    }
 }
 
 // --- rendering ---
@@ -132,7 +167,11 @@ pub(crate) fn render_apps(resp: &AppsResponse) -> String {
     out.push_str(&crate::table::render(&["Name", "Uses", "Exec"], &rows));
     if !resp.bookmarks.is_empty() {
         out.push_str("\n\nbookmarks:\n");
-        let rows: Vec<Vec<String>> = resp.bookmarks.iter().map(|b| vec![b.name.clone(), b.url.clone()]).collect();
+        let rows: Vec<Vec<String>> = resp
+            .bookmarks
+            .iter()
+            .map(|b| vec![b.name.clone(), b.url.clone()])
+            .collect();
         out.push_str(&crate::table::render(&["Name", "URL"], &rows));
     }
     out

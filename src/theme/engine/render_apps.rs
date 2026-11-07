@@ -14,12 +14,16 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::super::state;
-use crate::theme::assets::{optional_outputs, templates_dir, template_manifest};
+use crate::theme::assets::{optional_outputs, template_manifest, templates_dir};
 use crate::theme::renderer::render_template;
 use crate::theme::tokens::{load_spec, substitution_map};
 
 fn colour(generated: &serde_json::Value, key: &str) -> String {
-    generated.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string()
+    generated
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn cursor_theme() -> String {
@@ -35,7 +39,9 @@ fn cursor_size() -> String {
 }
 
 trait Pipe: Sized {
-    fn pipe<F: FnOnce(Self) -> T, T>(self, f: F) -> T { f(self) }
+    fn pipe<F: FnOnce(Self) -> T, T>(self, f: F) -> T {
+        f(self)
+    }
 }
 impl<T> Pipe for T {}
 
@@ -72,7 +78,11 @@ fn render_one(
         Ok(c) => c,
         Err(e) => {
             if required {
-                return Err(format!("could not read template {}: {}", src_path.display(), e));
+                return Err(format!(
+                    "could not read template {}: {}",
+                    src_path.display(),
+                    e
+                ));
             }
             eprintln!("theme: optional template missing {}", src_path.display());
             return Ok(());
@@ -104,7 +114,12 @@ fn write_generated_configs(
 ) -> Result<(), String> {
     let c = |k: &str| colour(generated, k);
     let (bg, fg, surface, muted, primary, accent) = (
-        c("background"), c("foreground"), c("surface"), c("muted"), c("primary"), c("accent"),
+        c("background"),
+        c("foreground"),
+        c("surface"),
+        c("muted"),
+        c("primary"),
+        c("accent"),
     );
     let state_dir = state::state_dir();
     let gtk_icon = extras.get("GTK_ICON").cloned().unwrap_or_default();
@@ -113,16 +128,37 @@ fn write_generated_configs(
         .unwrap_or_else(|_| "dark".to_string());
 
     for (name, body) in [
-        ("qt6ct.conf", format!(
-            "[Appearance]\ncolor_scheme_path={}/live/qt6ct-colors.conf\ncustom_palette=true\nicon_theme={}\nstyle=Fusion\n",
-            state_dir.display(), gtk_icon)),
-        ("qt5ct.conf", format!(
-            "[Appearance]\ncolor_scheme_path={}/live/qt6ct-colors.conf\ncustom_palette=true\nicon_theme={}\nstyle=Fusion\n",
-            state_dir.display(), gtk_icon)),
-        ("kvantum.kvconfig", format!("[General]\ntheme={}\n",
-            if mode == "light" { "KvAdapta" } else { "KvAdaptaDark" })),
-        ("tmux.conf", format!(
-            "set -g status-style \"bg={},fg={}\"\n\
+        (
+            "qt6ct.conf",
+            format!(
+                "[Appearance]\ncolor_scheme_path={}/live/qt6ct-colors.conf\ncustom_palette=true\nicon_theme={}\nstyle=Fusion\n",
+                state_dir.display(),
+                gtk_icon
+            ),
+        ),
+        (
+            "qt5ct.conf",
+            format!(
+                "[Appearance]\ncolor_scheme_path={}/live/qt6ct-colors.conf\ncustom_palette=true\nicon_theme={}\nstyle=Fusion\n",
+                state_dir.display(),
+                gtk_icon
+            ),
+        ),
+        (
+            "kvantum.kvconfig",
+            format!(
+                "[General]\ntheme={}\n",
+                if mode == "light" {
+                    "KvAdapta"
+                } else {
+                    "KvAdaptaDark"
+                }
+            ),
+        ),
+        (
+            "tmux.conf",
+            format!(
+                "set -g status-style \"bg={},fg={}\"\n\
              set -g status-left-style \"bg={},fg={}\"\n\
              set -g window-status-style \"bg={},fg={}\"\n\
              set -g window-status-current-style \"bg={},fg={},bold\"\n\
@@ -130,14 +166,36 @@ fn write_generated_configs(
              set -g message-style \"bg={},fg={}\"\n\
              set -g mode-style \"bg={},fg={}\"\n\
              set -g clock-mode-colour \"{}\"\n",
-            surface, fg, surface, muted, surface, muted, surface, primary,
-            surface, surface, fg, surface, fg, primary)),
-        ("btop.theme", format!(
-            "theme[main_bg]=\"{}\"\ntheme[main_fg]=\"{}\"\ntheme[title]=\"{}\"\n",
-            bg, fg, primary)),
-        ("terminal.zsh", format!(
-            "export BAT_THEME=ansi\nexport FZF_DEFAULT_OPTS=\"${{FZF_DEFAULT_OPTS:-}} --color=fg:{},bg:{},hl:{},fg+:{} ,bg+:{},hl+:{} ,info:{} ,prompt:{} ,pointer:{}\" \n",
-            fg, bg, primary, fg, surface, primary, accent, primary, accent)),
+                surface,
+                fg,
+                surface,
+                muted,
+                surface,
+                muted,
+                surface,
+                primary,
+                surface,
+                surface,
+                fg,
+                surface,
+                fg,
+                primary
+            ),
+        ),
+        (
+            "btop.theme",
+            format!(
+                "theme[main_bg]=\"{}\"\ntheme[main_fg]=\"{}\"\ntheme[title]=\"{}\"\n",
+                bg, fg, primary
+            ),
+        ),
+        (
+            "terminal.zsh",
+            format!(
+                "export BAT_THEME=ansi\nexport FZF_DEFAULT_OPTS=\"${{FZF_DEFAULT_OPTS:-}} --color=fg:{},bg:{},hl:{},fg+:{} ,bg+:{},hl+:{} ,info:{} ,prompt:{} ,pointer:{}\" \n",
+                fg, bg, primary, fg, surface, primary, accent, primary, accent
+            ),
+        ),
     ] {
         if let Some(parent) = gen_dir.join(name).parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -155,11 +213,20 @@ pub(crate) fn is_available() -> bool {
 /// Render all app files into `gen_dir`. Returns `Ok(())` on success,
 /// `Err` on required-template/placeholder failures. Optional
 /// (LibreWolf) templates warn only.
-pub(crate) fn render_apps(gen_dir: &Path, palette: &serde_json::Map<String, serde_json::Value>, mode: &str) -> Result<(), String> {
+pub(crate) fn render_apps(
+    gen_dir: &Path,
+    palette: &serde_json::Map<String, serde_json::Value>,
+    mode: &str,
+) -> Result<(), String> {
     render_apps_with_dir(templates_dir(), gen_dir, palette, mode)
 }
 
-pub(crate) fn render_apps_with_dir(dir_opt: Option<PathBuf>, gen_dir: &Path, palette: &serde_json::Map<String, serde_json::Value>, mode: &str) -> Result<(), String> {
+pub(crate) fn render_apps_with_dir(
+    dir_opt: Option<PathBuf>,
+    gen_dir: &Path,
+    palette: &serde_json::Map<String, serde_json::Value>,
+    mode: &str,
+) -> Result<(), String> {
     let dir = dir_opt.ok_or_else(|| "templates dir not configured".to_string())?;
     if !dir.is_dir() {
         return Err(format!("templates dir not found: {}", dir.display()));
@@ -180,16 +247,23 @@ pub(crate) fn render_apps_with_dir(dir_opt: Option<PathBuf>, gen_dir: &Path, pal
     }
     // opencode guard (mirrors theme-apps.sh)
     if let Ok(text) = std::fs::read_to_string(gen_dir.join("opencode-theme.json"))
-        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
-            for key in ["syntaxNumber", "syntaxType", "syntaxOperator", "syntaxPunctuation", "selectedListItemText"] {
-                if v.get("theme").and_then(|t| t.get(key)).is_none() {
-                    // theme-apps.sh hard-fails only when the rendered
-                    // opencode theme is actually produced; if the
-                    // template was missing we already errored above.
-                    let _ = optional_outputs();
-                }
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&text)
+    {
+        for key in [
+            "syntaxNumber",
+            "syntaxType",
+            "syntaxOperator",
+            "syntaxPunctuation",
+            "selectedListItemText",
+        ] {
+            if v.get("theme").and_then(|t| t.get(key)).is_none() {
+                // theme-apps.sh hard-fails only when the rendered
+                // opencode theme is actually produced; if the
+                // template was missing we already errored above.
+                let _ = optional_outputs();
             }
         }
+    }
     let generated = serde_json::Value::Object(palette.clone());
     write_generated_configs(gen_dir, &generated, &extras)
 }
@@ -201,7 +275,10 @@ mod tests {
     #[test]
     fn extras_mode_mapping() {
         let dark = build_extras("dark");
-        assert_eq!(dark.get("HELIX_PARENT").map(String::as_str), Some("base16_default_dark"));
+        assert_eq!(
+            dark.get("HELIX_PARENT").map(String::as_str),
+            Some("base16_default_dark")
+        );
         assert_eq!(dark.get("GTK_DARK").map(String::as_str), Some("1"));
         let light = build_extras("light");
         assert_eq!(light.get("GTK_THEME").map(String::as_str), Some("adw-gtk3"));
@@ -216,7 +293,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "alexie-render-apps-test-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         let err = render_apps_with_dir(None, &dir, &pal, "dark").unwrap_err();

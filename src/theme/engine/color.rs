@@ -3,9 +3,7 @@ use std::path::Path;
 // ---------- palette validation & colour maths (port of color.sh) ----------
 
 pub(crate) fn color_ok(s: &str) -> bool {
-    s.len() == 7
-        && s.starts_with('#')
-        && s[1..].chars().all(|c| c.is_ascii_hexdigit())
+    s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn hex_byte(h: &str, i: usize) -> u8 {
@@ -14,7 +12,11 @@ fn hex_byte(h: &str, i: usize) -> u8 {
 
 fn lin(v: u8) -> f64 {
     let v = v as f64 / 255.0;
-    if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 pub(crate) fn luminance(hex: &str) -> Option<f64> {
@@ -64,7 +66,11 @@ pub(crate) fn adjust_contrast(fg: &str, bg: &str, want: f64) -> Option<String> {
     }
     let c_black = contrast("#000000", bg)?;
     let c_white = contrast("#ffffff", bg)?;
-    let endpoint = if c_black >= c_white { "#000000" } else { "#ffffff" };
+    let endpoint = if c_black >= c_white {
+        "#000000"
+    } else {
+        "#ffffff"
+    };
     if contrast(endpoint, bg)? < want {
         return None;
     }
@@ -82,10 +88,25 @@ pub(crate) fn adjust_contrast(fg: &str, bg: &str, want: f64) -> Option<String> {
 }
 
 const PALETTE_KEYS: &[&str] = &[
-    "background", "surface", "surfaceContainer", "surfaceVariant",
-    "foreground", "fgLight", "bgDark", "bgLight", "muted", "outline",
-    "primary", "accent", "accentAlt", "secondary", "tertiary",
-    "success", "yellow", "danger", "error",
+    "background",
+    "surface",
+    "surfaceContainer",
+    "surfaceVariant",
+    "foreground",
+    "fgLight",
+    "bgDark",
+    "bgLight",
+    "muted",
+    "outline",
+    "primary",
+    "accent",
+    "accentAlt",
+    "secondary",
+    "tertiary",
+    "success",
+    "yellow",
+    "danger",
+    "error",
 ];
 
 pub(crate) fn palette_ok_value(v: &serde_json::Value) -> bool {
@@ -123,7 +144,11 @@ pub(crate) fn palette_fix_value(v: &mut serde_json::Value) -> Result<(), String>
         }
         let mut current = original.clone();
         for bg_key in ["background", "surface"] {
-            let Some(bg) = v.get(bg_key).and_then(|x| x.as_str()).map(|s| s.to_string()) else {
+            let Some(bg) = v
+                .get(bg_key)
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string())
+            else {
                 continue;
             };
             if !color_ok(&bg) {
@@ -134,9 +159,10 @@ pub(crate) fn palette_fix_value(v: &mut serde_json::Value) -> Result<(), String>
             current = fixed;
         }
         if current != original
-            && let Some(obj) = v.as_object_mut() {
-                obj.insert(key.to_string(), serde_json::json!(current));
-            }
+            && let Some(obj) = v.as_object_mut()
+        {
+            obj.insert(key.to_string(), serde_json::json!(current));
+        }
     }
     Ok(())
 }
@@ -177,7 +203,6 @@ pub(crate) fn color_accent_name(hex: &str) -> Option<String> {
     Some(name.to_string())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,9 +228,14 @@ mod tests {
         assert!(contrast("#000000", "#ffffff").unwrap() > 20.0);
         assert!(contrast("#777777", "#777777").unwrap() < 2.0);
         let fixed = adjust_contrast("#777777", "#777777", 4.5).expect("adjustable");
-        assert!(contrast(&fixed, "#777777").unwrap() >= 4.5 - 1e-9, "fixed={fixed}");
-        assert_eq!(adjust_contrast("#000000", "#ffffff", 4.5), Some("#000000".to_string()));
+        assert!(
+            contrast(&fixed, "#777777").unwrap() >= 4.5 - 1e-9,
+            "fixed={fixed}"
+        );
+        assert_eq!(
+            adjust_contrast("#000000", "#ffffff", 4.5),
+            Some("#000000".to_string())
+        );
         assert_eq!(adjust_contrast("not-a-colour", "#ffffff", 4.5), None);
     }
 }
-

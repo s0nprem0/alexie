@@ -66,12 +66,19 @@ mod tests {
     use super::*;
 
     fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
     fn replaces_all_forms() {
-        let subs = map(&[("@BG@", "#0f111a"), ("@BG_HEX@", "0f111a"), ("@PRIMARY_ALPHA_AA@", "#82aaffaa")]);
+        let subs = map(&[
+            ("@BG@", "#0f111a"),
+            ("@BG_HEX@", "0f111a"),
+            ("@PRIMARY_ALPHA_AA@", "#82aaffaa"),
+        ]);
         let out = render_template("bg:@BG@ hex:@BG_HEX@ p:@PRIMARY_ALPHA_AA@", &subs).unwrap();
         assert_eq!(out, "bg:#0f111a hex:0f111a p:#82aaffaa");
     }

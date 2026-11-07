@@ -14,7 +14,9 @@ pub fn load() -> Option<toml::Value> {
     let path = config_path();
     let content = fs::read_to_string(path).ok()?;
     // toml 1.x parses documents into a Table, not a bare Value.
-    toml::from_str::<toml::Table>(&content).ok().map(toml::Value::Table)
+    toml::from_str::<toml::Table>(&content)
+        .ok()
+        .map(toml::Value::Table)
 }
 
 pub fn get_str(keys: &[&str], default: &str) -> String {
@@ -72,7 +74,11 @@ pub fn get_str_list(keys: &[&str]) -> Option<Vec<String>> {
             cur = cur.get(*k)?;
         }
         if let Some(arr) = cur.as_array() {
-            return Some(arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect());
+            return Some(
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect(),
+            );
         }
     }
     None

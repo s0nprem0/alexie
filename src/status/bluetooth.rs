@@ -1,6 +1,6 @@
 //! Bluetooth status (wabi `get_bluetooth_status` JSON).
 
-use super::common::{print_json, run_out, bluetoothctl, upower};
+use super::common::{bluetoothctl, print_json, run_out, upower};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::process::Command;
@@ -273,13 +273,22 @@ pub(crate) fn render_text(s: &BluetoothStatus) -> String {
                 d.name.clone(),
                 d.address.clone(),
                 d.device_type.clone(),
-                if d.connected { "yes".into() } else { "no".into() },
+                if d.connected {
+                    "yes".into()
+                } else {
+                    "no".into()
+                },
                 if d.paired { "yes".into() } else { "no".into() },
-                d.battery.map(|b| format!("{}%", b.round() as i64)).unwrap_or_else(|| "-".into()),
+                d.battery
+                    .map(|b| format!("{}%", b.round() as i64))
+                    .unwrap_or_else(|| "-".into()),
             ]
         })
         .collect();
-    crate::table::render(&["Name", "Address", "Type", "Connected", "Paired", "Battery"], &rows)
+    crate::table::render(
+        &["Name", "Address", "Type", "Connected", "Paired", "Battery"],
+        &rows,
+    )
 }
 
 pub(crate) fn handle(args: &[String]) -> String {
@@ -304,8 +313,14 @@ mod tests {
 
     #[test]
     fn classify_by_info_first() {
-        assert_eq!(classify_device_type("Unknown", "Icon: audio-headset"), "audio");
-        assert_eq!(classify_device_type("Foo", "some keyboard info"), "keyboard");
+        assert_eq!(
+            classify_device_type("Unknown", "Icon: audio-headset"),
+            "audio"
+        );
+        assert_eq!(
+            classify_device_type("Foo", "some keyboard info"),
+            "keyboard"
+        );
     }
 
     #[test]
@@ -319,7 +334,8 @@ mod tests {
 
     #[test]
     fn parse_devices_line() {
-        let out = "Device AA:BB:CC:DD:EE:FF My Device\nDevice 11:22:33:44:55:66 Other\nNot a device";
+        let out =
+            "Device AA:BB:CC:DD:EE:FF My Device\nDevice 11:22:33:44:55:66 Other\nNot a device";
         let devs = parse_devices_out(out);
         assert_eq!(devs.len(), 2);
         assert_eq!(devs[0].1, "My Device");
@@ -344,7 +360,8 @@ mod tests {
     #[test]
     fn handle_json_is_parseable() {
         let out = handle(&["--json".to_string()]);
-        let v: serde_json::Value = serde_json::from_str(&out).expect("bluetooth --json must be JSON");
+        let v: serde_json::Value =
+            serde_json::from_str(&out).expect("bluetooth --json must be JSON");
         assert!(v.get("enabled").is_some());
         assert!(v.get("devices").is_some());
     }
