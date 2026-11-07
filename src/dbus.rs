@@ -226,21 +226,19 @@ fn theme_current() -> String {
 }
 
 fn emit_monitors_changed() {
-    if let Some(conn) = CONN.get() {
-        if let Ok(iface_ref) = conn.object_server().interface::<_, MonitorsIface>("/org/alexie/Daemon") {
+    if let Some(conn) = CONN.get()
+        && let Ok(iface_ref) = conn.object_server().interface::<_, MonitorsIface>("/org/alexie/Daemon") {
             let ctxt = iface_ref.signal_context();
             let _ = zbus::block_on(MonitorsIface::changed(ctxt));
         }
-    }
 }
 
 fn emit_theme_changed(name: String) {
-    if let Some(conn) = CONN.get() {
-        if let Ok(iface_ref) = conn.object_server().interface::<_, ThemeIface>("/org/alexie/Daemon") {
+    if let Some(conn) = CONN.get()
+        && let Ok(iface_ref) = conn.object_server().interface::<_, ThemeIface>("/org/alexie/Daemon") {
             let ctxt = iface_ref.signal_context();
             let _ = zbus::block_on(ThemeIface::changed(ctxt, &name));
         }
-    }
 }
 
 pub fn run_dbus_server() {

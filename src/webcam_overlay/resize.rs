@@ -43,11 +43,10 @@ pub(crate) fn resize(action: &str) -> String {
         let parts: Vec<&str> = region.split('+').collect();
         if parts.len() == 3 {
             let wh: Vec<&str> = parts[0].split('x').collect();
-            if wh.len() == 2 {
-                if let (Ok(w), Ok(h), Ok(x), Ok(y)) = (wh[0].parse::<i64>(), wh[1].parse::<i64>(), parts[1].parse::<i64>(), parts[2].parse::<i64>()) {
+            if wh.len() == 2
+                && let (Ok(w), Ok(h), Ok(x), Ok(y)) = (wh[0].parse::<i64>(), wh[1].parse::<i64>(), parts[1].parse::<i64>(), parts[2].parse::<i64>()) {
                     anchor_w = w; anchor_h = h; anchor_x = x; anchor_y = y;
                 }
-            }
         }
     }
 

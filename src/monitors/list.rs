@@ -43,13 +43,11 @@ pub(crate) fn list_action(snap: &Snapshot) -> String {
             _ => "none".to_string(),
         };
         if mirror.is_empty() { mirror = "none".to_string(); }
-        if mirror != "none" {
-            if let Ok(id) = mirror.parse::<i64>() {
-                if let Some(n) = id_to_name.get(&id) {
+        if mirror != "none"
+            && let Ok(id) = mirror.parse::<i64>()
+                && let Some(n) = id_to_name.get(&id) {
                     mirror = n.clone();
                 }
-            }
-        }
 
         let (pos, mode) = saved.get(&name).cloned().unwrap_or_else(|| ("auto".to_string(), "preferred".to_string()));
 

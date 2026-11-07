@@ -133,11 +133,10 @@ pub(crate) fn palette_fix_value(v: &mut serde_json::Value) -> Result<(), String>
                 .ok_or_else(|| format!("could not adjust {key} against {bg_key}"))?;
             current = fixed;
         }
-        if current != original {
-            if let Some(obj) = v.as_object_mut() {
+        if current != original
+            && let Some(obj) = v.as_object_mut() {
                 obj.insert(key.to_string(), serde_json::json!(current));
             }
-        }
     }
     Ok(())
 }

@@ -43,13 +43,11 @@ pub(crate) fn current_theme() -> String {
     }
     // fallback: state.json theme field
     let sp = state_dir().join("state.json");
-    if let Ok(s) = std::fs::read_to_string(&sp) {
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&s) {
-            if let Some(theme) = value.get("theme").and_then(|t| t.as_str()) {
+    if let Ok(s) = std::fs::read_to_string(&sp)
+        && let Ok(value) = serde_json::from_str::<serde_json::Value>(&s)
+            && let Some(theme) = value.get("theme").and_then(|t| t.as_str()) {
                 return theme.to_string();
             }
-        }
-    }
     String::new()
 }
 
@@ -66,11 +64,10 @@ pub(crate) fn live_link() -> PathBuf { state_dir().join("live") }
 pub(crate) fn generations_dir() -> PathBuf { state_dir().join("generations") }
 
 pub(crate) fn write_atomic(path: &PathBuf, content: &str) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)?;
         }
-    }
     let tmp = path.with_extension(format!("tmp{}", std::process::id()));
     std::fs::write(&tmp, content)?;
     if std::fs::rename(&tmp, path).is_err() {
@@ -107,13 +104,11 @@ pub(crate) fn mode_of(name: &str) -> String {
 #[allow(dead_code)]
 pub(crate) fn current_mode() -> String {
     if current_theme() == "wallpaper" {
-        if let Ok(s) = fs::read_to_string(generated_file()) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
-                if let Some(m) = v.get("_mode").and_then(|x| x.as_str()) {
+        if let Ok(s) = fs::read_to_string(generated_file())
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
+                && let Some(m) = v.get("_mode").and_then(|x| x.as_str()) {
                     return m.to_string();
                 }
-            }
-        }
         return "dark".to_string();
     }
     mode_of(&current_theme())

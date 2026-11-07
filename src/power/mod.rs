@@ -41,8 +41,8 @@ pub(crate) fn apply() {
 
     if src == "ac" {
         restore_brightness();
-    } else if automation_enabled() {
-        if let Some(pct) = battery_percent() {
+    } else if automation_enabled()
+        && let Some(pct) = battery_percent() {
             if pct <= critical_pct() {
                 profile = critical_profile();
                 enter_dim("critical", critical_brightness());
@@ -53,7 +53,6 @@ pub(crate) fn apply() {
                 restore_brightness();
             }
         }
-    }
 
     let ppd_bin = ppd();
     let _ = run(&ppd_bin, &["set", &profile]);

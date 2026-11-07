@@ -13,11 +13,10 @@ pub(crate) fn workspace_base(name: &str) -> String {
     }
     let all = monitors_by_name(true);
     let identity = monitor_serial(&all, name);
-    if identity != name {
-        if let Some(n) = map.get(&identity) {
+    if identity != name
+        && let Some(n) = map.get(&identity) {
             return n.to_string();
         }
-    }
     "1".to_string()
 }
 
@@ -66,11 +65,10 @@ pub(crate) fn workspaces_sync_action() -> String {
         let identity = monitor_serial(&all, name);
 
         // migrate name-keyed entry to identity key
-        if map.contains_key(name) && !map.contains_key(&identity) {
-            if let Some(base) = map.remove(name) {
+        if map.contains_key(name) && !map.contains_key(&identity)
+            && let Some(base) = map.remove(name) {
                 map.insert(identity.clone(), base);
             }
-        }
         if !map.contains_key(&identity) {
             let mut candidate = 1i64;
             while map.values().any(|&v| v == candidate) {

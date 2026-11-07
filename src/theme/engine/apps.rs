@@ -68,9 +68,9 @@ pub(crate) fn tell_apps(name: &str) {
         let _ = std::fs::create_dir_all(equicord.join("themes"));
         let _ = std::fs::copy(&live_discord, equicord.join("themes").join("anixie.theme.css"));
         let settings = equicord.join("settings").join("settings.json");
-        if settings.exists() {
-            if let Ok(s) = std::fs::read_to_string(&settings) {
-                if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&s) {
+        if settings.exists()
+            && let Ok(s) = std::fs::read_to_string(&settings)
+                && let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&s) {
                     if let Some(obj) = v.as_object_mut() {
                         let mut themes: Vec<serde_json::Value> = obj
                             .get("enabledThemes")
@@ -84,8 +84,6 @@ pub(crate) fn tell_apps(name: &str) {
                     }
                     let _ = std::fs::write(&settings, serde_json::to_string(&v).unwrap_or_default());
                 }
-            }
-        }
     }
 
     crate::theme::apply_cursor();
@@ -191,11 +189,10 @@ pub(crate) fn apply_theme() -> String {
     let needs_materialise = !live_link().join("palette.json").exists()
         || state_theme != name
         || renderer.is_empty();
-    if needs_materialise {
-        if let Err(e) = materialise(&name) {
+    if needs_materialise
+        && let Err(e) = materialise(&name) {
             return format!("ERR {}", e);
         }
-    }
     drop(_lock);
     tell_apps(&name);
     run_hooks(&name);

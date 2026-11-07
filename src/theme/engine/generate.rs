@@ -124,11 +124,10 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
         return Err("ERR no picture to read a palette from — set one with 'wallpaper set FILE', or name one: 'theme wallpaper FILE'".to_string());
     }
     let wallpaper_png = state_dir().join("wallpaper.png");
-    if let (Ok(a), Ok(b)) = (std::fs::canonicalize(&wp_path), std::fs::canonicalize(&wallpaper_png)) {
-        if a == b {
+    if let (Ok(a), Ok(b)) = (std::fs::canonicalize(&wp_path), std::fs::canonicalize(&wallpaper_png))
+        && a == b {
             return Err("ERR the current background is generated from the palette; set a picture with 'wallpaper set FILE' first".to_string());
         }
-    }
 
     let mtime = file_mtime(Path::new(&wp_path));
     let key_material = format!("{}\n{}\n{}\n{}\n{}", wp_path, mtime, requested, "1", matugen_version());
@@ -144,13 +143,11 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
     // prune old cache entries (>30 days)
     if let Ok(read) = std::fs::read_dir(&cache_dir) {
         for entry in read.flatten() {
-            if let Ok(m) = entry.metadata() {
-                if let Ok(modified) = m.modified() {
-                    if modified.elapsed().map(|d| d.as_secs() > 30 * 86400).unwrap_or(false) {
+            if let Ok(m) = entry.metadata()
+                && let Ok(modified) = m.modified()
+                    && modified.elapsed().map(|d| d.as_secs() > 30 * 86400).unwrap_or(false) {
                         let _ = std::fs::remove_file(entry.path());
                     }
-                }
-            }
         }
     }
     if cache.exists() && palette_ok_file(&cache) {

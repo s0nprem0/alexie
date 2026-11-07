@@ -6,9 +6,8 @@ pub(crate) fn transform_index(name: &str) -> Option<usize> {
 
 pub(crate) fn parse_transform(v: &str) -> Option<usize> {
     if let Some(i) = transform_index(v) { return Some(i); }
-    if let Ok(i) = v.parse::<usize>() {
-        if i < 8 { return Some(i); }
-    }
+    if let Ok(i) = v.parse::<usize>()
+        && i < 8 { return Some(i); }
     None
 }
 
@@ -29,9 +28,8 @@ pub(crate) fn valid_mode(v: &str) -> bool {
     if xb.count() > 0 { return false; }
     if w.is_empty() || !w.chars().all(|c| c.is_ascii_digit()) { return false; }
     if h.is_empty() || !h.chars().all(|c| c.is_ascii_digit()) { return false; }
-    if let Some(r) = rate {
-        if r.is_empty() || !r.chars().all(|c| c.is_ascii_digit() || c == '.') { return false; }
-    }
+    if let Some(r) = rate
+        && (r.is_empty() || !r.chars().all(|c| c.is_ascii_digit() || c == '.')) { return false; }
     // ensure at most one '@'
     if v.matches('@').count() > 1 { return false; }
     true

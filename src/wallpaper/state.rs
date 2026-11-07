@@ -68,11 +68,10 @@ pub(crate) fn watch_dirs() -> Vec<PathBuf> {
     if let Ok(v) = env::var("WALLPAPER_DIR") {
         return vec![PathBuf::from(v)];
     }
-    if let Some(list) = crate::config::get_str_list(&["wallpaper", "dirs"]) {
-        if !list.is_empty() {
+    if let Some(list) = crate::config::get_str_list(&["wallpaper", "dirs"])
+        && !list.is_empty() {
             return list.into_iter().map(PathBuf::from).collect();
         }
-    }
     vec![home_dir().join("Pictures").join("Wallpapers")]
 }
 

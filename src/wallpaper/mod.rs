@@ -27,21 +27,17 @@ pub fn handle(args: &[String]) -> String {
             // filter interpolates the theme name unsanitised.
             let theme = current_theme();
             let wp = state_dir().join("wallpapers.json");
-            if let Ok(s) = fs::read_to_string(&wp) {
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&s) {
-                    if let Some(path) = value
+            if let Ok(s) = fs::read_to_string(&wp)
+                && let Ok(value) = serde_json::from_str::<serde_json::Value>(&s)
+                    && let Some(path) = value
                         .get("themes")
                         .and_then(|t| t.get(&theme))
                         .and_then(|t| t.get("fallback"))
                         .and_then(|f| f.get("path"))
                         .and_then(|p| p.as_str())
-                    {
-                        if !path.is_empty() {
+                        && !path.is_empty() {
                             return path.to_string();
                         }
-                    }
-                }
-            }
             let file = state_dir().join(format!("wallpaper.{}", theme));
             if let Ok(s) = fs::read_to_string(&file) {
                 let s = s.trim().to_string();

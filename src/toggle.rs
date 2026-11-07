@@ -8,11 +8,9 @@ fn hyprctl_temp() -> String {
 
 fn nightlight_state() -> &'static str {
     let t = hyprctl_temp();
-    if !t.is_empty() {
-        if let Ok(n) = t.parse::<i64>() {
-            if n < 6000 { return "on"; }
-        }
-    }
+    if !t.is_empty()
+        && let Ok(n) = t.parse::<i64>()
+            && n < 6000 { return "on"; }
     "off"
 }
 

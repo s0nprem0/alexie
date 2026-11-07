@@ -90,9 +90,8 @@ pub(crate) fn set_action(snap: &Snapshot, output: &str, key: &str, value: &str) 
                 if snap.field(&v, "disabled") == "true" { return format!("ERR {} is off; turn it on before mirroring", v); }
                 // target must not already be mirroring
                 let st = state::read_state_from(snap, &v);
-                if let Some(s) = st {
-                    if s.3 != "none" { return format!("ERR {} is mirroring another screen; extend it first", v); }
-                }
+                if let Some(s) = st
+                    && s.3 != "none" { return format!("ERR {} is mirroring another screen; extend it first", v); }
             }
             if snap.field(output, "disabled") == "true" {
                 return format!("ERR {} is off; turn it on before mirroring", output);

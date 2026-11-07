@@ -33,9 +33,8 @@ pub(crate) fn on_mains() -> bool {
     if let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") {
         for e in entries.flatten() {
             let p = e.path().join("online");
-            if let Ok(s) = std::fs::read_to_string(&p) {
-                if s.trim() == "1" { return true; }
-            }
+            if let Ok(s) = std::fs::read_to_string(&p)
+                && s.trim() == "1" { return true; }
         }
     }
     false
@@ -49,9 +48,8 @@ pub(crate) fn battery_percent() -> Option<i64> {
             let name = e.file_name().to_string_lossy().to_string();
             if !name.starts_with("BAT") { continue; }
             let p = e.path().join("capacity");
-            if let Ok(s) = std::fs::read_to_string(&p) {
-                if let Ok(v) = s.trim().parse::<i64>() { return Some(v); }
-            }
+            if let Ok(s) = std::fs::read_to_string(&p)
+                && let Ok(v) = s.trim().parse::<i64>() { return Some(v); }
         }
     }
     None
@@ -61,9 +59,8 @@ pub(crate) fn charge_ceiling() -> Option<i64> {
     if let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") {
         for e in entries.flatten() {
             let p = e.path().join("charge_control_end_threshold");
-            if let Ok(s) = std::fs::read_to_string(&p) {
-                if let Ok(v) = s.trim().parse::<i64>() { return Some(v); }
-            }
+            if let Ok(s) = std::fs::read_to_string(&p)
+                && let Ok(v) = s.trim().parse::<i64>() { return Some(v); }
         }
     }
     None

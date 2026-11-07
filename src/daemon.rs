@@ -28,8 +28,8 @@ pub(crate) fn encode_request(args: &[String], stdin_data: &str) -> String {
 
 pub(crate) fn decode_request(line: &str) -> WireRequest {
     let trimmed = line.trim();
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-        if let Some(args) = value.get("args").and_then(|a| a.as_array()) {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed)
+        && let Some(args) = value.get("args").and_then(|a| a.as_array()) {
             let argv: Vec<String> = args
                 .iter()
                 .filter_map(|a| a.as_str().map(|s| s.to_string()))
@@ -41,7 +41,6 @@ pub(crate) fn decode_request(line: &str) -> WireRequest {
                 .to_string();
             return WireRequest { args: argv, stdin };
         }
-    }
     WireRequest {
         args: trimmed.split_whitespace().map(|s| s.to_string()).collect(),
         stdin: String::new(),

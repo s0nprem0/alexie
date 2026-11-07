@@ -38,11 +38,10 @@ pub(crate) fn switch_theme(wallpaper: &str, mode: &str) -> String {
         },
         _ => false,
     };
-    if cache_path.exists() && cache_fresh {
-        if let Ok(s) = std::fs::read_to_string(&cache_path) {
+    if cache_path.exists() && cache_fresh
+        && let Ok(s) = std::fs::read_to_string(&cache_path) {
             return s;
         }
-    }
     let mut cmd = std::process::Command::new("matugen");
     cmd.args(["image", path.to_str().unwrap_or(""), "--json", "hex", "--source-color-index", "0"]);
     match mode {

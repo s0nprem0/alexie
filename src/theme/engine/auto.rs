@@ -41,11 +41,10 @@ pub(crate) fn find_auto_pair(palettes: &serde_json::Value, current: &str, target
     let obj = palettes.as_object()?;
     let cur_entry = obj.get(current)?;
     let pair = cur_entry.get("_pair").and_then(|v| v.as_str()).filter(|s| !s.is_empty());
-    if let Some(p) = pair {
-        if obj.contains_key(p) {
+    if let Some(p) = pair
+        && obj.contains_key(p) {
             return Some(p.to_string());
         }
-    }
     let family = cur_entry.get("_family").and_then(|v| v.as_str()).unwrap_or("");
     // same family + target mode, sorted for determinism
     let mut candidates: Vec<&String> = obj.keys().filter(|k| *k != current).collect();
@@ -113,11 +112,10 @@ pub(crate) fn apply_auto() -> String {
         }
         return "OK".to_string();
     }
-    if let Some(pair) = find_auto_pair(&state::palettes(), &name, &target) {
-        if state::has_theme(&pair) {
+    if let Some(pair) = find_auto_pair(&state::palettes(), &name, &target)
+        && state::has_theme(&pair) {
             return set_theme(&pair);
         }
-    }
     "OK".to_string()
 }
 

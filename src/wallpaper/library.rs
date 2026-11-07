@@ -30,14 +30,13 @@ pub(crate) fn scan(dirs: &[PathBuf]) -> Vec<PathBuf> {
                 out.push(p.clone());
             }
             // one level of recursion for subdirs (common for wallpaper packs)
-            if p.is_dir() {
-                if let Ok(sub) = fs::read_dir(&p) {
+            if p.is_dir()
+                && let Ok(sub) = fs::read_dir(&p) {
                     for e in sub.flatten() {
                         let sp = e.path();
                         if sp.is_file() && is_supported(&sp) { out.push(sp); }
                     }
                 }
-            }
         }
     }
     out

@@ -46,8 +46,8 @@ pub(crate) fn doctor() -> String {
         let mut unresolved = false;
         if let Ok(read) = std::fs::read_dir(&live) {
             for entry in read.flatten() {
-                if let Ok(s) = std::fs::read_to_string(entry.path()) {
-                    if s.lines().any(|line| {
+                if let Ok(s) = std::fs::read_to_string(entry.path())
+                    && s.lines().any(|line| {
                         let mut chars = line.chars().peekable();
                         // crude @TOKEN@ scan without regex: @, then [A-Z0-9_]+, then @
                         let mut in_at = false;
@@ -68,7 +68,6 @@ pub(crate) fn doctor() -> String {
                         unresolved = true;
                         break;
                     }
-                }
             }
         }
         if unresolved {
@@ -76,9 +75,9 @@ pub(crate) fn doctor() -> String {
             failures += 1;
         }
 
-        if live.join("palette.json").exists() {
-            if let Ok(s) = std::fs::read_to_string(live.join("palette.json")) {
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+        if live.join("palette.json").exists()
+            && let Ok(s) = std::fs::read_to_string(live.join("palette.json"))
+                && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
                     for (fg_tok, bg_tok) in [
                         ("muted", "surface"),
                         ("muted", "background"),
@@ -87,18 +86,14 @@ pub(crate) fn doctor() -> String {
                     ] {
                         let fg_c = v.get(fg_tok).and_then(|x| x.as_str()).unwrap_or("");
                         let bg_c = v.get(bg_tok).and_then(|x| x.as_str()).unwrap_or("");
-                        if let (Some(fg_c), Some(bg_c)) = (Some(fg_c), Some(bg_c)) {
-                            if let Some(ratio) = contrast(fg_c, bg_c) {
-                                if ratio < 4.5 {
+                        if let (Some(fg_c), Some(bg_c)) = (Some(fg_c), Some(bg_c))
+                            && let Some(ratio) = contrast(fg_c, bg_c)
+                                && ratio < 4.5 {
                                     out.push_str(&format!("warn     {} vs {} contrast {:.2} < 4.5\n", fg_tok, bg_tok, ratio));
                                     warnings += 1;
                                 }
-                            }
-                        }
                     }
                 }
-            }
-        }
     }
 
     let config_home = env::var("XDG_CONFIG_HOME")

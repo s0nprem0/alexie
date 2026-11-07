@@ -90,11 +90,10 @@ pub(crate) fn theme_render(args: &[String]) -> String {
         Err(e) => return format!("ERR read template: {}", e),
     };
     let rendered = render_template(&content, &vars);
-    if let Some(parent) = std::path::Path::new(out).parent() {
-        if !parent.as_os_str().is_empty() {
+    if let Some(parent) = std::path::Path::new(out).parent()
+        && !parent.as_os_str().is_empty() {
             let _ = std::fs::create_dir_all(parent);
         }
-    }
     match std::fs::write(out, rendered) {
         Ok(_) => format!("rendered {}", out),
         Err(e) => format!("ERR write: {}", e),

@@ -16,11 +16,10 @@ fn pid_alive(pid: i64) -> bool {
 }
 
 fn watcher_pid_alive() -> bool {
-    if let Ok(s) = std::fs::read_to_string(watcher_pid_file()) {
-        if let Ok(pid) = s.trim().parse::<i64>() {
+    if let Ok(s) = std::fs::read_to_string(watcher_pid_file())
+        && let Ok(pid) = s.trim().parse::<i64>() {
             return pid_alive(pid);
         }
-    }
     false
 }
 
@@ -124,11 +123,10 @@ fn claim_pid_file() -> bool {
 }
 
 fn release_pid_file() {
-    if let Ok(s) = std::fs::read_to_string(watcher_pid_file()) {
-        if s.trim() == std::process::id().to_string() {
+    if let Ok(s) = std::fs::read_to_string(watcher_pid_file())
+        && s.trim() == std::process::id().to_string() {
             let _ = std::fs::remove_file(watcher_pid_file());
         }
-    }
 }
 
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -166,10 +164,7 @@ pub fn watch() {
         return;
     }
     while !STOP.load(Ordering::SeqCst) {
-        children.retain_mut(|c| match c.try_wait() {
-            Ok(Some(_)) => false,
-            _ => true,
-        });
+        children.retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
         if children.is_empty() {
             break;
         }

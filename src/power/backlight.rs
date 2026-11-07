@@ -20,24 +20,21 @@ pub(crate) fn set_backlight(pct: i64) {
 }
 
 pub(crate) fn restore_brightness() {
-    if let Ok(s) = std::fs::read_to_string(saved_brightness_file()) {
-        if let Ok(v) = s.trim().parse::<i64>() {
+    if let Ok(s) = std::fs::read_to_string(saved_brightness_file())
+        && let Ok(v) = s.trim().parse::<i64>() {
             set_backlight(v);
         }
-    }
     let _ = std::fs::remove_file(saved_brightness_file());
     let _ = std::fs::remove_file(dim_level_file());
 }
 
 pub(crate) fn enter_dim(level: &str, target: i64) {
-    if let Ok(s) = std::fs::read_to_string(dim_level_file()) {
-        if s.trim() == level { return; }
-    }
-    if !saved_brightness_file().exists() {
-        if let Some(cur) = backlight_percent() {
+    if let Ok(s) = std::fs::read_to_string(dim_level_file())
+        && s.trim() == level { return; }
+    if !saved_brightness_file().exists()
+        && let Some(cur) = backlight_percent() {
             let _ = std::fs::write(saved_brightness_file(), format!("{}\n", cur));
         }
-    }
     set_backlight(target);
     let _ = std::fs::write(dim_level_file(), format!("{}\n", level));
 }

@@ -78,14 +78,13 @@ pub(crate) fn write_daily_json(conn: &Connection) {
     let mut total: i64 = 0;
     if let Ok(mut stmt) = conn.prepare(
         "SELECT app_class, SUM(duration) FROM sessions WHERE start_time >= ?1 GROUP BY app_class",
-    ) {
-        if let Ok(iter) = stmt.query_map(params![ts], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
+    )
+        && let Ok(iter) = stmt.query_map(params![ts], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))) {
             for (k, v) in iter.filter_map(|r| r.ok()) {
                 apps.insert(k, serde_json::json!(v));
                 total += v;
             }
         }
-    }
     let obj = serde_json::json!({"date": day, "apps": apps, "idle": 0, "active": total});
     let _ = fs::write(&file, obj.to_string());
 }

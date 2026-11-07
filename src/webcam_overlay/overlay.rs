@@ -45,11 +45,9 @@ pub(crate) fn overlay_address() -> String {
     let v: Value = serde_json::from_str(&out).unwrap_or(Value::Null);
     if let Some(arr) = v.as_array() {
         for c in arr {
-            if let Some(cls) = c.get("class").and_then(|x| x.as_str()) {
-                if cls.starts_with("WebcamOverlay-") {
-                    if let Some(addr) = c.get("address").and_then(|x| x.as_str()) { return addr.to_string(); }
-                }
-            }
+            if let Some(cls) = c.get("class").and_then(|x| x.as_str())
+                && cls.starts_with("WebcamOverlay-")
+                    && let Some(addr) = c.get("address").and_then(|x| x.as_str()) { return addr.to_string(); }
         }
     }
     String::new()

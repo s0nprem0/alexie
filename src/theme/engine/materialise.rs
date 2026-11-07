@@ -9,20 +9,18 @@ fn tool(env_name: &str, default: &str) -> String {
 }
 
 pub(crate) fn theme_apps_bin() -> String {
-    if let Ok(v) = env::var("THEME_APPS") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("THEME_APPS")
+        && !v.is_empty() {
             return v;
         }
-    }
     let cfg = crate::config::get_str(&["theme", "theme_apps"], "");
     if !cfg.is_empty() {
         return cfg;
     }
-    if let Ok(s) = std::fs::read_to_string(state::live_link().join("renderer")) {
-        if let Some(path) = s.split_whitespace().nth(1) {
+    if let Ok(s) = std::fs::read_to_string(state::live_link().join("renderer"))
+        && let Some(path) = s.split_whitespace().nth(1) {
             return path.to_string();
         }
-    }
     tool("THEME_APPS", "theme-apps")
 }
 

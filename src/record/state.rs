@@ -9,11 +9,11 @@ use crate::proc::{resolve_tool, run};
 
 pub(crate) fn runtime_dir() -> PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
-        let st = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
+        
+        env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
             let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             format!("{}/.local/state", home)
-        });
-        st
+        })
     });
     PathBuf::from(rt).join("anixie")
 }
