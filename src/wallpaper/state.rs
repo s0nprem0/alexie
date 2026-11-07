@@ -1,4 +1,3 @@
-use crate::proc::run;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -28,25 +27,6 @@ pub(crate) fn current_theme() -> String {
         if !s.is_empty() { return s; }
     }
     String::new()
-}
-
-pub(crate) fn delegate(args: &[String]) -> String {
-    // Delegate heavy ops to the legacy bash implementation explicitly,
-    // like theme/shot/record. resolve_tool("wallpaper") can re-enter
-    // alexie via the wallpaper shim when daemon mode is on and the
-    // legacy binary has been removed.
-    let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) = run("wallpaper-legacy", &a);
-    if code == 0 {
-        if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
-    } else if code == -1 {
-        format!(
-            "ERR wallpaper-legacy not found: subcommand `{}` needs the legacy bash wallpaper (enable anixie.daemon, which renames it to wallpaper-legacy)",
-            args.first().map(|s| s.as_str()).unwrap_or("")
-        )
-    } else {
-        format!("ERR (exit {}) {}", code, err.trim())
-    }
 }
 
 pub(crate) fn home_dir() -> PathBuf {
@@ -146,9 +126,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn delegate_unknown_fails_fast() {
-        let out = delegate(&["__bogus_subcommand__".to_string()]);
-        assert!(out.starts_with("ERR"), "got: {out}");
-    }
 }

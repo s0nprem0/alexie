@@ -63,7 +63,7 @@ pub(crate) fn set_rotation(value: &str) -> String {
         return "ERR wallpaper: rotation needs whole minutes (0 turns it off)".to_string();
     }
     let minutes: i64 = value.parse().unwrap_or(-1);
-    if minutes < 0 || minutes > 1440 {
+    if !(0..=1440).contains(&minutes) {
         return "ERR wallpaper: rotation must be at most 1440 minutes".to_string();
     }
     match crate::theme::state::write_atomic(&rotation_file(), &format!("{}\n", minutes)) {

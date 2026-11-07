@@ -14,8 +14,8 @@
 //! tests can fake them on PATH:
 //! - `theme-apps` renders the application templates (like @THEME_APPS@)
 //! - `matugen`/`magick`/`ffmpeg` for wallpaper palette generation
-//! - quickshell/hyprctl/gsettings/tmux/wallpaper-legacy for tell_apps
-//!   (all best-effort, like legacy `|| true`)
+//! - quickshell/hyprctl/gsettings/tmux for tell_apps, plus the
+//!   native wallpaper apply (all best-effort, like legacy `|| true`)
 //!
 //! Palettes come from the embedded themes.json (identical copy of
 //! anixie's themes.json, verified by `diff` in development), not an

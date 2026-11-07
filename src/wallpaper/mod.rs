@@ -1,7 +1,7 @@
 //! Wallpaper: set/watch and library.
 //!
 //! Split from a single 560-line wallpaper.rs for readability:
-//! - `state` — state dir, current theme, legacy delegate, paths
+//! - `state` — state dir, current theme, paths
 //! - `library` — scan/fuzzy/thumbs/search
 //! - `playback` — pause/resume/status, set, watch
 //!
@@ -15,7 +15,7 @@ pub mod apply;
 pub mod catalog;
 pub mod select;
 pub mod step;
-use state::{current_theme, delegate, state_dir};
+use state::{current_theme, state_dir};
 use std::fs;
 use std::path::PathBuf;
 
@@ -172,7 +172,7 @@ pub fn handle(args: &[String]) -> String {
                 catalog::list_output()
             }
         }
-        _ => delegate(args),
+        _ => format!("ERR unknown wallpaper subcommand: {}", args[0]),
     }
 }
 

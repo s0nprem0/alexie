@@ -88,8 +88,9 @@ pub(crate) fn tell_apps(name: &str) {
 
     crate::theme::apply_cursor();
     let _ = run(&tmux_bin(), &["source-file", state::live_link().join("tmux.conf").to_string_lossy().as_ref()]);
-    // wallpaper apply via the legacy binary (best-effort)
-    let _ = run("wallpaper-legacy", &["apply"]);
+    // Re-apply the saved wallpaper selection so videos and
+    // per-output gradients follow the new palette (best-effort).
+    let _ = crate::wallpaper::apply::apply();
 }
 
 pub(crate) fn run_hooks(name: &str) {
