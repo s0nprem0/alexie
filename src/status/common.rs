@@ -133,6 +133,33 @@ pub(crate) fn cidr_to_netmask(prefix: u32) -> Option<String> {
     ))
 }
 
+/// nmcli `-g` (single value) helper: trimmed stdout or "" on failure.
+/// Used by band/dns handlers for one property at a time.
+pub(crate) fn nm_get(args: &[&str]) -> String {
+    let mut full = vec!["-e", "no", "-g"];
+    full.extend_from_slice(args);
+    let (_, out, _) = crate::proc::run(&nmcli(), &full);
+    out.trim().to_string()
+}
+
+/// The connected Wi-Fi device, if any.
+pub(crate) fn wifi_device() -> Option<String> {
+    let out = nm_get(&["DEVICE,TYPE,STATE", "device", "status"]);
+    for line in out.lines() {
+        let parts = split_nmcli_t_line(line);
+        if parts.len() >= 3 && parts[1] == "wifi" && parts[2].contains("connected") {
+            return Some(parts[0].clone());
+        }
+    }
+    None
+}
+
+/// The active connection profile name for a device.
+pub(crate) fn wifi_profile(device: &str) -> Option<String> {
+    let p = nm_get(&["GENERAL.CONNECTION", "device", "show", device]);
+    if p.is_empty() { None } else { Some(p) }
+}
+
 pub(crate) fn active_wifi_device() -> Option<String> {
     let out = {
         let (code, o, _) = crate::proc::run(&nmcli(), &["-t", "-f", "DEVICE,TYPE,STATE", "dev"]);
