@@ -31,5 +31,19 @@
           ];
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
         };
+        checks = {
+          # `nix flake check` builds default (with doCheck = tests) and
+          # verifies formatting stays rustfmt-clean.
+          fmt = pkgs.runCommand "alexie-fmt"
+            {
+              nativeBuildInputs = [ pkgs.rustfmt ];
+            }
+            ''
+              cp -r ${./src} ./src
+              cp ${./rustfmt.toml} ./rustfmt.toml
+              rustfmt --edition 2024 --check src/**/*.rs src/*.rs
+              touch $out
+            '';
+        };
       });
 }
