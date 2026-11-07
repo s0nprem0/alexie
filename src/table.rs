@@ -104,30 +104,6 @@ pub fn render(headers: &[&str], rows: &[Vec<String>]) -> String {
     out
 }
 
-#[allow(dead_code)]
-/// Alias for [`render`].
-pub fn table(headers: &[&str], rows: &[Vec<String>]) -> String {
-    render(headers, rows)
-}
-
-#[allow(dead_code)]
-/// Alias for [`render`].
-pub fn ascii_table(headers: &[&str], rows: &[Vec<String>]) -> String {
-    render(headers, rows)
-}
-
-#[allow(dead_code)]
-/// Alias for [`render`].
-pub fn format_table(headers: &[&str], rows: &[Vec<String>]) -> String {
-    render(headers, rows)
-}
-
-#[allow(dead_code)]
-/// Alias for [`render`].
-pub fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
-    render(headers, rows)
-}
-
 /// Render a two-column key/value table.
 pub fn render_kv(pairs: &[(&str, String)]) -> String {
     let rows: Vec<Vec<String>> = pairs.iter().map(|(k, v)| vec![k.to_string(), v.clone()]).collect();

@@ -15,11 +15,6 @@ pub(crate) fn load_current_player() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-#[allow(dead_code)]
-pub(crate) fn save_current_player(name: &str) {
-    let _ = fs::write(current_player_path(), name);
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SinkInfo {
     pub index: serde_json::Value,

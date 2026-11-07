@@ -102,9 +102,3 @@ pub(crate) fn get_media_info_for(player: Option<&str>) -> Option<MediaInfo> {
         length: playerctl_length(target_player),
     })
 }
-
-#[allow(dead_code)]
-pub(crate) fn run_playerctl(args: &[&str]) -> Option<String> {
-    let (code, out, _) = crate::proc::run(&playerctl(), args);
-    if code == 0 { Some(out.trim().to_string()) } else { None }
-}

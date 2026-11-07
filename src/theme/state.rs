@@ -53,14 +53,11 @@ pub(crate) fn current_theme() -> String {
 
 pub(crate) fn state_file() -> PathBuf { state_dir().join("state.json") }
 pub(crate) fn current_file() -> PathBuf { state_dir().join("current") }
-#[allow(dead_code)]
 pub(crate) fn mode_file() -> PathBuf { state_dir().join("mode") }
 pub(crate) fn wallpaper_mode_file() -> PathBuf { state_dir().join("wallpaper-mode") }
 pub(crate) fn cursor_file() -> PathBuf { state_dir().join("cursor-size") }
 pub(crate) fn generated_file() -> PathBuf { state_dir().join("palette.json") }
-#[allow(dead_code)]
 pub(crate) fn live_link() -> PathBuf { state_dir().join("live") }
-#[allow(dead_code)]
 pub(crate) fn generations_dir() -> PathBuf { state_dir().join("generations") }
 
 pub(crate) fn write_atomic(path: &PathBuf, content: &str) -> std::io::Result<()> {
@@ -119,7 +116,6 @@ pub(crate) fn mode_of(name: &str) -> String {
     if m.is_empty() { "dark".to_string() } else { m }
 }
 
-#[allow(dead_code)]
 pub(crate) fn current_mode() -> String {
     if current_theme() == "wallpaper" {
         if let Ok(s) = fs::read_to_string(generated_file())
@@ -189,7 +185,6 @@ pub(crate) fn state_ensure() -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-#[allow(dead_code)]
 pub(crate) fn state_set_theme(name: &str, source: &str) -> Result<(), String> {
     state_ensure()?;
     let mut state = read_state_json().unwrap_or_else(migrated_state_json);
@@ -211,7 +206,6 @@ pub(crate) fn state_set_theme(name: &str, source: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-#[allow(dead_code)]
 pub(crate) fn state_set_generation(gen_dir: &str) -> Result<(), String> {
     state_ensure()?;
     let mut state = read_state_json().unwrap_or_else(migrated_state_json);

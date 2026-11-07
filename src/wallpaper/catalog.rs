@@ -13,7 +13,6 @@ pub(crate) fn wallpapers_file() -> PathBuf { state_dir().join("wallpapers.json")
 pub(crate) fn background_file() -> PathBuf { state_dir().join("background.json") }
 pub(crate) fn library_cache_file() -> PathBuf { state_dir().join("library.json") }
 pub(crate) fn library_stamp_file() -> PathBuf { state_dir().join("library.stamp") }
-#[allow(dead_code)]
 pub(crate) fn rotation_file() -> PathBuf { state_dir().join("rotation") }
 
 pub(crate) fn is_video(path: &str) -> bool {

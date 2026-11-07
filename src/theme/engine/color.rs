@@ -141,18 +141,6 @@ pub(crate) fn palette_fix_value(v: &mut serde_json::Value) -> Result<(), String>
     Ok(())
 }
 
-#[allow(dead_code)]
-fn palette_fix_file(path: &Path) -> Result<(), String> {
-    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let mut v: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-    if !v.is_object() {
-        return Err("palette is not an object".to_string());
-    }
-    palette_fix_value(&mut v)?;
-    let pretty = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?;
-    super::super::state::write_atomic(&path.to_path_buf(), &format!("{}\n", pretty)).map_err(|e| e.to_string())
-}
-
 pub(crate) fn color_accent_name(hex: &str) -> Option<String> {
     if !color_ok(hex) {
         return None;

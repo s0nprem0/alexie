@@ -56,7 +56,6 @@ impl TokenSpec {
 
 /// Resolve a `tokens.json` path: `THEME_TOKENS` env → `theme.tokens_json`
 /// config → `None` (callers fall back to [`TokenSpec::embedded`]).
-#[allow(dead_code)]
 pub(crate) fn tokens_path() -> Option<PathBuf> {
     if let Ok(v) = std::env::var("THEME_TOKENS")
         && !v.trim().is_empty()
@@ -67,7 +66,6 @@ pub(crate) fn tokens_path() -> Option<PathBuf> {
     if v.trim().is_empty() { None } else { Some(PathBuf::from(v)) }
 }
 
-#[allow(dead_code)]
 pub(crate) fn load_spec() -> TokenSpec {
     if let Some(path) = tokens_path()
         && let Ok(text) = std::fs::read_to_string(&path)

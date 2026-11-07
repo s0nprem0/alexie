@@ -148,7 +148,6 @@ fn write_generated_configs(
 }
 
 /// Is the native renderer available (templates dir configured)?
-#[allow(dead_code)]
 pub(crate) fn is_available() -> bool {
     templates_dir().is_some_and(|d| d.is_dir())
 }

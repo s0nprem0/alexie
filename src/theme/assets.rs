@@ -12,7 +12,6 @@ use std::path::PathBuf;
 /// Resolve the templates dir: `ALEXIE_THEME_TEMPLATES` env →
 /// `theme.templates_dir` config → `None` (callers fall back to
 /// external `theme-apps` subprocess).
-#[allow(dead_code)]
 pub(crate) fn templates_dir() -> Option<PathBuf> {
     if let Ok(v) = std::env::var("ALEXIE_THEME_TEMPLATES")
         && !v.trim().is_empty()
@@ -30,7 +29,6 @@ pub(crate) fn templates_dir() -> Option<PathBuf> {
 
 /// (template filename, output filename, required)
 /// Mirrors `theming/default.nix` manifest order. LibreWolf = optional.
-#[allow(dead_code)]
 pub(crate) fn template_manifest() -> Vec<(&'static str, &'static str, bool)> {
     vec![
         ("helix.toml", "helix.toml", true),
@@ -58,7 +56,6 @@ pub(crate) fn template_manifest() -> Vec<(&'static str, &'static str, bool)> {
 }
 
 /// Required outputs (hard error if missing in a generation).
-#[allow(dead_code)]
 pub(crate) fn required_outputs() -> Vec<&'static str> {
     template_manifest()
         .into_iter()
@@ -68,7 +65,6 @@ pub(crate) fn required_outputs() -> Vec<&'static str> {
 }
 
 /// Optional outputs (warn only — LibreWolf best-effort).
-#[allow(dead_code)]
 pub(crate) fn optional_outputs() -> Vec<&'static str> {
     template_manifest()
         .into_iter()
@@ -77,7 +73,6 @@ pub(crate) fn optional_outputs() -> Vec<&'static str> {
         .collect()
 }
 
-#[allow(dead_code)]
 pub(crate) fn renderer_id() -> String {
     // Cheap fingerprint for `theme apply` skip logic. Bump when the
     // manifest changes so existing generations are re-rendered.
