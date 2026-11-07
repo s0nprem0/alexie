@@ -40,19 +40,31 @@ pub(crate) fn is_airplane_mode() -> bool {
     }
 }
 
-pub(crate) fn wifi_saved_connections() -> HashMap<String, bool> {
-    let out = run_out(
-        &nmcli(),
-        &["-t", "-f", "NAME,TYPE,AUTOCONNECT", "connection", "show"],
-    );
+/// Parse `nmcli -t -f NAME,802-11-wireless.ssid,AUTOCONNECT connection show`
+/// output, keyed by **SSID** (not profile NAME). The previous version keyed
+/// by NAME and joined on SSID in `collect()`: any profile whose NAME differs
+/// from its SSID showed up as unsaved, so the UI asked for the password
+/// again on every disconnect/reconnect.
+pub(crate) fn parse_saved_connections(out: &str) -> HashMap<String, bool> {
     let mut map = HashMap::new();
     for line in out.lines() {
         let parts = split_nmcli_t_line(line);
-        if parts.len() >= 3 && parts[1] == "802-11-wireless" {
-            map.insert(parts[0].clone(), parts[2].eq_ignore_ascii_case("yes"));
+        if parts.len() >= 3 {
+            let ssid = parts[1].trim().to_string();
+            if !ssid.is_empty() {
+                map.insert(ssid, parts[2].eq_ignore_ascii_case("yes"));
+            }
         }
     }
     map
+}
+
+pub(crate) fn wifi_saved_connections() -> HashMap<String, bool> {
+    let out = run_out(
+        &nmcli(),
+        &["-t", "-f", "NAME,802-11-wireless.ssid,AUTOCONNECT", "connection", "show"],
+    );
+    parse_saved_connections(&out)
 }
 
 /// Parse one wifi list line.

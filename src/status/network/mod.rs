@@ -377,6 +377,30 @@ fn set_dns(v4: &str, v6: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wifi::parse_saved_connections;
+
+    #[test]
+    fn saved_map_matches_ssid_not_profile_name() {
+        // Profile NAME differs from its SSID; the map must be keyed by
+        // SSID or the UI re-asks for the password on every reconnect.
+        let out = "Home:MyNetwork:yes\nWork:Office AP:no\nWired:\n".to_string();
+        let map = parse_saved_connections(&out);
+        assert_eq!(map.get("MyNetwork"), Some(&true));
+        assert_eq!(map.get("Office AP"), Some(&false));
+        assert!(map.get("Home").is_none(), "must not key by profile NAME");
+        assert!(map.get("Work").is_none(), "must not key by profile NAME");
+    }
+
+    #[test]
+    fn saved_map_handles_escaped_colons_and_trims() {
+        let out = "My\\:Profile:My\\:Wifi:yes\nPadded:  Spaced  :yes\n: :no\nshort\n".to_string();
+        let map = parse_saved_connections(&out);
+        assert_eq!(map.get("My:Wifi"), Some(&true));
+        assert_eq!(map.get("Spaced"), Some(&true));
+        // Empty SSID (non-wireless row) and short rows are skipped.
+        assert!(!map.contains_key(""));
+        assert_eq!(map.len(), 2);
+    }
 
     #[test]
     fn wifi_line_parses() {
