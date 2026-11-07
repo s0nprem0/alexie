@@ -8,6 +8,7 @@
 
 pub mod geometry;
 pub mod capture;
+pub mod scroll;
 
 use crate::proc::run;
 use std::env;
@@ -60,10 +61,6 @@ pub fn handle(args: &[String]) -> String {
             _ => { rest.push(a.to_string()); }
         }
         i += 1;
-    }
-
-    if mode == "scroll" {
-        return delegate(args);
     }
 
     if let Some(unknown) = rest.first() {

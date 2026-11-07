@@ -83,13 +83,23 @@ pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> Stri
         suffix += 1;
     }
 
-    // grim to captured file (for save/preview) or scratch (for copy)
+    // grim to captured file (for save/preview) or scratch (for copy);
+    // scrolling capture pages through the window and stitches instead.
     let tmp_scratch = crate::proc::tmp_file("shot", "png").to_string_lossy().to_string();
-    let (code, _, err) = run(&grim(), &["-c", "-g", &geometry, &tmp_scratch]);
-    if code != 0 {
-        release_freeze();
-        let _ = std::fs::remove_file(&tmp_scratch);
-        return format!("ERR grim: {}", err.trim());
+    if mode == "scroll" {
+        if let Err(e) = super::scroll::scroll_capture(&geometry, &tmp_scratch) {
+            release_freeze();
+            let _ = std::fs::remove_file(&tmp_scratch);
+            let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "6000", "Screenshot failed", &e]);
+            return format!("ERR {}", e);
+        }
+    } else {
+        let (code, _, err) = run(&grim(), &["-c", "-g", &geometry, &tmp_scratch]);
+        if code != 0 {
+            release_freeze();
+            let _ = std::fs::remove_file(&tmp_scratch);
+            return format!("ERR grim: {}", err.trim());
+        }
     }
 
     let last_capture_file = runtime_dir().join("last-capture");
