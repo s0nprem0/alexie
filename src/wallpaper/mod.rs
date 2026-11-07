@@ -11,6 +11,7 @@ pub mod state;
 pub mod library;
 pub mod playback;
 
+pub mod apply;
 pub mod catalog;
 pub mod select;
 use state::{current_theme, delegate, state_dir};
@@ -91,6 +92,7 @@ pub fn handle(args: &[String]) -> String {
             };
             library::search(&dirs, query)
         }
+        "apply" => apply::apply(),
         "use" => {
             if args.len() < 2 { return "ERR usage: wallpaper use FILE [--output NAME]".to_string(); }
             let output = parse_output_flag(&args[2..]);

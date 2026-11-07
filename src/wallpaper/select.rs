@@ -176,13 +176,7 @@ pub(crate) fn use_wallpaper(target: &str, output: &str) -> String {
         return format!("OK wallpaper: {}", target);
     }
 
-    // Apply is still delegated until the apply half is ported.
-    let (code, out, err) = crate::proc::run("wallpaper-legacy", &["apply"]);
-    if code == 0 {
-        if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
-    } else {
-        format!("ERR (exit {}) {}", code, err.trim())
-    }
+    super::apply::apply()
 }
 
 fn clear_library_cache() {
