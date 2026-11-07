@@ -105,8 +105,8 @@ mod tests {
     fn required_excludes_librewolf() {
         let req = required_outputs();
         assert!(!req.iter().any(|o| o.contains("librewolf")));
-        assert!(req.iter().any(|o| *o == "helix.toml"));
-        assert!(req.iter().any(|o| *o == "opencode-theme.json"));
+        assert!(req.contains(&"helix.toml"));
+        assert!(req.contains(&"opencode-theme.json"));
     }
 
     #[test]

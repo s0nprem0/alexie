@@ -18,7 +18,7 @@ pub(crate) fn render_template(
     subs: &BTreeMap<String, String>,
 ) -> Result<String, String> {
     let mut ordered: Vec<(&String, &String)> = subs.iter().collect();
-    ordered.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    ordered.sort_by_key(|e| std::cmp::Reverse(e.0.len()));
     let mut out = src.to_string();
     for (placeholder, value) in ordered {
         if !placeholder.is_empty() {

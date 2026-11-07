@@ -11,7 +11,7 @@
 //! `materialise.rs`. All other missing templates are hard errors.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::super::state;
 use crate::theme::assets::{optional_outputs, templates_dir, template_manifest};
@@ -157,7 +157,11 @@ pub(crate) fn is_available() -> bool {
 /// `Err` on required-template/placeholder failures. Optional
 /// (LibreWolf) templates warn only.
 pub(crate) fn render_apps(gen_dir: &Path, palette: &serde_json::Map<String, serde_json::Value>, mode: &str) -> Result<(), String> {
-    let dir = templates_dir().ok_or_else(|| "templates dir not configured".to_string())?;
+    render_apps_with_dir(templates_dir(), gen_dir, palette, mode)
+}
+
+pub(crate) fn render_apps_with_dir(dir_opt: Option<PathBuf>, gen_dir: &Path, palette: &serde_json::Map<String, serde_json::Value>, mode: &str) -> Result<(), String> {
+    let dir = dir_opt.ok_or_else(|| "templates dir not configured".to_string())?;
     if !dir.is_dir() {
         return Err(format!("templates dir not found: {}", dir.display()));
     }
@@ -206,14 +210,21 @@ mod tests {
 
     #[test]
     fn render_apps_requires_templates_dir() {
-        // With no templates configured, is_available is false and
-        // render_apps errors with the explicit message.
+        // Hermetic: pass None explicitly so the test does not depend
+        // on the host's config/env templates dir.
         let pal: serde_json::Map<String, serde_json::Value> =
             serde_json::from_str(r##"{"background":"#000000","primary":"#ffffff"}"##).unwrap();
-        let dir = std::env::temp_dir().join("alexie-render-apps-test");
+        let dir = std::env::temp_dir().join(format!(
+            "alexie-render-apps-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
-        let err = render_apps(&dir, &pal, "dark").unwrap_err();
+        let err = render_apps_with_dir(None, &dir, &pal, "dark").unwrap_err();
         assert!(err.contains("templates dir"), "got: {err}");
+        let missing = dir.join("nonexistent");
+        let err2 = render_apps_with_dir(Some(missing.clone()), &dir, &pal, "dark").unwrap_err();
+        assert!(err2.contains("templates dir not found"), "got: {err2}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
