@@ -7,15 +7,14 @@
 
 pub mod watch;
 
-use crate::proc::{run, run_stdout_to_file, run_with_stdin};
+use crate::proc::{run, run_stdout_to_file, run_with_stdin, quickshell, wl_copy};
 use std::env;
 
 pub use watch::{ensure_watcher, store, watch};
 
 pub(crate) fn cliphist() -> String { env::var("CLIPHIST").unwrap_or_else(|_| "cliphist".to_string()) }
-pub(crate) fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
 pub(crate) fn file_bin() -> String { env::var("FILE").unwrap_or_else(|_| "file".to_string()) }
-pub(crate) fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
+pub(crate) fn qs() -> String { quickshell() }
 pub(crate) fn wl_paste() -> String { env::var("WL_PASTE").unwrap_or_else(|_| "wl-paste".to_string()) }
 pub(crate) fn exe() -> String {
     env::current_exe()

@@ -1,4 +1,4 @@
-use crate::proc::run;
+use crate::proc::{notify_send as notify, run, wl_copy};
 use std::env;
 
 
@@ -6,9 +6,6 @@ fn shot_pick() -> String {
     env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string())
 }
 fn grim() -> String { env::var("GRIM").unwrap_or_else(|_| "grim".to_string()) }
-fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
-fn notify() -> String { env::var("NOTIFY_SEND").unwrap_or_else(|_| "notify-send".to_string()) }
-
 
 fn runtime_dir() -> std::path::PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {

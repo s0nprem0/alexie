@@ -10,13 +10,8 @@
 //! time. Picker values must stay free of `'` — handlers validate
 //! what they accept (e.g. emoji `apply`, reminder minutes).
 
-use crate::proc::run;
-use std::env;
+use crate::proc::{run, quickshell as qs};
 use std::path::PathBuf;
-
-fn qs() -> String {
-    env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string())
-}
 
 pub(crate) struct Request {
     pub title: String,
@@ -160,6 +155,7 @@ pub fn handle_with_stdin(args: &[String], stdin_data: &str) -> String {
     }
 }
 
+// CLI fallback symmetry with other modules; dispatch uses handle_with_stdin.
 #[allow(dead_code)]
 pub fn handle(args: &[String]) -> String {
     handle_with_stdin(args, "")

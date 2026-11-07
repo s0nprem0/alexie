@@ -2,13 +2,9 @@ use super::color::{palette_fix_value, palette_ok_file, palette_ok_value};
 use super::materialise::{StateLock, materialise};
 use super::apps::{tell_apps, run_hooks};
 use super::super::state::{generated_file, state_dir, saved_wallpaper_mode, wallpaper_mode_file, write_atomic};
-use crate::proc::run;
+use crate::proc::{run, tool};
 use std::env;
 use std::path::Path;
-
-fn tool(env_name: &str, default: &str) -> String {
-    env::var(env_name).unwrap_or_else(|_| default.to_string())
-}
 
 fn matugen_bin() -> String { tool("MATUGEN", "matugen") }
 fn magick_bin() -> String { tool("MAGICK", "magick") }

@@ -13,7 +13,7 @@ mod exec;
 mod file;
 
 pub use exec::{run, run_bytes_with_stdin, run_with_stdin, shell_quote};
-pub use tool::{find_in_path, resolve_tool};
+pub use tool::{find_in_path, notify_send, quickshell, resolve_tool, tool, wl_copy};
 pub use file::{copy_file_to_clipboard, copy_text_to_clipboard, run_stdout_to_file, tmp_file};
 
 #[cfg(test)]

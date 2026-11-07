@@ -27,11 +27,11 @@ pub(crate) fn out_dir() -> PathBuf {
 
 pub(crate) fn gsr() -> String { env::var("GSR").unwrap_or_else(|_| "gpu-screen-recorder".to_string()) }
 pub(crate) fn ffmpeg() -> String { env::var("FFMPEG").unwrap_or_else(|_| "ffmpeg".to_string()) }
-pub(crate) fn notify() -> String { env::var("NOTIFY_SEND").unwrap_or_else(|_| "notify-send".to_string()) }
+pub(crate) use crate::proc::notify_send as notify;
 pub(crate) fn notify_raw() -> String { env::var("NOTIFY_SEND_RAW").unwrap_or_else(|_| "notify-send".to_string()) }
 pub(crate) fn shot_pick() -> String { env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string()) }
 pub(crate) fn webcam_overlay() -> String { env::var("WEBCAM_OVERLAY").unwrap_or_else(|_| "webcam-overlay".to_string()) }
-pub(crate) fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
+pub(crate) use crate::proc::quickshell as qs;
 
 pub(crate) fn pid_file() -> PathBuf { runtime_dir().join("anixie-record.pid") }
 pub(crate) fn name_file() -> PathBuf { runtime_dir().join("anixie-record.file") }

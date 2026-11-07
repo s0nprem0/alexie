@@ -62,7 +62,7 @@ fn wl_copy() -> String {
     if !cfg.is_empty() {
         return cfg;
     }
-    "wl-copy".to_string()
+    crate::proc::wl_copy()
 }
 
 /// Parse emoji-test.txt `; fully-qualified` lines → `emoji name\temoji` entries.

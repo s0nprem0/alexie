@@ -1,12 +1,8 @@
 use super::color::palette_ok_file;
 use super::super::state::{self, generated_file, generations_dir, live_link, mode_file, state_dir, state_ensure, state_set_generation, state_set_theme, write_atomic};
-use crate::proc::run;
+use crate::proc::{run, tool};
 use std::env;
 use std::path::{Path, PathBuf};
-
-fn tool(env_name: &str, default: &str) -> String {
-    env::var(env_name).unwrap_or_else(|_| default.to_string())
-}
 
 pub(crate) fn theme_apps_bin() -> String {
     if let Ok(v) = env::var("THEME_APPS")
@@ -216,10 +212,16 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         return Err("could not write the terminal palette".to_string());
     }
 
-    // renderer record: embedded palettes + the theme-apps binary in use
+    // renderer record: embedded palettes + the theme-apps binary
+    // in use + template-manifest fingerprint so a manifest change
+    // can invalidate stale generations.
     if write_atomic(
         &gen_dir.join("renderer"),
-        &format!("embedded-themes {}\n", theme_apps_bin()),
+        &format!(
+            "embedded-themes {} {}\n",
+            theme_apps_bin(),
+            crate::theme::assets::renderer_id()
+        ),
     )
     .is_err()
     {

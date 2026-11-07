@@ -1,12 +1,10 @@
 //! Reminders via systemd user timers + notify-send.
 
-use crate::proc::{find_in_path, run};
+use crate::proc::{find_in_path, notify_send, quickshell as qs, run};
 use std::env;
 
 fn systemctl() -> String { env::var("SYSTEMCTL").unwrap_or_else(|_| "systemctl".to_string()) }
 fn systemd_run() -> String { env::var("SYSTEMD_RUN").unwrap_or_else(|_| "systemd-run".to_string()) }
-fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
-fn notify_send() -> String { env::var("NOTIFY_SEND").unwrap_or_else(|_| "notify-send".to_string()) }
 fn reminded_prefix() -> &'static str { "reminder" }
 
 fn usage() -> String {

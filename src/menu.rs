@@ -1,11 +1,6 @@
 //! Menu: open/list/launch via quickshell IPC.
 
-use crate::proc::run;
-use std::env;
-
-fn qs() -> String {
-    env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string())
-}
+use crate::proc::{run, quickshell as qs};
 
 fn call(args: &[&str]) -> (i32, String, String) {
     let mut full: Vec<&str> = vec!["ipc", "call", "menu"];

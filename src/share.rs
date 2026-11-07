@@ -1,4 +1,4 @@
-use crate::proc::run;
+use crate::proc::{run, wl_copy};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -96,4 +96,3 @@ pub fn handle(args: &[String]) -> String {
     }
 }
 
-fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }

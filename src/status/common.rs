@@ -4,9 +4,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub(crate) fn tool(env_name: &str, default: &str) -> String {
-    env::var(env_name).unwrap_or_else(|_| default.to_string())
-}
+pub(crate) use crate::proc::tool;
 
 pub(crate) fn nmcli() -> String { tool("NMCLI", "nmcli") }
 pub(crate) fn rfkill() -> String { tool("RFKILL", "rfkill") }
@@ -118,24 +116,6 @@ pub(crate) fn active_wifi_device() -> Option<String> {
         }
     }
     None
-}
-
-/// Parse `wpctl get-volume` output ("Volume: 0.52 [MUTED]") → (fraction, muted).
-#[allow(dead_code)]
-pub(crate) fn wpctl_get_volume(device: &str) -> Option<(f64, bool)> {
-    let out = {
-        let (code, o, _) = crate::proc::run("wpctl", &["get-volume", device]);
-        if code == 0 { o.trim().to_string() } else { return None; }
-    };
-    let vol_str = out.strip_prefix("Volume: ")?;
-    let mut muted = false;
-    let mut vol = vol_str;
-    if let Some(rest) = vol.strip_suffix(" [MUTED]") {
-        muted = true;
-        vol = rest;
-    }
-    let pct = vol.parse::<f64>().ok()?;
-    Some((pct, muted))
 }
 
 #[cfg(test)]

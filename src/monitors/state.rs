@@ -1,4 +1,5 @@
 use crate::proc::run;
+pub(crate) use crate::proc::quickshell as qs;
 use serde_json::Value;
 use std::env;
 
@@ -15,7 +16,6 @@ pub(crate) type MonitorState = (String, String, String, String, String, String, 
 pub(crate) fn state_file() -> std::path::PathBuf { state_dir().join("display.conf") }
 pub(crate) fn lid_file() -> std::path::PathBuf { state_dir().join("lid") }
 
-pub(crate) fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
 
 // Write `content` to `dest` atomically via a temp file in the same
 // directory. `/tmp` may be on a different filesystem than the state dir,

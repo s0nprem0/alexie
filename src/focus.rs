@@ -1,7 +1,4 @@
-use crate::proc::run;
-use std::env;
-
-fn qs() -> String { env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string()) }
+use crate::proc::{run, quickshell as qs};
 
 fn usage() -> String {
     "focus — a timed distraction block\n\nUsage:\n  focus [status]\n  focus start [MINUTES]\n  focus stop\n  focus extend [MINUTES]\n".to_string()

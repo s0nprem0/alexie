@@ -1,5 +1,7 @@
 //! Tool resolution: PATH search without shell-outs, preferring
-//! `name-legacy` so delegation never recurses through shims.
+//! `name-legacy` so delegation never recurses through shims, plus
+//! shared env-overridable binary resolvers (wl-copy, quickshell,
+//! notify-send) so callers don't each redefine the same one-liner.
 
 pub fn find_in_path(name: &str, path_str: &str) -> Option<std::path::PathBuf> {
     // Names containing a path separator are used as-is: if the file
@@ -19,6 +21,17 @@ pub fn find_in_path(name: &str, path_str: &str) -> Option<std::path::PathBuf> {
     }
     None
 }
+
+/// Env-overridable binary: `$ENV_NAME` or `default`.
+pub fn tool(env_name: &str, default: &str) -> String {
+    std::env::var(env_name).unwrap_or_else(|_| default.to_string())
+}
+
+pub fn wl_copy() -> String { tool("WL_COPY", "wl-copy") }
+
+pub fn quickshell() -> String { tool("QUICKSHELL", "quickshell") }
+
+pub fn notify_send() -> String { tool("NOTIFY_SEND", "notify-send") }
 
 fn is_executable(p: &std::path::Path) -> bool {
     #[cfg(unix)]

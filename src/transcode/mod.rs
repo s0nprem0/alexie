@@ -11,7 +11,7 @@ pub(crate) mod convert;
 
 use convert::{format_size_options, media_type, output_path, transcode_picture, transcode_video, validate_format_resolution};
 use pick::prompt_pick;
-use crate::proc::shell_quote;
+use crate::proc::{shell_quote, wl_copy};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -20,8 +20,6 @@ fn search_paths() -> Vec<PathBuf> {
     let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     vec![PathBuf::from(format!("{}/Pictures", home)), PathBuf::from(format!("{}/Videos", home))]
 }
-
-fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
 
 pub fn handle(args: &[String]) -> String {
     let mut search_paths = search_paths();

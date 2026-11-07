@@ -3,13 +3,10 @@ use super::materialise::colour;
 use crate::theme::palette;
 use super::materialise::{StateLock, materialise};
 use super::super::state::{self, live_link};
-use crate::proc::run;
+use crate::proc::{run, tool};
 use std::env;
 use std::path::PathBuf;
 
-fn tool(env_name: &str, default: &str) -> String {
-    env::var(env_name).unwrap_or_else(|_| default.to_string())
-}
 pub(crate) fn quickshell_bin() -> String { tool("QUICKSHELL", "quickshell") }
 pub(crate) fn hyprctl_bin() -> String { tool("HYPRCTL", "hyprctl") }
 fn gsettings_bin() -> String { tool("GSETTINGS", "gsettings") }

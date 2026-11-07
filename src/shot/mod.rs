@@ -16,10 +16,11 @@ use crate::proc::run;
 use std::env;
 use std::process::Command;
 
+pub(crate) use crate::proc::wl_copy;
+pub(crate) use crate::proc::notify_send as notify;
+
 pub(crate) fn shot_pick() -> String { env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string()) }
 pub(crate) fn grim() -> String { env::var("GRIM").unwrap_or_else(|_| "grim".to_string()) }
-pub(crate) fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
-pub(crate) fn notify() -> String { env::var("NOTIFY_SEND").unwrap_or_else(|_| "notify-send".to_string()) }
 pub(crate) fn hyprctl() -> String { "hyprctl".to_string() }
 pub(crate) fn runtime_dir() -> std::path::PathBuf {
     let rt = env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {

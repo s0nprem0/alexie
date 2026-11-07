@@ -8,10 +8,9 @@ use super::catalog::is_video;
 use crate::theme::state::write_atomic as write_atomic_state;
 use super::select::wallpapers_ensure;
 use super::state::{current_theme, generated_file, posters_dir, state_dir};
-use crate::proc::run;
+use crate::proc::{run, tool};
 use std::path::Path;
 
-fn tool(env_name: &str, default: &str) -> String { std::env::var(env_name).unwrap_or_else(|_| default.to_string()) }
 fn magick() -> String { tool("MAGICK", "magick") }
 fn ffmpeg() -> String { tool("FFMPEG", "ffmpeg") }
 fn mpvpaper() -> String { tool("MPVPAPER", "mpvpaper") }
