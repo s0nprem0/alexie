@@ -103,7 +103,12 @@ pub(crate) fn watch_dirs() -> Vec<PathBuf> {
         && !list.is_empty() {
             return list.into_iter().map(PathBuf::from).collect();
         }
-    vec![home_dir().join("Pictures").join("Wallpapers")]
+    // Legacy defaults (anixie.theme.wallpaper.dirs).
+    vec![
+        home_dir().join("Pictures").join("Wallpapers"),
+        home_dir().join("Pictures"),
+        data_dir().join("backgrounds"),
+    ]
 }
 
 
