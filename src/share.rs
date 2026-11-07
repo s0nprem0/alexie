@@ -1,4 +1,4 @@
-use crate::proc::{resolve_tool, run};
+use crate::proc::run;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -30,11 +30,35 @@ pub fn handle(args: &[String]) -> String {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
         "" | "menu" => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = resolve_tool("share-legacy");
-            let (code, out, err) = run(&tool, &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
+            // Picker entries carry the subcommand as their value, so
+            // the on-select runs `share <subcommand>` natively.
+            let last = match last_capture() {
+                Ok(l) => l,
+                Err(e) => { let _ = run("notify-send", &["-a", "capture", "-u", "normal", "-t", "3000", "Share", &e]); return format!("ERR {}", e); }
+            };
+            let _ = last;
+            let entries = [
+                "Copy file URI\turi",
+                "Copy path\tpath",
+                "Edit in satty\tedit",
+                "Show in folder\tfolder",
+                "Compress with transcode\tcompress",
+            ];
+            let data = entries.join("\n") + "\n";
+            let out = crate::pick::handle_with_stdin(
+                &["--title".to_string(), "Share capture".to_string(), "--on-select".to_string(), "share {}".to_string()],
+                &data,
+            );
+            // Fallback without a picker: copy the path, like legacy.
+            if out.starts_with("ERR") {
+                let code = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &last, &[]);
+                if code != 0 {
+                    return format!("ERR (exit {}) wl-copy failed", code);
+                }
+                notify("Copied path to clipboard");
+                return "OK".to_string();
+            }
+            out
         }
         "uri" => {
             let last = match last_capture() { Ok(l) => l, Err(e) => { let _ = run("notify-send", &["-a", "capture", "-u", "normal", "-t", "3000", "Share", &e]); return format!("ERR {}", e); } };
@@ -68,13 +92,7 @@ pub fn handle(args: &[String]) -> String {
             let _ = run("transcode", &[&last]);
             "OK".to_string()
         }
-        _ => {
-            let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let tool = resolve_tool("share-legacy");
-            let (code, out, err) = run(&tool, &a);
-            if code == 0 { if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() } }
-            else { format!("ERR (exit {}) {}", code, err.trim()) }
-        }
+        _ => format!("ERR unknown share subcommand: {}", sub),
     }
 }
 
