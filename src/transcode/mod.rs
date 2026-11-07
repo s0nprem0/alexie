@@ -123,7 +123,6 @@ pub fn handle(args: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::convert::{format_size_options, media_type_from_mime, output_path, validate_format_resolution};
     use super::pick::prompt_pick_with;
     #[test]
