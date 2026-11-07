@@ -359,7 +359,7 @@ pub(crate) fn apply() -> String {
 
 /// The saved choice, like legacy chosen(): wallpapers.json
 /// fallback first, then wallpaper.$theme, else "generated".
-fn chosen() -> String {
+pub(crate) fn chosen() -> String {
     super::select::wallpapers_ensure().ok();
     let theme = current_theme();
     let wallpapers = super::catalog::wallpapers_file();

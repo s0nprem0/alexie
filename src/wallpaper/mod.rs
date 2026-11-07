@@ -14,6 +14,7 @@ pub mod playback;
 pub mod apply;
 pub mod catalog;
 pub mod select;
+pub mod step;
 use state::{current_theme, delegate, state_dir};
 use std::fs;
 use std::path::PathBuf;
@@ -37,7 +38,7 @@ fn parse_output_flag(args: &[String]) -> String {
 
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
-        return delegate(args);
+        return step::pick_one();
     }
     match args[0].as_str() {
         "current" => {
@@ -111,6 +112,14 @@ pub fn handle(args: &[String]) -> String {
             if args.len() < 2 { return "ERR usage: wallpaper add DIR".to_string(); }
             select::add_dir(&args[1])
         }
+        "next" => step::step("next", args.get(1).map(|s| s.as_str())),
+        "prev" | "previous" => step::step("prev", args.get(1).map(|s| s.as_str())),
+        "rotate" => step::step("next", Some("--random")),
+        "rotation" => match args.get(1) {
+            Some(v) => step::set_rotation(v),
+            None => step::rotation_minutes().to_string(),
+        },
+        "generated" | "theme" | "default" => select::use_wallpaper("generated", ""),
         "status" => playback::status_video(),
         "pause" => playback::pause_video(),
         "resume" => playback::resume_video(),
