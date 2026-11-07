@@ -134,15 +134,45 @@ fn launch_reply(reply: &str) -> String {
     }
 }
 
+/// Interpret a `menu list` reply. The shell reports the
+/// shell-side "no such group" as an `ERR` line too, so rules both
+/// layers: an empty filtered list (old shell or shell bug) is an
+/// error, never a bare empty success.
+fn list_output(group: &Option<String>, out: &str) -> String {
+    let out = out.trim_end().to_string();
+    if !out.is_empty() {
+        return out;
+    }
+    match group {
+        Some(g) if !g.is_empty() => format!("ERR no such group: {g}"),
+        _ => out,
+    }
+}
+
 /// Execute a parsed command against quickshell.
 fn execute(cmd: Command) -> String {
     match cmd {
         Command::Open => ok_or_err(&["open"]),
-        Command::Only(group) => ok_or_err(&["only", &group]),
+        // QML answers "ok"/"" on success but an error line otherwise,
+        // so the silent-success mapping applies here too.
+        Command::Only(group) => {
+            let (code, reply, err) = call(&["only", &group]);
+            if code != 0 {
+                transport_err(code, &err)
+            } else {
+                launch_reply(&reply)
+            }
+        }
         Command::List(group) => {
             let (code, out, err) = call(&["list", group.as_deref().unwrap_or("")]);
             if code == 0 {
-                out.trim_end().to_string()
+                // `list` prints an ERR line for an unknown group; pass it through.
+                let out = out.trim_end().to_string();
+                if out.starts_with("ERR ") || out == "ERR" {
+                    out
+                } else {
+                    list_output(&group, &out)
+                }
             } else {
                 transport_err(code, &err)
             }
@@ -275,5 +305,23 @@ mod tests {
         assert_eq!(launch_reply("  ok\n"), "OK");
         assert_eq!(launch_reply(""), "OK", "shell printed nothing on success");
         assert_eq!(launch_reply("no such app: x"), "ERR no such app: x");
+    }
+
+    #[test]
+    fn list_output_rejects_empty_filtered_list() {
+        assert_eq!(
+            list_output(&Some("Bogus".to_string()), ""),
+            "ERR no such group: Bogus"
+        );
+        assert_eq!(
+            list_output(&Some("Bogus".to_string()), "stderr noise"),
+            "stderr noise"
+        );
+        assert_eq!(list_output(&None, ""), "");
+        assert_eq!(
+            list_output(&Some("".to_string()), ""),
+            "",
+            "empty group means unfiltered"
+        );
     }
 }
