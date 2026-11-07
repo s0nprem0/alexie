@@ -58,6 +58,7 @@ pub(crate) const COMMANDS: &[(&str, &str, &str)] = &[
     ("shortcuts", "keyboard shortcuts.", "  (help)\n"),
     ("toggle", "nightlight, idle, dnd, stay-awake.", "  nightlight, idle, dnd, stayawake\n  status, list\n"),
     ("menu", "application and action menu.", "  apps, --list, --only\n"),
+    ("apps", "app launcher backend.", "  list [--json] [--search TEXT]\n  launch NAME, bookmark add|remove|list|clear\n  history web|file clear|list, web search|open\n  files index|search|open|history\n"),
     ("capture", "capture text/qr/share.", "  text, qr, share\n"),
     ("daemon", "run the alexie daemon.", "  (no subcommands)\n"),
     ("ping", "health check.", "  (no subcommands)\n"),

@@ -11,6 +11,7 @@
 mod client;
 mod daemon;
 mod dbus;
+mod apps;
 mod capture;
 mod clipboard;
 mod color;

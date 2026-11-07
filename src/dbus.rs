@@ -227,6 +227,16 @@ impl StatusIface {
     }
 }
 
+// ---------- Apps interface (P1: launcher) ----------
+pub struct AppsIface;
+#[interface(name = "org.alexie.Apps1")]
+impl AppsIface {
+    fn list_json(&self) -> String { crate::apps::list_json() }
+    fn launch(&self, name: &str) -> String {
+        crate::apps::handle(&["launch".to_string(), name.to_string()])
+    }
+}
+
 // ---------- Media interface (P1: shot db) ----------
 pub struct MediaIface;
 #[interface(name = "org.alexie.Media1")]
@@ -306,11 +316,14 @@ pub fn run_dbus_server() {
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", StatusIface) {
         eprintln!("dbus: register StatusIface failed: {}", e);
     }
+    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", AppsIface) {
+        eprintln!("dbus: register AppsIface failed: {}", e);
+    }
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", MediaIface) {
         eprintln!("dbus: register MediaIface failed: {}", e);
     }
     let _ = CONN.set(conn.clone());
-    eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme/Status/Media interfaces");
+    eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme/Status/Apps/Media interfaces");
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }
