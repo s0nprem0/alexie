@@ -227,28 +227,9 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         return Err("could not record the renderer".to_string());
     }
 
-    // theme-apps renders the application files; it is the one
-    // external renderer legacy used (@THEME_APPS@).
-    let (code, _, err) = run(&theme_apps_bin(), &[name, gen_dir.to_string_lossy().as_ref()]);
-    if code != 0 {
-        cleanup(&gen_dir);
-        return Err(format!("could not render the application themes: {}", err.trim()));
-    }
-
-    for source in [
-        "palette.json", "mode", "kitty.conf", "helix.toml", "yazi.toml", "hyprlock.conf",
-        "qt6ct-colors.conf", "qt6ct.conf", "qt5ct.conf", "kvantum.kvconfig",
-        "gtk-3.0-settings.ini", "gtk-4.0-settings.ini", "gtk-3.0.css", "gtk-4.0.css",
-        "share-picker.css", "discord.css", "librewolf-userChrome.css", "librewolf-userContent.css",
-        "tmux.conf", "btop.theme", "terminal.zsh",
-    ] {
-        if std::fs::metadata(gen_dir.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
-            cleanup(&gen_dir);
-            return Err(format!("the generation is missing {}", source));
-        }
-    }
-
-    // Activate: tmp symlink + rename (atomic, like legacy .live.$$
+    // Activate the generation BEFORE rendering the slow app files, so the
+    // shell can repaint from the palette immediately ("early shell paint").
+    // theme-apps still writes into gen_dir, which live_link now points at.
     let tmp_link = state_dir().join(format!(".live.{}", std::process::id()));
     let _ = std::fs::remove_file(&tmp_link);
     #[cfg(unix)]
@@ -268,6 +249,42 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         let _ = std::fs::remove_file(&tmp_link);
         cleanup(&gen_dir);
         return Err("could not activate the generation".to_string());
+    }
+
+    // Early shell paint: tell Quickshell the new palette now, before the
+    // slow application files (and papirus-folders) are rendered.
+    {
+        let qs = std::env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string());
+        if name == "wallpaper" {
+            let content = std::fs::read_to_string(live_link().join("palette.json"))
+                .unwrap_or_default()
+                .replace('\n', "");
+            let _ = run(&qs, &["ipc", "call", "theme", "palette", &content]);
+        } else {
+            let _ = run(&qs, &["ipc", "call", "theme", "set", name]);
+        }
+    }
+
+    // theme-apps renders the application files; it is the one
+    // external renderer legacy used (@THEME_APPS@).
+    let (code, _, err) = run(&theme_apps_bin(), &[name, gen_dir.to_string_lossy().as_ref()]);
+    if code != 0 {
+        cleanup(&gen_dir);
+        return Err(format!("could not render the application themes: {}", err.trim()));
+    }
+
+    for source in [
+        "palette.json", "mode", "kitty.conf", "helix.toml", "yazi.toml", "hyprlock.conf",
+        "qt6ct-colors.conf", "qt6ct.conf", "qt5ct.conf", "kvantum.kvconfig",
+        "gtk-3.0-settings.ini", "gtk-4.0-settings.ini", "gtk-3.0.css", "gtk-4.0.css",
+        "share-picker.css", "discord.css", "librewolf-userChrome.css", "librewolf-userContent.css",
+        "mpv.conf", "zathurarc", "eza-theme.yml", "opencode-theme.json",
+        "tmux.conf", "btop.theme", "terminal.zsh",
+    ] {
+        if std::fs::metadata(gen_dir.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
+            cleanup(&gen_dir);
+            return Err(format!("the generation is missing {}", source));
+        }
     }
 
     let source = if name == "wallpaper" { "wallpaper" } else { "preset" };

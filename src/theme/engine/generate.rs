@@ -180,8 +180,20 @@ fn generate_palette(wp: &str, requested: &str) -> Result<(), String> {
     let saturation: f64 = if sat_code == 0 { sat_out.trim().parse().unwrap_or(1.0) } else { 1.0 };
     let mono = saturation < 0.08;
 
+    // Doty-style brightness detection: for auto/smart mode, decide light vs
+    // dark from the image's luminance instead of relying on matugen's
+    // internal heuristics, so the choice is deterministic and inspectable.
+    let effective_mode = match requested {
+        "auto" | "smart" => {
+            let (b_code, b_out, _) = run(&magick_bin(), &[&source, "-colorspace", "Gray", "-format", "%[fx:mean]", "info:"]);
+            let brightness: f64 = if b_code == 0 { b_out.trim().parse().unwrap_or(0.5) } else { 0.5 };
+            if brightness > 0.55 { "light" } else { "dark" }
+        }
+        other => other,
+    };
+
     let mut cmd = std::process::Command::new(matugen_bin());
-    cmd.args(["image", &source, "--mode", requested, "--source-color-index", "0", "--json", "hex"]);
+    cmd.args(["image", &source, "--mode", effective_mode, "--source-color-index", "0", "--json", "hex"]);
     if mono {
         cmd.args(["--type", "scheme-monochrome"]);
     }
