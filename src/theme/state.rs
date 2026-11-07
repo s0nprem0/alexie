@@ -78,7 +78,25 @@ pub(crate) fn write_atomic(path: &PathBuf, content: &str) -> std::io::Result<()>
     Ok(())
 }
 
+/// External override path for `themes.json`: `THEME_PALETTES` env →
+/// `theme.palettes_json` config → `None` (embedded fallback).
+pub(crate) fn palettes_path() -> Option<PathBuf> {
+    if let Ok(v) = std::env::var("THEME_PALETTES")
+        && !v.trim().is_empty()
+    {
+        return Some(PathBuf::from(v));
+    }
+    let v = crate::config::get_str(&["theme", "palettes_json"], "");
+    if v.trim().is_empty() { None } else { Some(PathBuf::from(v)) }
+}
+
 pub(crate) fn palettes() -> serde_json::Value {
+    if let Some(path) = palettes_path()
+        && let Ok(text) = std::fs::read_to_string(&path)
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&text)
+    {
+        return v;
+    }
     serde_json::from_str(THEMES_JSON).unwrap_or(serde_json::Value::Null)
 }
 
