@@ -273,17 +273,25 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         return Err(format!("could not render the application themes: {}", err.trim()));
     }
 
-    for source in [
-        "palette.json", "mode", "kitty.conf", "helix.toml", "yazi.toml", "hyprlock.conf",
-        "qt6ct-colors.conf", "qt6ct.conf", "qt5ct.conf", "kvantum.kvconfig",
-        "gtk-3.0-settings.ini", "gtk-4.0-settings.ini", "gtk-3.0.css", "gtk-4.0.css",
-        "share-picker.css", "discord.css", "librewolf-userChrome.css", "librewolf-userContent.css",
-        "mpv.conf", "zathurarc", "eza-theme.yml", "opencode-theme.json",
+    // Required vs optional outputs. LibreWolf (live bridge) is
+    // best-effort: warn instead of failing the switch when browser
+    // templates are absent.
+    use crate::theme::assets::{optional_outputs, required_outputs};
+    let mut required = vec![
+        "palette.json", "mode", "kitty.conf",
+        "qt6ct.conf", "qt5ct.conf", "kvantum.kvconfig",
         "tmux.conf", "btop.theme", "terminal.zsh",
-    ] {
+    ];
+    required.extend(required_outputs());
+    for source in &required {
         if std::fs::metadata(gen_dir.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
             cleanup(&gen_dir);
             return Err(format!("the generation is missing {}", source));
+        }
+    }
+    for source in optional_outputs() {
+        if std::fs::metadata(gen_dir.join(&source)).map(|m| m.len()).unwrap_or(0) == 0 {
+            eprintln!("theme: optional generation file missing {}", source);
         }
     }
 

@@ -14,6 +14,7 @@ pub mod state;
 pub mod palette;
 pub mod tokens;
 pub mod renderer;
+pub mod assets;
 pub mod vars;
 pub mod engine;
 pub mod commands;
