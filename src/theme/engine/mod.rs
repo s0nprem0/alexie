@@ -28,6 +28,7 @@
 pub mod color;
 pub mod generate;
 pub mod materialise;
+pub mod render_apps;
 pub mod apps;
 pub mod auto;
 pub mod doctor;

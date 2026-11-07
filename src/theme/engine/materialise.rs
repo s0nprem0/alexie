@@ -265,12 +265,29 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         }
     }
 
-    // theme-apps renders the application files; it is the one
-    // external renderer legacy used (@THEME_APPS@).
-    let (code, _, err) = run(&theme_apps_bin(), &[name, gen_dir.to_string_lossy().as_ref()]);
-    if code != 0 {
+    // Render the application files. Prefer the native Rust renderer
+    // (template manifest + @TOKEN@ engine) when a templates dir is
+    // configured; otherwise fall back to external `theme-apps`
+    // (@THEME_APPS@ legacy). Both write into `gen_dir` (live symlink
+    // already points at it for early shell paint).
+    use crate::theme::engine::render_apps;
+    let palette_map = generated_json
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let rendered = if render_apps::is_available() {
+        render_apps::render_apps(&gen_dir, &palette_map, &mode_value)
+    } else {
+        let (code, _, err) = run(&theme_apps_bin(), &[name, gen_dir.to_string_lossy().as_ref()]);
+        if code != 0 {
+            Err(format!("could not render the application themes: {}", err.trim()))
+        } else {
+            Ok(())
+        }
+    };
+    if let Err(e) = rendered {
         cleanup(&gen_dir);
-        return Err(format!("could not render the application themes: {}", err.trim()));
+        return Err(e);
     }
 
     // Required vs optional outputs. LibreWolf (live bridge) is
