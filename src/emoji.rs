@@ -10,21 +10,49 @@ fn emoji_test_path() -> Option<PathBuf> {
             return Some(PathBuf::from(v));
         }
     }
-    for cand in [
-        "/run/current-system/sw/share/unicode/emoji/emoji-test.txt",
-        "/usr/share/unicode/emoji/emoji-test.txt",
-        "/usr/share/unicode/emoji-test.txt",
-    ] {
-        let p = PathBuf::from(cand);
+    let cfg = crate::config::get_str(&["emoji", "test_path"], "");
+    if !cfg.is_empty() {
+        let p = PathBuf::from(&cfg);
         if p.is_file() {
             return Some(p);
+        }
+    }
+    let mut cands: Vec<PathBuf> = vec![
+        PathBuf::from("/run/current-system/sw/share/unicode/emoji/emoji-test.txt"),
+        PathBuf::from("/usr/share/unicode/emoji/emoji-test.txt"),
+        PathBuf::from("/usr/share/unicode/emoji-test.txt"),
+    ];
+    if let Ok(home) = env::var("HOME") {
+        cands.push(PathBuf::from(&home).join(".nix-profile/share/unicode/emoji/emoji-test.txt"));
+    }
+    for p in &cands {
+        if p.is_file() {
+            return Some(p.clone());
+        }
+    }
+    // Last resort: scan the Nix store for an installed unicode-emoji.
+    if let Ok(entries) = fs::read_dir("/nix/store") {
+        for entry in entries.flatten() {
+            let p = entry.path().join("share/unicode/emoji/emoji-test.txt");
+            if p.is_file() {
+                return Some(p);
+            }
         }
     }
     None
 }
 
 fn wtype() -> String {
-    env::var("WTYPE").unwrap_or_else(|_| "wtype".to_string())
+    if let Ok(v) = env::var("WTYPE") {
+        if !v.is_empty() {
+            return v;
+        }
+    }
+    let cfg = crate::config::get_str(&["emoji", "wtype"], "");
+    if !cfg.is_empty() {
+        return cfg;
+    }
+    "wtype".to_string()
 }
 
 /// Parse emoji-test.txt `; fully-qualified` lines → `emoji name\temoji` entries.
