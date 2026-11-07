@@ -360,17 +360,24 @@ pub(crate) fn handle_mode_dest(
                 std::time::Duration::from_secs(3),
             );
             if ipc_code != 0 {
+                // Fallback matching legacy show_capture: an image icon and
+                // actions, so the saved file is reachable without the shell.
+                let file_dir = std::path::Path::new(&candidate)
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
                 let _ = run(
                     &notify(),
                     &[
-                        "-a",
-                        "capture",
-                        "-u",
-                        "low",
-                        "-t",
-                        "4000",
+                        "-a", "capture",
+                        "-u", "low",
+                        "-t", "6000",
+                        "-i", &candidate,
                         "Screenshot saved",
-                        &candidate,
+                        &format!("Copied to the clipboard and saved to {}", candidate),
+                        "--action", "Open", "xdg-open", &candidate,
+                        "--action", "Edit", "shot", "edit-last",
+                        "--action", "Show folder", "xdg-open", &file_dir,
                     ],
                 );
             }
