@@ -158,13 +158,12 @@ fn get_cpu_temp() -> i32 {
             let temp_path = path.join("temp");
             if let Ok(type_str) = fs::read_to_string(type_path) {
                 let type_str = type_str.trim();
-                if type_str == "x86_pkg_temp" || type_str == "TCPU" {
-                    if let Ok(temp_str) = fs::read_to_string(temp_path)
+                if (type_str == "x86_pkg_temp" || type_str == "TCPU")
+                    && let Ok(temp_str) = fs::read_to_string(temp_path)
                         && let Ok(temp_raw) = temp_str.trim().parse::<i32>()
                     {
                         return temp_raw / 1000;
                     }
-                }
             }
         }
     }

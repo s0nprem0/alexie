@@ -128,7 +128,7 @@ pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometr
                 return "OK".to_string();
             }
             let _ = fs::write(&last_capture_file, format!("{}\n", output));
-            let _ = super::db::index_screenshot(&output);
+            super::db::index_screenshot(&output);
             release_freeze();
             let _ = fs::remove_file(&tmp_scratch);
             let _ = crate::proc::copy_file_to_clipboard(&wl_copy(), "image/png", std::path::Path::new(&output));
@@ -146,7 +146,7 @@ pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometr
             } else {
                 let _ = move_file(&tmp_scratch, &candidate);
                 let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
-                let _ = super::db::index_screenshot(&candidate);
+                super::db::index_screenshot(&candidate);
                 release_freeze();
                 let _ = run(&notify(), &["-a", "capture", "-u", "normal", "-t", "8000", "Screenshot saved, not copied", "The clipboard could not be reached."]);
                 format!("ERR clipboard unavailable; saved to {}", candidate)
@@ -155,7 +155,7 @@ pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometr
         "save" => {
             let _ = move_file(&tmp_scratch, &candidate);
             let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
-            let _ = super::db::index_screenshot(&candidate);
+            super::db::index_screenshot(&candidate);
             release_freeze();
             // Legacy exec semantics: the post command replaces the
             // shot process and inherits the terminal, so its output
@@ -175,7 +175,7 @@ pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometr
         "preview" => {
             let _ = move_file(&tmp_scratch, &candidate);
             let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
-            let _ = super::db::index_screenshot(&candidate);
+            super::db::index_screenshot(&candidate);
             release_freeze();
             let mut copied = true;
             let code = crate::proc::copy_file_to_clipboard(&wl_copy(), "image/png", std::path::Path::new(&candidate));

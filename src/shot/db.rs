@@ -106,25 +106,22 @@ fn cache_dir() -> PathBuf {
 }
 
 pub(crate) fn db_path() -> PathBuf {
-    if let Ok(v) = env::var("SHOT_DB_PATH") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("SHOT_DB_PATH")
+        && !v.is_empty() {
             return PathBuf::from(v);
         }
-    }
-    if let Ok(v) = env::var("ASSETS_DB") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("ASSETS_DB")
+        && !v.is_empty() {
             return PathBuf::from(v);
         }
-    }
     state_dir().join("assets.db")
 }
 
 pub(crate) fn thumbnails_dir() -> PathBuf {
-    if let Ok(v) = env::var("SHOT_THUMB_DIR") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("SHOT_THUMB_DIR")
+        && !v.is_empty() {
             return PathBuf::from(v);
         }
-    }
     cache_dir().join("thumbnails")
 }
 
@@ -805,11 +802,10 @@ fn parse_limit(args: &[String], default: i64) -> i64 {
     let mut limit = default;
     let mut i = 0;
     while i < args.len() {
-        if args[i] == "--limit" && i + 1 < args.len() {
-            if let Ok(v) = args[i + 1].parse::<i64>() {
+        if args[i] == "--limit" && i + 1 < args.len()
+            && let Ok(v) = args[i + 1].parse::<i64>() {
                 limit = v.clamp(1, 500);
             }
-        }
         i += 1;
     }
     limit

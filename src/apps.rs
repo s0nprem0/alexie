@@ -62,11 +62,10 @@ fn thunar() -> String { env::var("THUNAR").unwrap_or_else(|_| "thunar".to_string
 fn home_dir_str() -> String { env::var("HOME").unwrap_or_default() }
 
 pub(crate) fn db_path() -> PathBuf {
-    if let Ok(v) = env::var("APPS_DB") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("APPS_DB")
+        && !v.is_empty() {
             return PathBuf::from(v);
         }
-    }
     let state = env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
         let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         format!("{}/.local/state", home)
@@ -75,11 +74,10 @@ pub(crate) fn db_path() -> PathBuf {
 }
 
 pub(crate) fn cache_dir() -> PathBuf {
-    if let Ok(v) = env::var("APPS_CACHE_DIR") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("APPS_CACHE_DIR")
+        && !v.is_empty() {
             return PathBuf::from(v);
         }
-    }
     let base = env::var("XDG_CACHE_HOME").unwrap_or_else(|_| {
         let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         format!("{}/.cache", home)
@@ -532,16 +530,14 @@ pub(crate) fn collect_apps(conn: &Connection) -> (Vec<AppInfo>, Vec<AppInfo>) {
         if let Ok(entries) = fs::read_dir(path) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.extension().is_some_and(|ext| ext == "desktop") {
-                    if let Some(file_name) = p.file_name().and_then(|f| f.to_str()) {
-                        if let Some(mut app_info) = parse_desktop_file(&p) {
+                if p.extension().is_some_and(|ext| ext == "desktop")
+                    && let Some(file_name) = p.file_name().and_then(|f| f.to_str())
+                        && let Some(mut app_info) = parse_desktop_file(&p) {
                             if let Some(&count) = usage_map.get(&app_info.name) {
                                 app_info.count = count;
                             }
                             apps.entry(file_name.to_string()).or_insert(app_info);
                         }
-                    }
-                }
             }
         }
     }
@@ -635,13 +631,12 @@ fn search_files(query: &str) -> String {
                     let _ = writeln!(stdin, "{}", entry.path);
                 }
             }
-            if let Some(c2) = child {
-                if let Ok(output) = c2.wait_with_output()
+            if let Some(c2) = child
+                && let Ok(output) = c2.wait_with_output()
                     && output.status.success()
                 {
                     fzf_lines = Some(String::from_utf8_lossy(&output.stdout).lines().map(|s| s.to_string()).collect());
                 }
-            }
         }
         fzf_lines
     };
@@ -704,11 +699,10 @@ pub(crate) fn usage() -> String {
 
 pub fn handle(args: &[String]) -> String {
     // Wabi flag aliases.
-    if let Some(flag) = args.first().map(|s| s.as_str()) {
-        if flag.starts_with("--") {
+    if let Some(flag) = args.first().map(|s| s.as_str())
+        && flag.starts_with("--") {
             return handle_wabi_flag(args);
         }
-    }
 
     let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     match sub {
@@ -823,7 +817,7 @@ pub fn handle(args: &[String]) -> String {
                         _ => format!("ERR unknown subcommand: history file {}", fsub),
                     }
                 }
-                _ => format!("ERR usage: apps history <web|file> <clear|list>"),
+                _ => "ERR usage: apps history <web|file> <clear|list>".to_string(),
             }
         }
         "web" => {
@@ -859,7 +853,7 @@ pub fn handle(args: &[String]) -> String {
                     open_browser(&item);
                     item.url
                 }
-                _ => format!("ERR usage: apps web <search|open> …"),
+                _ => "ERR usage: apps web <search|open> …".to_string(),
             }
         }
         "files" => {
@@ -884,7 +878,7 @@ pub fn handle(args: &[String]) -> String {
                     let items = get_file_history(&conn);
                     serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string())
                 }
-                _ => format!("ERR usage: apps files <index|search|open|history> …"),
+                _ => "ERR usage: apps files <index|search|open|history> …".to_string(),
             }
         }
         _ => format!("ERR unknown subcommand: {}", sub),

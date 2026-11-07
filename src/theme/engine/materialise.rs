@@ -307,7 +307,7 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
         }
     }
     for source in optional_outputs() {
-        if std::fs::metadata(gen_dir.join(&source)).map(|m| m.len()).unwrap_or(0) == 0 {
+        if std::fs::metadata(gen_dir.join(source)).map(|m| m.len()).unwrap_or(0) == 0 {
             eprintln!("theme: optional generation file missing {}", source);
         }
     }

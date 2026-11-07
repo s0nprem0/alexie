@@ -119,7 +119,7 @@ pub(crate) fn substitution_map(
     };
 
     // Base colors: palette key -> token.
-    for (key, _) in &spec.colors {
+    for key in spec.colors.keys() {
         let token = match token_name(spec, key) { Some(t) => t, None => continue };
         let value = match palette_value(palette, key) {
             Some(v) => v,

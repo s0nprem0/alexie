@@ -139,7 +139,7 @@ fn write_generated_configs(
             "export BAT_THEME=ansi\nexport FZF_DEFAULT_OPTS=\"${{FZF_DEFAULT_OPTS:-}} --color=fg:{},bg:{},hl:{},fg+:{} ,bg+:{},hl+:{} ,info:{} ,prompt:{} ,pointer:{}\" \n",
             fg, bg, primary, fg, surface, primary, accent, primary, accent)),
     ] {
-        if let Some(parent) = gen_dir.join(&name).parent() {
+        if let Some(parent) = gen_dir.join(name).parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         state::write_atomic(&gen_dir.join(name).to_path_buf(), &body).map_err(|e| e.to_string())?;
@@ -167,10 +167,8 @@ pub(crate) fn render_apps(gen_dir: &Path, palette: &serde_json::Map<String, serd
 
     let mut warned: Vec<String> = Vec::new();
     for (tmpl, out, required) in template_manifest() {
-        if let Err(e) = render_one(&dir, tmpl, out, required, &subs, gen_dir) {
-            return Err(e);
-        }
-        if !required && !gen_dir.join(&out).exists() {
+        render_one(&dir, tmpl, out, required, &subs, gen_dir)?;
+        if !required && !gen_dir.join(out).exists() {
             warned.push(out.to_string());
         }
     }
@@ -178,8 +176,8 @@ pub(crate) fn render_apps(gen_dir: &Path, palette: &serde_json::Map<String, serd
         eprintln!("theme: optional generation file missing {}", w);
     }
     // opencode guard (mirrors theme-apps.sh)
-    if let Ok(text) = std::fs::read_to_string(gen_dir.join("opencode-theme.json")) {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+    if let Ok(text) = std::fs::read_to_string(gen_dir.join("opencode-theme.json"))
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             for key in ["syntaxNumber", "syntaxType", "syntaxOperator", "syntaxPunctuation", "selectedListItemText"] {
                 if v.get("theme").and_then(|t| t.get(key)).is_none() {
                     // theme-apps.sh hard-fails only when the rendered
@@ -189,7 +187,6 @@ pub(crate) fn render_apps(gen_dir: &Path, palette: &serde_json::Map<String, serd
                 }
             }
         }
-    }
     let generated = serde_json::Value::Object(palette.clone());
     write_generated_configs(gen_dir, &generated, &extras)
 }

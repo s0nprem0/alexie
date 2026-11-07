@@ -5,11 +5,10 @@ use std::fs;
 use std::path::PathBuf;
 
 fn emoji_test_path() -> Option<PathBuf> {
-    if let Ok(v) = env::var("EMOJI_TEST") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("EMOJI_TEST")
+        && !v.is_empty() {
             return Some(PathBuf::from(v));
         }
-    }
     let cfg = crate::config::get_str(&["emoji", "test_path"], "");
     if !cfg.is_empty() {
         let p = PathBuf::from(&cfg);
@@ -43,11 +42,10 @@ fn emoji_test_path() -> Option<PathBuf> {
 }
 
 fn wtype() -> String {
-    if let Ok(v) = env::var("WTYPE") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("WTYPE")
+        && !v.is_empty() {
             return v;
         }
-    }
     let cfg = crate::config::get_str(&["emoji", "wtype"], "");
     if !cfg.is_empty() {
         return cfg;

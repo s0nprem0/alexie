@@ -7,11 +7,10 @@ use std::fs;
 use std::path::PathBuf;
 
 fn picker_bin() -> String {
-    if let Ok(v) = env::var("SHARE_PICKER_BIN") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("SHARE_PICKER_BIN")
+        && !v.is_empty() {
             return v;
         }
-    }
     let path = env::var("PATH").unwrap_or_default();
     find_in_path("hyprland-preview-share-picker", &path)
         .map(|p| p.to_string_lossy().to_string())
@@ -19,11 +18,10 @@ fn picker_bin() -> String {
 }
 
 fn slurp_bin() -> String {
-    if let Ok(v) = env::var("SLURP") {
-        if !v.is_empty() {
+    if let Ok(v) = env::var("SLURP")
+        && !v.is_empty() {
             return v;
         }
-    }
     let path = env::var("PATH").unwrap_or_default();
     find_in_path("slurp", &path)
         .map(|p| p.to_string_lossy().to_string())
