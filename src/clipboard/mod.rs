@@ -44,6 +44,11 @@ fn cliphist_list() -> (i32, String, String) {
     run(&cliphist(), &["list"])
 }
 
+fn is_safe_id(id: &str) -> bool {
+    !id.is_empty() && !id.contains('/') && !id.contains('\\') && !id.contains('\0')
+        && !id.starts_with('-')
+}
+
 fn cliphist_delete_line(line: &str) -> (i32, String, String) {
     // cliphist delete reads the full list line on stdin. Feeding it
     // via run_with_stdin avoids `printf … | cliphist delete` shell
@@ -76,6 +81,7 @@ pub fn handle(args: &[String]) -> String {
         "--copy" => {
             if args.len() < 2 { return "ERR usage: clipboard --copy ID".to_string(); }
             let id = &args[1];
+            if !is_safe_id(id) { return "ERR usage: clipboard --copy ID".to_string(); }
             // Decode binary-safely to a temp file (no shell redirect,
             // no lossy UTF-8 conversion of image data).
             let tmp = crate::proc::tmp_file("clip", "");
@@ -127,6 +133,7 @@ pub fn handle(args: &[String]) -> String {
         }
         "--text" => {
             if args.len() < 2 { return "ERR usage: clipboard --text ID".to_string(); }
+            if !is_safe_id(&args[1]) { return "ERR usage: clipboard --text ID".to_string(); }
             let (code, out, err) = run(&cliphist(), &["decode", &args[1]]);
             if code != 0 { format!("ERR {}", err.trim()) } else { out }
         }
@@ -150,6 +157,7 @@ pub fn handle(args: &[String]) -> String {
                 let id = &line[..tab];
                 let preview = &line[tab+1..];
                 if !preview.starts_with("[[ binary data ") { continue; }
+                if !is_safe_id(id) { continue; }
                 let path = dir.join(id);
                 let (dcode, _) = run_stdout_to_file(&cliphist(), &["decode", id], &path);
                 if dcode == 0 {
@@ -165,6 +173,7 @@ pub fn handle(args: &[String]) -> String {
         }
         "--image" => {
             if args.len() < 2 { return "ERR usage: clipboard --image ID".to_string(); }
+            if !is_safe_id(&args[1]) { return "ERR usage: clipboard --image ID".to_string(); }
             let dir = preview_dir().join("previews");
             let _ = std::fs::create_dir_all(&dir);
             let path = dir.join(format!("preview-{}", args[1]));
@@ -179,6 +188,7 @@ pub fn handle(args: &[String]) -> String {
         "--delete" => {
             if args.len() < 2 { return "ERR usage: clipboard --delete ID".to_string(); }
             let id = &args[1];
+            if !is_safe_id(id) { return "ERR usage: clipboard --delete ID".to_string(); }
             let (code, list, _) = cliphist_list();
             if code != 0 { return "ERR cliphist list failed".to_string(); }
             let found_line = list_ids(&list)

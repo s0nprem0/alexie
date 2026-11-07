@@ -82,6 +82,9 @@ pub fn handle(args: &[String]) -> String {
             if args.len() < 2 {
                 return "ERR usage: reminder --ask MIN".to_string();
             }
+            if args[1].is_empty() || !args[1].chars().all(|c| c.is_ascii_digit()) {
+                return "ERR usage: reminder --ask MIN".to_string();
+            }
             crate::pick::handle_with_stdin(
                 &[
                     "--title".to_string(),
