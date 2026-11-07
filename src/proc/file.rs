@@ -50,12 +50,12 @@ pub fn copy_text_to_clipboard(wl_bin: &str, mime: &str, data: &str, extra: &[&st
         Ok(c) => c,
         Err(_) => return -1,
     };
-    if let Some(mut stdin) = child.stdin.take() {
-        if stdin.write_all(data.as_bytes()).is_err() {
-            let _ = child.kill();
-            let _ = child.wait();
-            return -1;
-        }
+    if let Some(mut stdin) = child.stdin.take()
+        && stdin.write_all(data.as_bytes()).is_err()
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        return -1;
     }
     child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1)
 }

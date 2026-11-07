@@ -12,7 +12,7 @@ mod exec;
 mod file;
 mod tool;
 
-pub use exec::{run, run_bytes_with_stdin, run_with_stdin, shell_quote};
+pub use exec::{run, run_bytes_with_stdin, run_timeout, run_with_stdin, shell_quote};
 pub use file::{copy_file_to_clipboard, copy_text_to_clipboard, run_stdout_to_file, tmp_file};
 pub use tool::{find_in_path, notify_send, quickshell, resolve_tool, tool, wl_copy};
 

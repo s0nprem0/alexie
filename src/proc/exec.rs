@@ -36,14 +36,14 @@ pub fn run_with_stdin(cmd: &str, args: &[&str], stdin_data: &str) -> (i32, Strin
         Ok(c) => c,
         Err(e) => return (-1, String::new(), e.to_string()),
     };
-    if let Some(mut stdin) = child.stdin.take() {
-        if let Err(e) = stdin.write_all(stdin_data.as_bytes()) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return (-1, String::new(), format!("write stdin: {e}"));
-        }
-        // stdin drops here, signalling EOF to the child
+    if let Some(mut stdin) = child.stdin.take()
+        && let Err(e) = stdin.write_all(stdin_data.as_bytes())
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        return (-1, String::new(), format!("write stdin: {e}"));
     }
+    // stdin drops here, signalling EOF to the child
     match child.wait_with_output() {
         Ok(o) => {
             let code = o.status.code().unwrap_or(-1);
@@ -70,14 +70,14 @@ pub fn run_bytes_with_stdin(cmd: &str, args: &[&str], data: &[u8]) -> (i32, Stri
         Ok(c) => c,
         Err(e) => return (-1, String::new(), e.to_string()),
     };
-    if let Some(mut stdin) = child.stdin.take() {
-        if let Err(e) = stdin.write_all(data) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return (-1, String::new(), format!("write stdin: {e}"));
-        }
-        // stdin drops here, signalling EOF to the child
+    if let Some(mut stdin) = child.stdin.take()
+        && let Err(e) = stdin.write_all(data)
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        return (-1, String::new(), format!("write stdin: {e}"));
     }
+    // stdin drops here, signalling EOF to the child
     match child.wait_with_output() {
         Ok(o) => {
             let code = o.status.code().unwrap_or(-1);
@@ -88,6 +88,51 @@ pub fn run_bytes_with_stdin(cmd: &str, args: &[&str], data: &[u8]) -> (i32, Stri
         Err(e) => (-1, String::new(), e.to_string()),
     }
 }
+
+/// Like `run`, but kills the child after `timeout` and returns -1.
+/// For quickshell IPC calls: an unanswered shell must not leave the
+/// daemon thread (and the user's frozen overlay) hanging forever.
+pub fn run_timeout(cmd: &str, args: &[&str], timeout: std::time::Duration) -> (i32, String, String) {
+    use std::io::Read;
+    use std::process::Stdio;
+    let mut child = match Command::new(resolve_tool(cmd))
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => return (-1, String::new(), e.to_string()),
+    };
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let out = child.stdout.take().map(|mut s| {
+                    let mut v = String::new();
+                    let _ = s.read_to_string(&mut v);
+                    v
+                }).unwrap_or_default();
+                let err = child.stderr.take().map(|mut s| {
+                    let mut v = String::new();
+                    let _ = s.read_to_string(&mut v);
+                    v
+                }).unwrap_or_default();
+                return (status.code().unwrap_or(-1), out, err);
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return (-1, String::new(), format!("timed out after {}s", timeout.as_secs()));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => return (-1, String::new(), e.to_string()),
+        }
+    }
+}
+
 
 /// Shell-quote `s` as a single POSIX word (`'…'\''…'`).
 /// Used for static args baked into `pick --on-select` templates at

@@ -4,7 +4,7 @@ use super::geometry::{
     chrono_like_stamp, focused_monitor_geometry_from_json, window_geometry_from_json, window_slug,
 };
 use super::{grim, hyprctl, notify, runtime_dir, shot_pick, wl_copy};
-use crate::proc::run;
+use crate::proc::{run, run_timeout};
 use std::env;
 use std::fs;
 use std::process::Command;
@@ -213,6 +213,10 @@ pub(crate) fn handle_mode_dest(
                 output = format!("{}/{}-{}.png", shot_dir, stem, n);
                 n += 1;
             }
+            // Unfreeze before opening the GUI annotator: the freeze frame
+            // is a fullscreen layer that swallows clicks, so while satty
+            // holds input it must not be on top of it.
+            release_freeze();
             let satty_bin = env::var("SATTY").unwrap_or_else(|_| "satty".to_string());
             let status = Command::new(&satty_bin)
                 .args([
@@ -255,9 +259,12 @@ pub(crate) fn handle_mode_dest(
                 );
                 return format!("ERR clipboard unavailable; saved to {}", output);
             }
-            let _ = run(
+            // Bounded: a hung quickshell handler must not leave the
+            // daemon thread (or the frozen overlay) waiting forever.
+            let _ = run_timeout(
                 "quickshell",
                 &["ipc", "call", "capture", "preview", &output],
+                std::time::Duration::from_secs(3),
             );
             format!("Saved {}", output)
         }
@@ -347,9 +354,10 @@ pub(crate) fn handle_mode_dest(
             } else {
                 "previewCopyFailed"
             };
-            let (ipc_code, _, _) = run(
+            let (ipc_code, _, _) = run_timeout(
                 "quickshell",
                 &["ipc", "call", "capture", ipc_action, &candidate],
+                std::time::Duration::from_secs(3),
             );
             if ipc_code != 0 {
                 let _ = run(
@@ -380,6 +388,11 @@ pub(crate) fn handle_mode_dest(
     }
 }
 
+/// Dismiss the fullscreen freeze surface. The legacy freeze was a
+/// `slurp`/`swappy` process whose pid lived in `anixie-pick-freeze.pid`;
+/// killing it unfreezes the frame. When quickshell itself owns the
+/// layer, that kill misses — so also send `capture hide` (best-effort,
+/// bounded) so the surface cannot swallow clicks if the pid is stale.
 pub(crate) fn release_freeze() {
     let freeze_pid_file = runtime_dir().join("anixie-pick-freeze.pid");
     if let Ok(pid) = std::fs::read_to_string(&freeze_pid_file) {
@@ -392,4 +405,9 @@ pub(crate) fn release_freeze() {
         }
     }
     let _ = std::fs::remove_file(&freeze_pid_file);
+    let _ = run_timeout(
+        "quickshell",
+        &["ipc", "call", "capture", "hide"],
+        std::time::Duration::from_secs(2),
+    );
 }

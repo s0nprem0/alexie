@@ -12,7 +12,7 @@ pub mod db;
 pub mod geometry;
 pub mod scroll;
 
-use crate::proc::run;
+use crate::proc::{run, run_timeout};
 use std::env;
 use std::process::Command;
 
@@ -90,7 +90,11 @@ pub fn handle(args: &[String]) -> String {
         let runtime = runtime_dir();
         let _ = std::fs::create_dir_all(&runtime);
         let _ = std::fs::write(runtime.join("shot-scroll-cancel"), "");
-        let _ = run("quickshell", &["ipc", "call", "capture", "hide"]);
+        let _ = run_timeout(
+            "quickshell",
+            &["ipc", "call", "capture", "hide"],
+            std::time::Duration::from_secs(2),
+        );
         return "OK".to_string();
     }
 
