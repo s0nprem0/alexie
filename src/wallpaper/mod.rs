@@ -11,6 +11,7 @@ pub mod state;
 pub mod library;
 pub mod playback;
 
+pub mod catalog;
 use state::{current_theme, delegate, state_dir};
 use std::fs;
 use std::path::PathBuf;
@@ -21,6 +22,16 @@ pub fn handle(args: &[String]) -> String {
     }
     match args[0].as_str() {
         "current" => {
+            if args.get(1).map(|s| s.as_str()) == Some("--json") {
+                let bg = catalog::background_file();
+                if let Ok(s) = fs::read_to_string(&bg) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) {
+                        return v.to_string();
+                    }
+                }
+                let path = handle(&["current".to_string()]);
+                return serde_json::json!({"outputs": {}, "fallback": {"path": path, "video": false, "poster": ""}}).to_string();
+            }
             // Match legacy chosen(): wallpapers.json fallback first,
             // then wallpaper.$theme file, else "generated".
             // Parse with serde_json instead of a jq shell-out whose
@@ -104,7 +115,21 @@ pub fn handle(args: &[String]) -> String {
             "watching".to_string()
         }
         "watch-foreground" => playback::watch_wallpapers(args),
-        "list" | "library" => delegate(args),
+        "list" | "ls" => {
+            if args.get(1).map(|s| s.as_str()) == Some("--json") {
+                catalog::library_json(false)
+            } else {
+                catalog::list_output()
+            }
+        }
+        "library" => {
+            let refresh = args.iter().any(|a| a == "--refresh");
+            if args.get(1).map(|s| s.as_str()) == Some("--json") || args.get(2).map(|s| s.as_str()) == Some("--json") {
+                catalog::library_json(refresh)
+            } else {
+                catalog::list_output()
+            }
+        }
         _ => delegate(args),
     }
 }

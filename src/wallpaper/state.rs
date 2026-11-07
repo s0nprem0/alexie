@@ -61,6 +61,56 @@ pub(crate) fn cache_dir() -> PathBuf {
     PathBuf::from(base).join("alexie").join("wallpaper-thumbs")
 }
 
+pub(crate) fn data_dir() -> PathBuf {
+    let base = env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
+        let home = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        format!("{}/.local/share", home)
+    });
+    PathBuf::from(base).join("anixie")
+}
+
+/// Per-theme backgrounds folder: $DATA/backgrounds/<theme>.
+pub(crate) fn theme_dir() -> PathBuf {
+    data_dir().join("backgrounds").join(current_theme())
+}
+
+/// The configured default wallpaper, empty when unset (the legacy
+/// build bakes this in as @DEFAULT_WALLPAPER@).
+pub(crate) fn default_wallpaper() -> String {
+    if let Ok(v) = env::var("DEFAULT_WALLPAPER") {
+        return v;
+    }
+    crate::config::get_str(&["wallpaper", "default"], "")
+}
+
+pub(crate) fn wallpaper_recursive() -> bool {
+    match env::var("WALLPAPER_RECURSIVE") {
+        Ok(v) => v == "true",
+        Err(_) => crate::config::get_str(&["wallpaper", "recursive"], "false") == "true",
+    }
+}
+
+pub(crate) fn thumbs_dir() -> PathBuf { state_dir().join("thumbs") }
+pub(crate) fn posters_dir() -> PathBuf { state_dir().join("posters") }
+pub(crate) fn generated_dir() -> PathBuf { state_dir().join("wallpapers") }
+
+/// The palette-gradient wallpaper file for a theme and optional
+/// output: `<theme>-wallpaper.png`, or `<theme>-<output>.png` with
+/// the output name sanitised. The theme-specific name makes the path
+/// change on theme switch, which is how the shell keys its reload.
+pub(crate) fn generated_file(output: &str) -> PathBuf {
+    let theme = current_theme();
+    if output.is_empty() {
+        generated_dir().join(format!("{}-wallpaper.png", theme))
+    } else {
+        let safe: String = output
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '_' })
+            .collect();
+        generated_dir().join(format!("{}-{}.png", theme, safe))
+    }
+}
+
 pub(crate) fn watch_dirs() -> Vec<PathBuf> {
     if let Ok(v) = env::var("WALLPAPER_WATCH_DIRS") {
         return v.split(':').filter(|p| !p.trim().is_empty()).map(PathBuf::from).collect();
