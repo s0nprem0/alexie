@@ -51,7 +51,6 @@ pub(crate) fn tell_apps(name: &str) {
     };
     let gs = gsettings_bin();
     let _ = run(&gs, &["set", "org.gnome.desktop.interface", "color-scheme", color_scheme]);
-    let _ = run(&gs, &["set", "org.g gnome.desktop.interface", "gtk-theme", gtk_theme]);
     let _ = run(&gs, &["set", "org.gnome.desktop.interface", "gtk-theme", gtk_theme]);
     let _ = run(&gs, &["set", "org.gnome.desktop.interface", "icon-theme", icon_theme]);
     let generated = generated_palette();
