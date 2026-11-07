@@ -128,20 +128,20 @@ fn handle_set(args: &[String]) -> String {
     // Move only real application streams. A filter-chain's own output carries
     // no application.name, and moving it would rewire processing.
     let (code, out, _) = crate::proc::run(&pactl, &["-f", "json", "list", "sink-inputs"]);
-    if code == 0 {
-        if let Ok(inputs) = serde_json::from_str::<serde_json::Value>(&out) {
-            for input in inputs.as_array().cloned().unwrap_or_default() {
-                let name = input
-                    .pointer("/properties/application.name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                if name.is_empty() || name == "EasyEffects" {
-                    continue;
-                }
-                if let Some(index) = input.get("index").and_then(|v| v.as_u64()) {
-                    let _ =
-                        crate::proc::run(&pactl, &["move-sink-input", &index.to_string(), sink_name]);
-                }
+    if code == 0
+        && let Ok(inputs) = serde_json::from_str::<serde_json::Value>(&out)
+    {
+        for input in inputs.as_array().cloned().unwrap_or_default() {
+            let name = input
+                .pointer("/properties/application.name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if name.is_empty() || name == "EasyEffects" {
+                continue;
+            }
+            if let Some(index) = input.get("index").and_then(|v| v.as_u64()) {
+                let _ =
+                    crate::proc::run(&pactl, &["move-sink-input", &index.to_string(), sink_name]);
             }
         }
     }

@@ -6,7 +6,52 @@ use super::super::common::{
 };
 use super::types::{ConnectionDetails, NetworkStatus, VpnConnection, WifiNetwork};
 use super::wifi::{is_airplane_mode, is_wifi_enabled, parse_wifi_line, wifi_saved_connections};
-use std::collections::HashSet;
+
+/// Join every `IP4.DNS[*]` value from a `dev show` listing into the
+/// single display string.
+fn join_dns(dns: &[String]) -> String {
+    dns.join(", ")
+}
+
+/// Merge every scan row for the same SSID into one entry, preferring
+/// the active BSSID and otherwise keeping the strongest signal, so
+/// duplicate SSIDs (2.4/5/6 GHz) stay a single row.
+fn index_of_ssid(rows: &[WifiNetwork], ssid: &str) -> Option<usize> {
+    rows.iter().position(|n| n.ssid == ssid)
+}
+
+/// Pure: format an `iw link` bitrate dump as `↓rx ↑tx`, or fall back
+/// to the scan-reported rate.
+pub(crate) fn link_speed(out: &str, fallback_rate: &str) -> String {
+    let (mut tx, mut rx) = (String::new(), String::new());
+    for l in out.lines() {
+        let t = l.trim();
+        if let Some(v) = t.strip_prefix("rx bitrate:") {
+            rx = v.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
+        } else if let Some(v) = t.strip_prefix("tx bitrate:") {
+            tx = v.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
+        }
+    }
+    if tx.is_empty() {
+        return fallback_rate.to_string();
+    }
+    format!("↓{} ↑{}", rx.replace("MBit/s", "Mbps"), tx.replace("MBit/s", "Mbps"))
+}
+
+/// Pure: accumulate every `IP4.DNS[*]` value from a `dev show` dump.
+pub(crate) fn parse_dev_dns(out: &str) -> Vec<String> {
+    let mut v = Vec::new();
+    for line in out.lines() {
+        let Some((k, val)) = line.split_once(':') else { continue };
+        let k = k.trim();
+        let val = val.trim().to_string();
+        if k.starts_with("IP4.DNS") && !val.is_empty() {
+            v.push(val);
+        }
+    }
+    v
+}
+
 pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
     let wifi_enabled = is_wifi_enabled();
     let airplane_mode = is_airplane_mode();
@@ -37,7 +82,13 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
             ],
         );
 
-        let mut seen_ssids = HashSet::new();
+        // One `iw link` read for the active link, outside the scan
+        // loop: the old code ran it every time an "active" line
+        // appeared and fell back to a hardcoded "wlo1" when the
+        // device was unknown.
+        let active_link_speed = wifi_device
+            .as_deref()
+            .map(|dev| run_out(&iw(), &["dev", dev, "link"]));
 
         for line in wifi_list_out.lines() {
             let Some((active, ssid, bssid, signal, rate, security)) = parse_wifi_line(line) else {
@@ -53,39 +104,14 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
                 active_signal = signal;
                 details.security = security.clone();
                 details.bssid = bssid.clone();
-
-                let mut tx_rate = String::new();
-                let mut rx_rate = String::new();
-                let link_dev = wifi_device.as_deref().unwrap_or("wlo1").to_string();
-                let link_info = run_out(&iw(), &["dev", &link_dev, "link"]);
-                for l in link_info.lines() {
-                    let trimmed = l.trim();
-                    if trimmed.starts_with("rx bitrate:") {
-                        rx_rate = trimmed
-                            .trim_start_matches("rx bitrate:")
-                            .split_whitespace()
-                            .take(2)
-                            .collect::<Vec<&str>>()
-                            .join(" ");
-                    } else if trimmed.starts_with("tx bitrate:") {
-                        tx_rate = trimmed
-                            .trim_start_matches("tx bitrate:")
-                            .split_whitespace()
-                            .take(2)
-                            .collect::<Vec<&str>>()
-                            .join(" ");
-                    }
-                }
-                if !tx_rate.is_empty() {
-                    let tx_clean = tx_rate.replace("MBit/s", "Mbps");
-                    let rx_clean = rx_rate.replace("MBit/s", "Mbps");
-                    active_speed = format!("↓{} ↑{}", rx_clean, tx_clean);
-                } else {
-                    active_speed = rate.clone();
-                }
+                active_speed = active_link_speed
+                    .as_deref()
+                    .map(|link| link_speed(link, &rate))
+                    .unwrap_or_else(|| rate.clone());
             }
 
-            if let Some(existing) = networks.iter_mut().find(|n| n.ssid == ssid) {
+            if let Some(i) = index_of_ssid(&networks, &ssid) {
+                let existing = &mut networks[i];
                 if active {
                     existing.active = true;
                     existing.bssid = bssid;
@@ -95,7 +121,6 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
                     existing.signal = signal;
                 }
             } else {
-                seen_ssids.insert(ssid.clone());
                 let (saved, autoconnect) = match saved_connections.get(&ssid) {
                     Some(&auto) => (true, auto),
                     None => (false, false),
@@ -171,38 +196,28 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
     if connected && let Some(dev) = wifi_device.as_deref() {
         let dev_info = run_out(&nmcli(), &["dev", "show", dev]);
         for line in dev_info.lines() {
-            let parts: Vec<&str> = line.splitn(2, ':').collect();
-            if parts.len() == 2 {
-                let key = parts[0].trim();
-                let val = parts[1].trim().to_string();
-                match key {
-                    "IP4.ADDRESS[1]" => {
-                        let ip_parts: Vec<&str> = val.split('/').collect();
-                        if !ip_parts.is_empty() {
-                            details.ip_address = ip_parts[0].to_string();
-                            if ip_parts.len() > 1
-                                && let Ok(cidr) = ip_parts[1].parse::<u32>()
-                                && let Some(mask) = cidr_to_netmask(cidr)
-                            {
-                                details.subnet = mask;
-                            }
+            let Some((key, val)) = line.split_once(':') else { continue };
+            let key = key.trim();
+            let val = val.trim().to_string();
+            match key {
+                "IP4.ADDRESS[1]" => {
+                    let ip_parts: Vec<&str> = val.split('/').collect();
+                    if !ip_parts.is_empty() {
+                        details.ip_address = ip_parts[0].to_string();
+                        if ip_parts.len() > 1
+                            && let Ok(cidr) = ip_parts[1].parse::<u32>()
+                            && let Some(mask) = cidr_to_netmask(cidr)
+                        {
+                            details.subnet = mask;
                         }
                     }
-                    "IP4.GATEWAY" => details.gateway = val,
-                    "IP4.DNS[1]" => {
-                        if details.dns.is_empty() {
-                            details.dns = val;
-                        } else {
-                            details.dns = format!("{}, {}", details.dns, val);
-                        }
-                    }
-                    "IP4.DNS[2]" if !details.dns.is_empty() => {
-                        details.dns = format!("{}, {}", details.dns, val);
-                    }
-                    _ => {}
                 }
+                "IP4.GATEWAY" => details.gateway = val,
+                _ => {}
             }
         }
+        // Every DNS entry, not just the first two.
+        details.dns = join_dns(&parse_dev_dns(&dev_info));
     }
 
     let conns_out = run_out(

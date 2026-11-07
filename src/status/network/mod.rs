@@ -115,6 +115,8 @@ pub(crate) fn handle(args: &[String]) -> String {
         match args[0].as_str() {
             "band" => return handle_band(&args[1..]),
             "dns" => return handle_dns(&args[1..]),
+            "qr" => return handle_qr(&args[1..]),
+            "password" => return handle_password(&args[1..]),
             _ => {}
         }
     }
@@ -202,12 +204,11 @@ fn available_bands(device: &str, ssid: &str) -> Vec<&'static str> {
         if parts[1..].join(":") != ssid {
             continue;
         }
-        if let Ok(mhz) = parts[0].trim().parse::<u32>() {
-            if let Some(b) = band_for_freq(mhz) {
-                if !bands.contains(&b) {
-                    bands.push(b);
-                }
-            }
+        if let Ok(mhz) = parts[0].trim().parse::<u32>()
+            && let Some(b) = band_for_freq(mhz)
+            && !bands.contains(&b)
+        {
+            bands.push(b);
         }
     }
     bands
@@ -374,6 +375,172 @@ fn set_dns(v4: &str, v6: &str) -> String {
     "OK".to_string()
 }
 
+// ---- qr / password ====
+//
+// Port of `wifi-qr.sh` / `wifi-password.sh`. The QML sharing panel
+// shells out to them through the legacy front door; the daemon shim
+// (`wifi` → `alexie network`) routes these subcommands here.
+
+fn state_file(name: &str) -> std::path::PathBuf {
+    let base = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        format!("{}/.local/state", home)
+    });
+    std::path::PathBuf::from(base)
+        .join("anixie")
+        .join(name)
+}
+
+/// Active connection facts the QR/password subcommands need:
+/// (ssid, keymgmt, psk, wep-key0). Uses the *profile* (GENERAL.CONNECTION),
+/// never the SSID, for the con verbs.
+fn active_wifi_facts() -> Option<(String, String, String, String)> {
+    use crate::status::common::{nm_get, nmcli, wifi_device};
+    let device = wifi_device()?;
+    let conn = nm_get(&["GENERAL.CONNECTION", "device", "show", &device]);
+    if conn.is_empty() {
+        return None;
+    }
+    let ssid = nm_get(&["802-11-wireless.ssid", "connection", "show", &conn]);
+    let keymgmt = nm_get(&["802-11-wireless-security.key-mgmt", "connection", "show", &conn]);
+    let psk = {
+        let (_, out, _) = crate::proc::run(
+            &nmcli(),
+            &["-e", "no", "-g", "802-11-wireless-security.psk", "connection", "show", &conn],
+        );
+        out.trim().to_string()
+    };
+    let wep = {
+        let (_, out, _) = crate::proc::run(
+            &nmcli(),
+            &["-e", "no", "-g", "802-11-wireless-security.wep-key0", "connection", "show", &conn],
+        );
+        out.trim().to_string()
+    };
+    Some((ssid, keymgmt, psk, wep))
+}
+
+fn handle_qr(args: &[String]) -> String {
+    // `wifi qr` prints the file it wrote; `wifi qr --password` prints the secret.
+    let want_password = match args.first().map(|s| s.as_str()) {
+        None => false,
+        Some("--password") if args.len() == 1 => true,
+        _ => return "ERR usage: wifi qr [--password]".to_string(),
+    };
+
+    let device_check = crate::status::common::wifi_device();
+    if device_check.is_none() {
+        return "ERR wifi-qr: no Wi-Fi device".to_string();
+    }
+    let Some((ssid, keymgmt, psk, wep)) = active_wifi_facts() else {
+        return "ERR wifi-qr: not connected to Wi-Fi".to_string();
+    };
+    if matches!(keymgmt.as_str(), "wpa-eap" | "ieee8021x") {
+        return "ERR wifi-qr: 802.1X networks cannot be shared with a QR code".to_string();
+    }
+
+    let (r#type, secret) = if !psk.is_empty() {
+        ("WPA", psk.clone())
+    } else if !wep.is_empty() {
+        ("WEP", wep.clone())
+    } else if keymgmt.is_empty() || keymgmt == "none" {
+        ("nopass", String::new())
+    } else {
+        return format!(
+            "ERR wifi-qr: no shareable password for {} ({})",
+            ssid, keymgmt
+        );
+    };
+
+    if want_password {
+        if secret.is_empty() {
+            return "ERR wifi-qr: this network has no password".to_string();
+        }
+        return secret;
+    }
+
+    fn esc(s: &str) -> String {
+        s.chars()
+            .map(|c| {
+                if matches!(c, '\\' | ';' | ',' | ':' | '"') {
+                    format!("\\{c}")
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect()
+    }
+    let ssid_e = esc(&ssid);
+    let payload = if r#type == "nopass" {
+        format!("WIFI:T:{};S:{};;", r#type, ssid_e)
+    } else {
+        format!("WIFI:T:{};S:{};P:{};;", r#type, ssid_e, esc(&secret))
+    };
+
+    let dir = state_file("");
+    let out = dir.join("wifi-qr.png");
+    let _ = std::fs::create_dir_all(&dir);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    }
+    let _ = std::fs::remove_file(&out);
+
+    let qrencode = std::env::var("QRENCODE").unwrap_or_else(|_| "qrencode".to_string());
+    let (code, _, err) = crate::proc::run(
+        &qrencode,
+        &["-t", "PNG", "-o", out.to_string_lossy().as_ref(), "-s", "6", "-m", "1", &payload],
+    );
+    if code != 0 {
+        return format!("ERR wifi-qr: qrencode failed: {}", err.trim());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o600));
+    }
+    out.to_string_lossy().to_string()
+}
+
+fn handle_password(args: &[String]) -> String {
+    // `wifi password` prints the secret; `wifi password --copy`
+    // puts it on the clipboard as sensitive.
+    let copy = match args.first().map(|s| s.as_str()) {
+        None => false,
+        Some("--copy") if args.len() == 1 => true,
+        _ => return "ERR usage: wifi password [--copy]".to_string(),
+    };
+
+    let Some((_ssid, keymgmt, psk, wep)) = active_wifi_facts() else {
+        return "ERR wifi-password: not connected to Wi-Fi".to_string();
+    };
+    let secret = if !psk.is_empty() {
+        psk
+    } else if !wep.is_empty() {
+        wep
+    } else if keymgmt.is_empty() || keymgmt == "none" {
+        String::new()
+    } else {
+        return format!(
+            "ERR wifi-password: no shareable password ({})",
+            keymgmt
+        );
+    };
+    if secret.is_empty() {
+        return "ERR wifi-password: this network has no password".to_string();
+    }
+    if copy {
+        let wl_copy = std::env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string());
+        let code = crate::proc::copy_text_to_clipboard(&wl_copy, "text/plain", &secret, &["--sensitive"]);
+        if code != 0 {
+            return "ERR wifi-password: wl-copy failed".to_string();
+        }
+        return "OK".to_string();
+    }
+    secret
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,8 +554,8 @@ mod tests {
         let map = parse_saved_connections(&out);
         assert_eq!(map.get("MyNetwork"), Some(&true));
         assert_eq!(map.get("Office AP"), Some(&false));
-        assert!(map.get("Home").is_none(), "must not key by profile NAME");
-        assert!(map.get("Work").is_none(), "must not key by profile NAME");
+        assert!(!map.contains_key("Home"), "must not key by profile NAME");
+        assert!(!map.contains_key("Work"), "must not key by profile NAME");
     }
 
     #[test]
