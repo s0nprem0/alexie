@@ -18,9 +18,11 @@ pub(crate) fn move_file(src: &str, dst: &str) -> std::io::Result<()> {
 
 /// Geometry "X,Y WxH" for the focused window, from hyprctl JSON.
 /// Pure, so it can be tested without hyprctl/jq.
-pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String]) -> String {
+pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometry_arg: Option<&str>) -> String {
     // get geometry
-    let geometry = if mode == "window" {
+    let geometry = if let Some(g) = geometry_arg {
+        g.to_string()
+    } else if mode == "window" {
         let (code, out, _) = run(&hyprctl(), &["activewindow", "-j"]);
         if code != 0 { return "ERR no focused window".to_string(); }
         match window_geometry_from_json(&out) {

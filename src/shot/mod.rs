@@ -42,11 +42,12 @@ pub(crate) fn runtime_dir() -> std::path::PathBuf {
 
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
-        return capture::handle_mode_dest("smart", "preview", &[]);
+        return capture::handle_mode_dest("smart", "preview", &[], None);
     }
     let mut mode = "smart".to_string();
     let mut dest = "preview".to_string();
     let mut post: Vec<String> = Vec::new();
+    let mut geometry: Option<String> = None;
     let mut i = 0;
     let mut after_dash = false;
     let mut rest: Vec<String> = Vec::new();
@@ -58,6 +59,7 @@ pub fn handle(args: &[String]) -> String {
             | "cancel" | "edit-last" | "copy-path" | "copy-uri" => { mode = a.to_string(); }
             "save" | "copy" | "annotate" | "preview" | "redact" | "text" => { dest = a.to_string(); }
             "--" => { after_dash = true; }
+            _ if geometry.is_none() && parse_geometry(a).is_some() => { geometry = Some(a.to_string()); }
             _ => { rest.push(a.to_string()); }
         }
         i += 1;
@@ -115,7 +117,29 @@ pub fn handle(args: &[String]) -> String {
         return delegate(args);
     }
 
-    capture::handle_mode_dest(&mode, &dest, &rest)
+    // An explicit geometry (from the AreaPicker, which already did
+    // the picking) skips shot-pick: `shot region "X,Y WxH" <dest>`.
+    if geometry.is_some() && mode != "region" {
+        return "ERR geometry is only valid for region mode".to_string();
+    }
+
+    capture::handle_mode_dest(&mode, &dest, &rest, geometry.as_deref())
+}
+
+/// Validate a grim-style geometry "X,Y WxH" (physical pixels, X/Y may
+/// be negative on multi-monitor layouts). Pure, so it is testable.
+pub(crate) fn parse_geometry(s: &str) -> Option<String> {
+    let (pos, size) = s.split_once(' ')?;
+    let (x, y) = pos.split_once(',')?;
+    x.parse::<i64>().ok()?;
+    y.parse::<i64>().ok()?;
+    let (w, h) = size.split_once('x')?;
+    let w: i64 = w.parse().ok()?;
+    let h: i64 = h.parse().ok()?;
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    Some(s.to_string())
 }
 
 #[cfg(test)]
@@ -128,5 +152,14 @@ mod tests {
         assert!(out.starts_with("ERR unknown argument:"), "got: {out}");
         let out = handle(&["region".to_string(), "__bogus__".to_string()]);
         assert!(out.starts_with("ERR unknown argument:"), "got: {out}");
+    }
+
+    #[test]
+    fn parse_geometry_validates() {
+        assert_eq!(parse_geometry("100,100 700x400"), Some("100,100 700x400".to_string()));
+        assert_eq!(parse_geometry("-100,50 700x400"), Some("-100,50 700x400".to_string()));
+        assert_eq!(parse_geometry("100,100 0x400"), None);
+        assert_eq!(parse_geometry("100,100"), None);
+        assert_eq!(parse_geometry("__bogus__"), None);
     }
 }
