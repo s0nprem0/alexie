@@ -62,7 +62,13 @@ pub(crate) fn parse_saved_connections(out: &str) -> HashMap<String, bool> {
 pub(crate) fn wifi_saved_connections() -> HashMap<String, bool> {
     let out = run_out(
         &nmcli(),
-        &["-t", "-f", "NAME,802-11-wireless.ssid,AUTOCONNECT", "connection", "show"],
+        &[
+            "-t",
+            "-f",
+            "NAME,802-11-wireless.ssid,AUTOCONNECT",
+            "connection",
+            "show",
+        ],
     );
     parse_saved_connections(&out)
 }

@@ -41,6 +41,8 @@ pub struct NetworkStatus {
     pub active_signal: i32,
     pub active_speed: String,
     pub wifi_device: String,
+    /// Name of a connected ethernet device, "" when none.
+    pub wired: String,
     pub warp_connected: bool,
     pub tailscale_connected: bool,
     pub tailscale_ip: String,

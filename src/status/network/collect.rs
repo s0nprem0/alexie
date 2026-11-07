@@ -35,14 +35,32 @@ pub(crate) fn link_speed(out: &str, fallback_rate: &str) -> String {
     if tx.is_empty() {
         return fallback_rate.to_string();
     }
-    format!("↓{} ↑{}", rx.replace("MBit/s", "Mbps"), tx.replace("MBit/s", "Mbps"))
+    format!(
+        "↓{} ↑{}",
+        rx.replace("MBit/s", "Mbps"),
+        tx.replace("MBit/s", "Mbps")
+    )
+}
+
+/// Pure: first connected ethernet device from a
+/// `device status` listing, if any.
+pub(crate) fn parse_wired_device(out: &str) -> String {
+    for line in out.lines() {
+        let parts = split_nmcli_t_line(line);
+        if parts.len() >= 3 && parts[1] == "ethernet" && parts[2].starts_with("connected") {
+            return parts[0].clone();
+        }
+    }
+    String::new()
 }
 
 /// Pure: accumulate every `IP4.DNS[*]` value from a `dev show` dump.
 pub(crate) fn parse_dev_dns(out: &str) -> Vec<String> {
     let mut v = Vec::new();
     for line in out.lines() {
-        let Some((k, val)) = line.split_once(':') else { continue };
+        let Some((k, val)) = line.split_once(':') else {
+            continue;
+        };
         let k = k.trim();
         let val = val.trim().to_string();
         if k.starts_with("IP4.DNS") && !val.is_empty() {
@@ -56,6 +74,14 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
     let wifi_enabled = is_wifi_enabled();
     let airplane_mode = is_airplane_mode();
     let wifi_device = active_wifi_device();
+
+    // One `device status` read feeds both the wired link and the
+    // connected fallback — no separate query per fact.
+    let dev_status_out = run_out(
+        &nmcli(),
+        &["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev"],
+    );
+    let wired = parse_wired_device(&dev_status_out);
 
     let mut connected = false;
     let mut active_ssid = String::new();
@@ -139,10 +165,7 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
         }
 
         if !connected {
-            let dev_out = run_out(
-                &nmcli(),
-                &["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev"],
-            );
+            let dev_out = dev_status_out.clone();
             for line in dev_out.lines() {
                 let parts = split_nmcli_t_line(line);
                 if parts.len() >= 4
@@ -196,7 +219,9 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
     if connected && let Some(dev) = wifi_device.as_deref() {
         let dev_info = run_out(&nmcli(), &["dev", "show", dev]);
         for line in dev_info.lines() {
-            let Some((key, val)) = line.split_once(':') else { continue };
+            let Some((key, val)) = line.split_once(':') else {
+                continue;
+            };
             let key = key.trim();
             let val = val.trim().to_string();
             match key {
@@ -277,6 +302,7 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
         active_signal,
         active_speed,
         wifi_device: wifi_device.unwrap_or_default(),
+        wired: wired.clone(),
         warp_connected,
         tailscale_connected,
         tailscale_ip,
@@ -290,4 +316,39 @@ pub(crate) fn collect(force_rescan: bool) -> NetworkStatus {
     let _ = crate::status::common::atomic_write_json(&cache_path, &status);
 
     status
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wired_device_picks_first_connected_ethernet() {
+        let out = "wlo1:wifi:connected:0 Connected to MyNet\neth0:ethernet:connected:0 Connected to Wired connection 1\nlo:loopback:unconnected:\n";
+        assert_eq!(parse_wired_device(out), "eth0");
+    }
+
+    #[test]
+    fn wired_device_empty_when_disconnected() {
+        assert_eq!(parse_wired_device("eth0:ethernet:disconnected:\n"), "");
+        assert_eq!(parse_wired_device(""), "");
+        assert_eq!(parse_wired_device("garbage\n"), "");
+    }
+
+    #[test]
+    fn dns_accumulates_every_entry() {
+        let out = "IP4.ADDRESS[1]:  192.168.1.2/24\nIP4.DNS[1]:  1.1.1.1\nIP4.DNS[2]:  1.0.0.1\nIP4.DNS[3]:  8.8.8.8\nIP4.DNS[4]:  \n";
+        assert_eq!(parse_dev_dns(out), vec!["1.1.1.1", "1.0.0.1", "8.8.8.8"]);
+    }
+
+    #[test]
+    fn link_speed_formats_both_directions() {
+        let out = "Connected to abcdef\n\tConnected time: 100\nrx bitrate: 540.0 MBit/s\ntx bitrate: 120.0 MBit/s\n";
+        assert_eq!(link_speed(out, "540 Mbit/s"), "↓540.0 Mbps ↑120.0 Mbps");
+    }
+
+    #[test]
+    fn link_speed_falls_back_to_scan_rate() {
+        assert_eq!(link_speed("some other output", "480 Mbit/s"), "480 Mbit/s");
+    }
 }

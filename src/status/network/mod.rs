@@ -175,7 +175,20 @@ fn read_active(device: &str) -> Option<(u32, String)> {
     use crate::status::common::{nmcli, split_nmcli_t_line};
     let (_, out, _) = crate::proc::run(
         &nmcli(),
-        &["-t", "-e", "no", "-f", "IN-USE,FREQ,SSID", "dev", "wifi", "list", "ifname", device, "--rescan", "no"],
+        &[
+            "-t",
+            "-e",
+            "no",
+            "-f",
+            "IN-USE,FREQ,SSID",
+            "dev",
+            "wifi",
+            "list",
+            "ifname",
+            device,
+            "--rescan",
+            "no",
+        ],
     );
     for line in out.lines() {
         let parts = split_nmcli_t_line(line);
@@ -193,7 +206,19 @@ fn available_bands(device: &str, ssid: &str) -> Vec<&'static str> {
     use crate::status::common::{nmcli, split_nmcli_t_line};
     let (_, out, _) = crate::proc::run(
         &nmcli(),
-        &["-e", "no", "-g", "FREQ,SSID", "dev", "wifi", "list", "ifname", device, "--rescan", "no"],
+        &[
+            "-e",
+            "no",
+            "-g",
+            "FREQ,SSID",
+            "dev",
+            "wifi",
+            "list",
+            "ifname",
+            device,
+            "--rescan",
+            "no",
+        ],
     );
     let mut bands = Vec::new();
     for line in out.lines() {
@@ -220,8 +245,12 @@ fn handle_band(args: &[String]) -> String {
     match args.len() {
         0 => {
             // print_status
-            let Some(device) = wifi_device() else { return String::new() };
-            let Some((mhz, ssid)) = read_active(&device) else { return String::new() };
+            let Some(device) = wifi_device() else {
+                return String::new();
+            };
+            let Some((mhz, ssid)) = read_active(&device) else {
+                return String::new();
+            };
             if ssid.is_empty() {
                 return String::new();
             }
@@ -238,7 +267,12 @@ fn handle_band(args: &[String]) -> String {
             let mut out = format!("band\t{}\n", band);
             out.push_str(&format!("available\t{}\n", available.join(" ")));
             if let Some(profile) = wifi_profile(&device) {
-                let selected = band_from_nm(&nm_get(&["802-11-wireless.band", "connection", "show", &profile]));
+                let selected = band_from_nm(&nm_get(&[
+                    "802-11-wireless.band",
+                    "connection",
+                    "show",
+                    &profile,
+                ]));
                 out.push_str(&format!("selected\t{}\n", selected));
             }
             out
@@ -279,7 +313,13 @@ fn handle_band(args: &[String]) -> String {
 
             let (code, _, err) = crate::proc::run(
                 &nmcli(),
-                &["connection", "modify", &profile, "802-11-wireless.band", &desired],
+                &[
+                    "connection",
+                    "modify",
+                    &profile,
+                    "802-11-wireless.band",
+                    &desired,
+                ],
             );
             if code != 0 {
                 return format!("ERR nmcli connection modify: {}", err.trim());
@@ -288,7 +328,13 @@ fn handle_band(args: &[String]) -> String {
             if code != 0 {
                 let _ = crate::proc::run(
                     &nmcli(),
-                    &["connection", "modify", &profile, "802-11-wireless.band", &previous],
+                    &[
+                        "connection",
+                        "modify",
+                        &profile,
+                        "802-11-wireless.band",
+                        &previous,
+                    ],
                 );
                 let _ = crate::proc::run(&nmcli(), &["connection", "up", &profile]);
                 return format!("ERR could not connect on {}; reverted", target);
@@ -305,8 +351,12 @@ fn handle_dns(args: &[String]) -> String {
     use crate::status::common::{nm_get, wifi_device, wifi_profile};
 
     if args.is_empty() {
-        let Some(device) = wifi_device() else { return String::new() };
-        let Some(profile) = wifi_profile(&device) else { return String::new() };
+        let Some(device) = wifi_device() else {
+            return String::new();
+        };
+        let Some(profile) = wifi_profile(&device) else {
+            return String::new();
+        };
         let v4 = nm_get(&["ipv4.dns", "connection", "show", &profile]);
         let v6 = nm_get(&["ipv6.dns", "connection", "show", &profile]);
         return format!("ipv4\t{}\nipv6\t{}\n", v4, v6);
@@ -350,18 +400,38 @@ fn set_dns(v4: &str, v6: &str) -> String {
     let restore = |profile: &str, p4: &str, pi4: &str, p6: &str, pi6: &str| {
         let _ = crate::proc::run(
             &nmcli,
-            &["connection", "modify", profile,
-              "ipv4.dns", p4, "ipv4.ignore-auto-dns", pi4,
-              "ipv6.dns", p6, "ipv6.ignore-auto-dns", pi6],
+            &[
+                "connection",
+                "modify",
+                profile,
+                "ipv4.dns",
+                p4,
+                "ipv4.ignore-auto-dns",
+                pi4,
+                "ipv6.dns",
+                p6,
+                "ipv6.ignore-auto-dns",
+                pi6,
+            ],
         );
         let _ = crate::proc::run(&nmcli, &["connection", "up", profile]);
     };
 
     let (code, _, err) = crate::proc::run(
         &nmcli,
-        &["connection", "modify", &profile,
-          "ipv4.dns", v4, "ipv4.ignore-auto-dns", ign4,
-          "ipv6.dns", v6, "ipv6.ignore-auto-dns", ign6],
+        &[
+            "connection",
+            "modify",
+            &profile,
+            "ipv4.dns",
+            v4,
+            "ipv4.ignore-auto-dns",
+            ign4,
+            "ipv6.dns",
+            v6,
+            "ipv6.ignore-auto-dns",
+            ign6,
+        ],
     );
     if code != 0 {
         restore(&profile, &prev4, &prev_ign4, &prev6, &prev_ign6);
@@ -386,9 +456,7 @@ fn state_file(name: &str) -> std::path::PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         format!("{}/.local/state", home)
     });
-    std::path::PathBuf::from(base)
-        .join("anixie")
-        .join(name)
+    std::path::PathBuf::from(base).join("anixie").join(name)
 }
 
 /// Active connection facts the QR/password subcommands need:
@@ -402,18 +470,39 @@ fn active_wifi_facts() -> Option<(String, String, String, String)> {
         return None;
     }
     let ssid = nm_get(&["802-11-wireless.ssid", "connection", "show", &conn]);
-    let keymgmt = nm_get(&["802-11-wireless-security.key-mgmt", "connection", "show", &conn]);
+    let keymgmt = nm_get(&[
+        "802-11-wireless-security.key-mgmt",
+        "connection",
+        "show",
+        &conn,
+    ]);
     let psk = {
         let (_, out, _) = crate::proc::run(
             &nmcli(),
-            &["-e", "no", "-g", "802-11-wireless-security.psk", "connection", "show", &conn],
+            &[
+                "-e",
+                "no",
+                "-g",
+                "802-11-wireless-security.psk",
+                "connection",
+                "show",
+                &conn,
+            ],
         );
         out.trim().to_string()
     };
     let wep = {
         let (_, out, _) = crate::proc::run(
             &nmcli(),
-            &["-e", "no", "-g", "802-11-wireless-security.wep-key0", "connection", "show", &conn],
+            &[
+                "-e",
+                "no",
+                "-g",
+                "802-11-wireless-security.wep-key0",
+                "connection",
+                "show",
+                &conn,
+            ],
         );
         out.trim().to_string()
     };
@@ -490,7 +579,17 @@ fn handle_qr(args: &[String]) -> String {
     let qrencode = std::env::var("QRENCODE").unwrap_or_else(|_| "qrencode".to_string());
     let (code, _, err) = crate::proc::run(
         &qrencode,
-        &["-t", "PNG", "-o", out.to_string_lossy().as_ref(), "-s", "6", "-m", "1", &payload],
+        &[
+            "-t",
+            "PNG",
+            "-o",
+            out.to_string_lossy().as_ref(),
+            "-s",
+            "6",
+            "-m",
+            "1",
+            &payload,
+        ],
     );
     if code != 0 {
         return format!("ERR wifi-qr: qrencode failed: {}", err.trim());
@@ -522,17 +621,15 @@ fn handle_password(args: &[String]) -> String {
     } else if keymgmt.is_empty() || keymgmt == "none" {
         String::new()
     } else {
-        return format!(
-            "ERR wifi-password: no shareable password ({})",
-            keymgmt
-        );
+        return format!("ERR wifi-password: no shareable password ({})", keymgmt);
     };
     if secret.is_empty() {
         return "ERR wifi-password: this network has no password".to_string();
     }
     if copy {
         let wl_copy = std::env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string());
-        let code = crate::proc::copy_text_to_clipboard(&wl_copy, "text/plain", &secret, &["--sensitive"]);
+        let code =
+            crate::proc::copy_text_to_clipboard(&wl_copy, "text/plain", &secret, &["--sensitive"]);
         if code != 0 {
             return "ERR wifi-password: wl-copy failed".to_string();
         }
@@ -605,6 +702,7 @@ mod tests {
             active_signal: 0,
             active_speed: String::new(),
             wifi_device: String::new(),
+            wired: String::new(),
             warp_connected: false,
             tailscale_connected: false,
             tailscale_ip: String::new(),
