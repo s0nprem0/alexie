@@ -4,17 +4,43 @@ use super::dispatch::handle_args;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 
+/// Read whatever stdin already holds, without waiting for EOF.
+/// A blocking read_to_string hangs when the caller holds stdin
+/// open but sends nothing (quickshell's Process does exactly
+/// that), which left every quickshell-spawned command with no
+/// output at all. Poll briefly for more data, then move on.
+fn stdin_available_data() -> String {
+    use std::io::Read;
+    let mut buf: Vec<u8> = Vec::new();
+    let mut pfd = libc::pollfd {
+        fd: 0,
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    loop {
+        let rc = unsafe { libc::poll(&mut pfd, 1, 100) };
+        if rc <= 0 {
+            break;
+        }
+        let mut chunk = [0u8; 8192];
+        match std::io::stdin().lock().read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(_) => break,
+        }
+    }
+    String::from_utf8_lossy(&buf).to_string()
+}
+
 pub(crate) fn run_client(args: &[String]) {
-    use std::io::{IsTerminal, Read};
+    use std::io::IsTerminal;
     // Forward piped stdin (e.g. `printf … | alexie pick …`); a tty
     // stdin is left alone so interactive commands are not blocked
     // waiting for EOF. Pick --input mode does not read stdin at all.
     let stdin_data = if std::io::stdin().is_terminal() {
         String::new()
     } else {
-        let mut buf = String::new();
-        let _ = std::io::stdin().read_to_string(&mut buf);
-        buf
+        stdin_available_data()
     };
     let sock = socket_path();
     let mut stream = match UnixStream::connect(&sock) {
