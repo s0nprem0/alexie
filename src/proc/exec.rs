@@ -37,7 +37,11 @@ pub fn run_with_stdin(cmd: &str, args: &[&str], stdin_data: &str) -> (i32, Strin
         Err(e) => return (-1, String::new(), e.to_string()),
     };
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(stdin_data.as_bytes());
+        if let Err(e) = stdin.write_all(stdin_data.as_bytes()) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return (-1, String::new(), format!("write stdin: {e}"));
+        }
         // stdin drops here, signalling EOF to the child
     }
     match child.wait_with_output() {
@@ -67,7 +71,11 @@ pub fn run_bytes_with_stdin(cmd: &str, args: &[&str], data: &[u8]) -> (i32, Stri
         Err(e) => return (-1, String::new(), e.to_string()),
     };
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(data);
+        if let Err(e) = stdin.write_all(data) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return (-1, String::new(), format!("write stdin: {e}"));
+        }
         // stdin drops here, signalling EOF to the child
     }
     match child.wait_with_output() {

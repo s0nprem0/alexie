@@ -234,11 +234,27 @@ pub(crate) fn handle_mode_dest(
             super::db::index_screenshot(&output);
             release_freeze();
             let _ = fs::remove_file(&tmp_scratch);
-            let _ = crate::proc::copy_file_to_clipboard(
+            if crate::proc::copy_file_to_clipboard(
                 &wl_copy(),
                 "image/png",
                 std::path::Path::new(&output),
-            );
+            ) != 0
+            {
+                let _ = run(
+                    &notify(),
+                    &[
+                        "-a",
+                        "capture",
+                        "-u",
+                        "normal",
+                        "-t",
+                        "8000",
+                        "Screenshot saved, not copied",
+                        "The clipboard could not be reached.",
+                    ],
+                );
+                return format!("ERR clipboard unavailable; saved to {}", output);
+            }
             let _ = run(
                 "quickshell",
                 &["ipc", "call", "capture", "preview", &output],
@@ -367,9 +383,12 @@ pub(crate) fn handle_mode_dest(
 pub(crate) fn release_freeze() {
     let freeze_pid_file = runtime_dir().join("anixie-pick-freeze.pid");
     if let Ok(pid) = std::fs::read_to_string(&freeze_pid_file) {
-        let pid = pid.trim();
-        if !pid.is_empty() {
-            let _ = run("kill", &[pid]);
+        let Ok(pid) = pid.trim().parse::<i64>() else {
+            let _ = std::fs::remove_file(&freeze_pid_file);
+            return;
+        };
+        if pid > 0 {
+            let _ = run("kill", &["--", &pid.to_string()]);
         }
     }
     let _ = std::fs::remove_file(&freeze_pid_file);

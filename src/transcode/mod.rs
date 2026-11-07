@@ -171,12 +171,11 @@ pub fn handle(args: &[String]) -> String {
     }
 
     let uri = format!("file://{}", output);
-    let _ = crate::proc::copy_text_to_clipboard(
-        &wl_copy(),
-        "text/uri-list",
-        &format!("{}\n", uri),
-        &[],
-    );
+    if crate::proc::copy_text_to_clipboard(&wl_copy(), "text/uri-list", &format!("{}\n", uri), &[])
+        != 0
+    {
+        return format!("ERR clipboard unavailable; saved to {}", output);
+    }
     format!("Saved {}", output)
 }
 

@@ -80,7 +80,7 @@ fn capture_text() -> String {
         return format!("ERR grim: {}", err.trim());
     }
 
-    let (_code, text, _) = run(
+    let (code, text, err) = run(
         &tesseract_bin,
         &[
             &tmp,
@@ -101,6 +101,9 @@ fn capture_text() -> String {
 
     // release freeze
     release_freeze(&freeze_file);
+    if code != 0 {
+        return format!("ERR tesseract: {}", err.trim());
+    }
 
     let text = text.trim().to_string();
     if text.is_empty() {
@@ -121,7 +124,9 @@ fn capture_text() -> String {
     }
 
     // copy to clipboard
-    let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &text, &[]);
+    if crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &text, &[]) != 0 {
+        return "ERR clipboard unavailable".to_string();
+    }
     let first = text
         .lines()
         .next()
@@ -162,7 +167,7 @@ fn capture_qr() -> String {
         return format!("ERR grim: {}", err.trim());
     }
 
-    let (_code, result, _) = {
+    let (_code, result, zerr) = {
         // zbarimg reads the image on stdin; feed the temp file
         // directly instead of `zbarimg … - < tmp` via a shell.
         use std::process::Stdio;
@@ -187,6 +192,7 @@ fn capture_qr() -> String {
 
     let result = result.trim().to_string();
     if result.is_empty() {
+        let detail = zerr.trim();
         let _ = run(
             &notify(),
             &[
@@ -200,11 +206,15 @@ fn capture_qr() -> String {
                 "Nothing in that region decoded as a QR code.",
             ],
         );
-        return "ERR no qr".to_string();
+        if detail.is_empty() {
+            return "ERR no qr".to_string();
+        }
+        return format!("ERR no qr: {}", detail);
     }
 
-    let _ =
-        crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &result, &["--sensitive"]);
+    if crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &result, &["--sensitive"]) != 0 {
+        return "ERR clipboard unavailable".to_string();
+    }
     let _ = run(
         &notify(),
         &[
@@ -221,9 +231,12 @@ fn capture_qr() -> String {
 
 fn release_freeze(path: &std::path::Path) {
     if let Ok(pid) = std::fs::read_to_string(path) {
-        let pid = pid.trim();
-        if !pid.is_empty() {
-            let _ = run("kill", &[pid]);
+        let Ok(pid) = pid.trim().parse::<i64>() else {
+            let _ = std::fs::remove_file(path);
+            return;
+        };
+        if pid > 0 {
+            let _ = run("kill", &["--", &pid.to_string()]);
         }
     }
     let _ = std::fs::remove_file(path);

@@ -129,7 +129,9 @@ pub fn handle(args: &[String]) -> String {
         if last.is_empty() || !std::path::Path::new(&last).exists() {
             return "ERR no previous capture".to_string();
         }
-        let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &last, &[]);
+        if crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", &last, &[]) != 0 {
+            return "ERR clipboard unavailable".to_string();
+        }
         let _ = run(
             "notify-send",
             &[
@@ -156,7 +158,9 @@ pub fn handle(args: &[String]) -> String {
             return "ERR no previous capture".to_string();
         }
         let uri = format!("file://{}", last);
-        let _ = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/uri-list", &uri, &[]);
+        if crate::proc::copy_text_to_clipboard(&wl_copy(), "text/uri-list", &uri, &[]) != 0 {
+            return "ERR clipboard unavailable".to_string();
+        }
         let _ = run(
             "notify-send",
             &[

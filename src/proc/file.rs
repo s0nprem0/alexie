@@ -8,6 +8,12 @@ use std::io::Write;
 use std::process::Command;
 
 pub fn tmp_file(prefix: &str, ext: &str) -> std::path::PathBuf {
+    // Callers pass literal names today, but keep user input from
+    // escaping the temp dir if a future caller is careless.
+    assert!(!prefix.contains('/') && !prefix.contains('\\'),
+        "tmp_file prefix must not contain path separators");
+    assert!(!ext.contains('/') && !ext.contains('\\'),
+        "tmp_file ext must not contain path separators");
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -45,7 +51,11 @@ pub fn copy_text_to_clipboard(wl_bin: &str, mime: &str, data: &str, extra: &[&st
         Err(_) => return -1,
     };
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(data.as_bytes());
+        if stdin.write_all(data.as_bytes()).is_err() {
+            let _ = child.kill();
+            let _ = child.wait();
+            return -1;
+        }
     }
     child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1)
 }

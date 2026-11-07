@@ -126,8 +126,11 @@ pub fn handle(args: &[String]) -> String {
                 "application/octet-stream".to_string()
             };
             // copy, binary-safe, no shell redirection
-            let _ = crate::proc::copy_file_to_clipboard(&wl_copy(), &mime, &tmp);
+            let copy_code = crate::proc::copy_file_to_clipboard(&wl_copy(), &mime, &tmp);
             let _ = std::fs::remove_file(&tmp);
+            if copy_code != 0 {
+                return format!("ERR (exit {}) wl-copy failed", copy_code);
+            }
             // Poll for the watcher-created duplicate instead of a
             // fixed sleep(300ms) followed by deleting *every* new
             // entry: a slower watcher left the duplicate behind, and
