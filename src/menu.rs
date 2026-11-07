@@ -1,20 +1,16 @@
-use std::process::Command;
+//! Menu: open/list/launch via quickshell IPC.
 
-fn quickshell() -> String {
-    std::env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string())
+use crate::proc::run;
+use std::env;
+
+fn qs() -> String {
+    env::var("QUICKSHELL").unwrap_or_else(|_| "quickshell".to_string())
 }
 
 fn call(args: &[&str]) -> (i32, String, String) {
-    let qs = quickshell();
-    match Command::new(&qs).args(["ipc", "call", "menu"]).args(args).output() {
-        Ok(o) => {
-            let code = o.status.code().unwrap_or(-1);
-            let out = String::from_utf8_lossy(&o.stdout).to_string();
-            let err = String::from_utf8_lossy(&o.stderr).to_string();
-            (code, out, err)
-        }
-        Err(e) => (-1, String::new(), e.to_string()),
-    }
+    let mut full: Vec<&str> = vec!["ipc", "call", "menu"];
+    full.extend_from_slice(args);
+    run(&qs(), &full)
 }
 
 pub fn handle(args: &[String]) -> String {

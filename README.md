@@ -7,22 +7,21 @@ A Rust daemon + CLI that replaces anixie's shell-script tooling (`monitors`, `sh
 Substantially complete. Native (no bash delegation):
 - `monitors` — fully ported (status, list, set, scale, brightness, identify, wake, recover, internal, mirror, lid, try, keep, revert, workspaces, workspace, workspace-step, move-window, identities).
 - `theme` — fully ported (list/current/next/prev/state/set/wallpaper/apply/auto/doctor/info/export/favorite/pin/wallpaper-mode/cursor-size/vars/render/presets/switch).
-- `wallpaper` — current (heavy ops delegate).
-- `shot`/capture — core modes (region/windows/fullscreen/window + copy/save/preview), capture-text, capture-qr (smart/scroll/redact/text/annotate delegate). Cursor included; cross-filesystem safe; notifies on failure.
+- `wallpaper` — native (apply/library/playback).
+- `shot`/capture — native core modes (region/windows/fullscreen/window + copy/save/preview), capture-text, capture-qr, smart/scroll/redact/text/annotate via `satty`. Cursor included; cross-filesystem safe; notifies on failure.
 - `toggle` — nightlight/idle/dnd/stayawake.
 - `screentime` — native SQLite-backed tracking (`screentime watch` records active-window sessions; show/json/reset/path). DB at `$XDG_STATE_HOME/anixie/screentime.db`, shared with anixie's quickshell via a daily JSON file.
 - `snapshot`, `webapp` — ported.
 - `clipboard` — copy/list/text/image/delete/wipe/open (auto-starts the watcher; dedups history).
-- `emoji`, `shortcuts`, `reminder`, `pick`, `menu` — thin wrappers.
+- `emoji`, `reminder`, `pick` — native (quickshell IPC / systemd timers).
+- `record`, `webcam-overlay` — native.
 - `transcode` — ported (picture/video resize + clipboard URI).
 - `power` — fully ported including udev watcher (no bash delegation).
 - `status` — network/sysmon/audio/bluetooth as text or JSON (P0 from doty's `wabi`). `alexie status <name> --json` (aliases `alexie network|sysmon|audio|bluetooth`) emits wabi-compatible JSON for Quickshell popups; cached to `$XDG_CACHE_HOME/anixie/`.
-- `shot db` — screenshot/recording asset index (P1, wabi `media_db` port). `add/list/remove/clear/check/path/thumbs`, `color` + `ocr` groups, `status --json` (wabi `MediaStatus`); saves auto-index. DB at `$XDG_STATE_HOME/anixie/assets.db`, thumbs at `$XDG_CACHE_HOME/anixie/thumbnails/`.
+- `shot db` — screenshot/recording asset index (P1, wabi `media_db` port). `add/list/remove/clear/check/path/thumbs`, `color` + `ocr` groups, `status --json` (wabi `MediaStatus`); saves + recordings auto-index. DB at `$XDG_STATE_HOME/anixie/assets.db`, thumbs at `$XDG_CACHE_HOME/anixie/thumbnails/`.
 - `apps` — app launcher backend (P1, wabi `apps.rs` port). `list [--json]` (wabi `{most_used,all_apps,web_history,file_history,bookmarks}`), `launch`, `bookmark`, `history`, `web search/open`, `files index/search/open`; wabi `--launch`/`--add-bookmark`/… flags accepted. DB at `$XDG_STATE_HOME/anixie/launcher.db`.
 
-Thin wrappers (delegate to the quickshell, which owns the UI/timer): `focus`.
-
-Delegated to legacy bash (complex process/systemd management): `record`, `webcam-overlay`.
+- `shortcuts`, `menu`, `focus` — quickshell IPC wrappers (shell owns UI/timer).
 - `share` — native subcommands (uri/path/edit/folder/compress); interactive picker delegates.
 
 The daemon listens on `$XDG_RUNTIME_DIR/alexie/daemon.sock` and exposes a DBus service (`org.alexie.Daemon`, typed methods/properties/signals).

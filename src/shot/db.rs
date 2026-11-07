@@ -726,6 +726,18 @@ pub(crate) fn index_screenshot(path: &str) {
     }
 }
 
+/// Index a recording (best-effort).
+pub(crate) fn index_recording(path: &str) {
+    if path.is_empty() {
+        return;
+    }
+    if let Ok(conn) = open()
+        && let Err(e) = add_asset(&conn, "recording", path)
+    {
+        eprintln!("shot db: indexing {} failed: {}", path, e);
+    }
+}
+
 pub(crate) fn usage() -> String {
     "shot db — screenshot/recording asset index (wabi media_db).\n\nUsage:\n  alexie shot db [list] [--json] [--limit N] [--search TEXT]\n  alexie shot db status [--json]\n  alexie shot db add <screenshot|recording> <path>\n  alexie shot db remove <id>\n  alexie shot db clear [assets|ocr|colors|all]\n  alexie shot db check               # mark deleted files\n  alexie shot db path|thumbs         # print DB / thumbnails dir\n  alexie shot db color add <hex> | list [--json] | remove <id> | clear\n  alexie shot db ocr add <detail> | list [--json] | clear\n  # wabi aliases: add-asset, remove-asset, clear-assets, clear-ocr,\n  # clear-all, clear-colors, add-color, remove-color, pick-color,\n  # recording-status, add ocr <detail>\n".to_string()
 }

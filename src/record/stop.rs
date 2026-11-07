@@ -51,6 +51,7 @@ pub(crate) fn stop_recording() -> String {
                 if std::path::Path::new(&processed).exists() {
                     let _ = fs::rename(&processed, &name);
                 }
+                crate::shot::db::index_recording(&name);
                 // announce
                 let _ = run(&notify_raw(), &["-a", "record", "-u", "normal", "-t", "10000", "-G", "f03d", "-A", "default=Play", "Recording saved", &name]);
             }
