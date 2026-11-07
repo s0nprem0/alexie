@@ -18,7 +18,7 @@ pub fn run() {
             .stdout(Stdio::piped())
             .spawn();
         let mut child = match child { Ok(c) => c, Err(_) => return };
-        let stdout = child.stdout.take().unwrap();
+        let Some(stdout) = child.stdout.take() else { let _ = child.wait(); return; };
         let reader = BufReader::new(stdout);
         let mut last_online: Option<i32> = None;
         let mut event_has_online = false;

@@ -99,7 +99,8 @@ pub(crate) fn run_daemon() {
 }
 
 fn handle_stream(mut stream: UnixStream) {
-    let reader = BufReader::new(stream.try_clone().unwrap());
+    let Ok(clone) = stream.try_clone() else { return; };
+    let reader = BufReader::new(clone);
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,

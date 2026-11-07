@@ -37,7 +37,7 @@ pub fn ensure_watcher() {
     if cfg!(test) {
         return;
     }
-    let _guard = WATCHER_LOCK.lock().unwrap();
+    let _guard = WATCHER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     // If the watcher recorded in the pid file is still
     // alive, do nothing. This is more precise than
     // `pgrep -f clipboard-watch`, whose full-command-line match can
