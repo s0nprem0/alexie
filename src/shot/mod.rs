@@ -14,16 +14,6 @@ use crate::proc::run;
 use std::env;
 use std::process::Command;
 
-fn delegate(args: &[String]) -> String {
-    let a: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let (code, out, err) = run("shot-legacy", &a);
-    if code == 0 {
-        if out.trim().is_empty() { "OK".to_string() } else { out.trim_end().to_string() }
-    } else {
-        format!("ERR (exit {}) {}", code, err.trim())
-    }
-}
-
 pub(crate) fn shot_pick() -> String { env::var("SHOT_PICK").unwrap_or_else(|_| "shot-pick".to_string()) }
 pub(crate) fn grim() -> String { env::var("GRIM").unwrap_or_else(|_| "grim".to_string()) }
 pub(crate) fn wl_copy() -> String { env::var("WL_COPY").unwrap_or_else(|_| "wl-copy".to_string()) }
@@ -42,7 +32,7 @@ pub(crate) fn runtime_dir() -> std::path::PathBuf {
 
 pub fn handle(args: &[String]) -> String {
     if args.is_empty() {
-        return capture::handle_mode_dest("smart", "preview", &[], None);
+        return capture::handle_mode_dest("smart", "preview", &[], None, &[]);
     }
     let mut mode = "smart".to_string();
     let mut dest = "preview".to_string();
@@ -113,8 +103,11 @@ pub fn handle(args: &[String]) -> String {
         return uri;
     }
 
-    if !post.is_empty() {
-        return delegate(args);
+    // `-- CMD` runs CMD on the kept capture, like legacy exec.
+    // It only makes sense with `save` (copy keeps nothing, annotate
+    // keeps a different file).
+    if !post.is_empty() && dest != "save" {
+        return format!("ERR shot: -- CMD cannot be combined with \"{}\"", dest);
     }
 
     // An explicit geometry (from the AreaPicker, which already did
@@ -123,7 +116,7 @@ pub fn handle(args: &[String]) -> String {
         return "ERR geometry is only valid for region mode".to_string();
     }
 
-    capture::handle_mode_dest(&mode, &dest, &rest, geometry.as_deref())
+    capture::handle_mode_dest(&mode, &dest, &rest, geometry.as_deref(), &post)
 }
 
 /// Validate a grim-style geometry "X,Y WxH" (physical pixels, X/Y may

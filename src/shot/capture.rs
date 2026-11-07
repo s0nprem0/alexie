@@ -18,7 +18,7 @@ pub(crate) fn move_file(src: &str, dst: &str) -> std::io::Result<()> {
 
 /// Geometry "X,Y WxH" for the focused window, from hyprctl JSON.
 /// Pure, so it can be tested without hyprctl/jq.
-pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometry_arg: Option<&str>) -> String {
+pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometry_arg: Option<&str>, post: &[String]) -> String {
     // get geometry
     let geometry = if let Some(g) = geometry_arg {
         g.to_string()
@@ -154,6 +154,18 @@ pub(crate) fn handle_mode_dest(mode: &str, dest: &str, _rest: &[String], geometr
             let _ = move_file(&tmp_scratch, &candidate);
             let _ = std::fs::write(&last_capture_file, format!("{}\n", candidate));
             release_freeze();
+            // Legacy exec semantics: the post command replaces the
+            // shot process and inherits the terminal, so its output
+            // is the command's output, not "Saved ...".
+            if !post.is_empty() {
+                let mut cmd = Command::new(&post[0]);
+                cmd.args(&post[1..]).arg(&candidate);
+                return match cmd.status() {
+                    Ok(status) if status.success() => "OK".to_string(),
+                    Ok(status) => format!("ERR post command exited {}", status.code().unwrap_or(-1)),
+                    Err(e) => format!("ERR spawn post command: {}", e),
+                };
+            }
             let _ = run(&notify(), &["-a", "capture", "-u", "low", "-t", "2000", "Screenshot saved", &candidate]);
             candidate
         }
