@@ -1,4 +1,4 @@
-//! Emoji picker: pick one and type it via wtype.
+//! Emoji picker: pick one, copy it to the clipboard, and type it.
 
 use std::env;
 use std::fs;
@@ -53,6 +53,18 @@ fn wtype() -> String {
     "wtype".to_string()
 }
 
+fn wl_copy() -> String {
+    if let Ok(v) = env::var("WL_COPY")
+        && !v.is_empty() {
+            return v;
+        }
+    let cfg = crate::config::get_str(&["emoji", "wl_copy"], "");
+    if !cfg.is_empty() {
+        return cfg;
+    }
+    "wl-copy".to_string()
+}
+
 /// Parse emoji-test.txt `; fully-qualified` lines → `emoji name\temoji` entries.
 pub(crate) fn parse_emoji_test(content: &str) -> String {
     let mut out = String::new();
@@ -73,9 +85,25 @@ pub(crate) fn parse_emoji_test(content: &str) -> String {
     out
 }
 
+fn apply(selected: &str) -> String {
+    if selected.is_empty() {
+        return "ERR nothing selected".to_string();
+    }
+    let copy_code = crate::proc::copy_text_to_clipboard(&wl_copy(), "text/plain", selected, &[]);
+    let (type_code, _out, type_err) = crate::proc::run(&wtype(), &[selected]);
+    if copy_code != 0 && type_code != 0 {
+        return format!("ERR clipboard and type failed ({})", type_err.trim());
+    }
+    "OK".to_string()
+}
+
 pub fn handle(args: &[String]) -> String {
     if args.iter().any(|a| a == "-h" || a == "--help" || a == "help") {
-        return "emoji — pick one and type it\n\nUsage:\n  emoji".to_string();
+        return "emoji — pick one, copy it, and type it\n\nUsage:\n  emoji\n  emoji --apply EMOJI".to_string();
+    }
+    if args.first().map(|s| s.as_str()) == Some("--apply") {
+        let selected = args.get(1..).unwrap_or(&[]).join(" ");
+        return apply(selected.trim());
     }
     let Some(path) = emoji_test_path() else {
         return "ERR emoji list not found (set EMOJI_TEST)".to_string();
@@ -93,7 +121,7 @@ pub fn handle(args: &[String]) -> String {
             "--title".to_string(),
             "emoji".to_string(),
             "--on-select".to_string(),
-            format!("{} {{}}", wtype()),
+            "emoji --apply {}".to_string(),
         ],
         &entries,
     )

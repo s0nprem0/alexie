@@ -51,7 +51,7 @@ pub(crate) const COMMANDS: &[(&str, &str, &str)] = &[
     ("transcode", "picture/video resize.", "  picture|video ...\n"),
     ("webcam-overlay", "webcam overlay.", "  start, stop, resize, list\n"),
     ("clipboard", "clipboard history.", "  --copy, --list, --text, --image\n"),
-    ("emoji", "emoji picker.", "  (no subcommands)\n"),
+    ("emoji", "emoji picker (copy + type).", "  (no subcommands)\n"),
     ("pick", "generic picker.", "  --title, --placeholder, --input\n"),
     ("reminder", "reminders.", "  show, count, clear\n"),
     ("share", "file sharing.", "  uri, path, edit, folder, compress\n"),
