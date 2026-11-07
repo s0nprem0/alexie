@@ -60,4 +60,4 @@ Enabled via `anixie.daemon.enable = true;` (home-manager option). When enabled, 
 - Process helpers are centralized in `src/proc.rs` (`resolve_tool`, `run`, `shell_quote`).
 - Protocol is line-based text (`CMD args\n` → response lines + `__END__`).
 - State files shared with anixie (`XDG_STATE_HOME/anixie/`).
-- Test suite: `cargo test` (unit tests for monitors, theme, wallpaper, clipboard).
+- Test suite: `nix develop -c cargo test` (187 unit tests), `cargo clippy --all-targets -- -D warnings`, `cargo fmt --check`. `nix flake check` builds default (tests via `doCheck`) + fmt check.
