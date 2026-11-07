@@ -1,5 +1,5 @@
 use super::help::{help_text, is_help_flag};
-use crate::{capture, clipboard, emoji, focus, menu, monitors, pick, power, proc, record, reminder, screentime, share, shortcuts, shot, snapshot, theme, toggle, transcode, wallpaper, webcam_overlay, webapp};
+use crate::{capture, clipboard, emoji, focus, menu, monitors, pick, power, proc, record, reminder, screentime, share, shortcuts, shot, snapshot, status, theme, toggle, transcode, wallpaper, webcam_overlay, webapp};
 use std::process::Command;
 
 fn run_tool(cmd: &str, args: &[&str]) -> (i32, String, String) {
@@ -61,6 +61,26 @@ pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
         Some("screentime") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             screentime::handle(&args)
+        }
+        Some("status") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            status::handle(&args)
+        }
+        Some("network") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            status::network_handle(&args)
+        }
+        Some("sysmon") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            status::sysmon_handle(&args)
+        }
+        Some("audio") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            status::audio_handle(&args)
+        }
+        Some("bluetooth") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            status::bluetooth_handle(&args)
         }
         Some("shot") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();

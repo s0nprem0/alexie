@@ -36,6 +36,7 @@ mod power;
 mod power_watch;
 mod screentime;
 mod shot;
+mod status;
 mod theme;
 mod toggle;
 mod wallpaper;

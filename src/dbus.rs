@@ -208,6 +208,25 @@ impl ScreentimeIface {
     fn path(&self) -> String { crate::screentime::db_path().to_string_lossy().to_string() }
 }
 
+// ---------- Status interface (P0: network/sysmon/audio/bluetooth) ----------
+pub struct StatusIface;
+#[interface(name = "org.alexie.Status1")]
+impl StatusIface {
+    fn network_json(&self) -> String { crate::status::network_json() }
+    fn sysmon_json(&self) -> String { crate::status::sysmon_json() }
+    fn audio_json(&self) -> String { crate::status::audio_json() }
+    fn bluetooth_json(&self) -> String { crate::status::bluetooth_json() }
+    fn get(&self, name: &str) -> String {
+        match name {
+            "network" => crate::status::network_json(),
+            "sysmon" => crate::status::sysmon_json(),
+            "audio" => crate::status::audio_json(),
+            "bluetooth" => crate::status::bluetooth_json(),
+            _ => format!("ERR unknown status: {}", name),
+        }
+    }
+}
+
 // ---------- helpers ----------
 
 fn theme_current() -> String {
@@ -276,8 +295,11 @@ pub fn run_dbus_server() {
     if let Err(e) = conn.object_server().at("/org/alexie/Daemon", ScreentimeIface) {
         eprintln!("dbus: register ScreentimeIface failed: {}", e);
     }
+    if let Err(e) = conn.object_server().at("/org/alexie/Daemon", StatusIface) {
+        eprintln!("dbus: register StatusIface failed: {}", e);
+    }
     let _ = CONN.set(conn.clone());
-    eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme interfaces");
+    eprintln!("alexie dbus service registered (org.alexie.Daemon): Daemon/Monitors/Theme/Status interfaces");
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }

@@ -16,6 +16,7 @@ Substantially complete. Native (no bash delegation):
 - `emoji`, `shortcuts`, `reminder`, `pick`, `menu` — thin wrappers.
 - `transcode` — ported (picture/video resize + clipboard URI).
 - `power` — fully ported including udev watcher (no bash delegation).
+- `status` — network/sysmon/audio/bluetooth as text or JSON (P0 from doty's `wabi`). `alexie status <name> --json` (aliases `alexie network|sysmon|audio|bluetooth`) emits wabi-compatible JSON for Quickshell popups; cached to `$XDG_CACHE_HOME/anixie/`.
 
 Thin wrappers (delegate to the quickshell, which owns the UI/timer): `focus`.
 
@@ -41,6 +42,8 @@ alexie monitors status
 alexie theme list
 alexie screentime watch &  # track active-window time
 alexie screentime show
+alexie status sysmon --json  # CPU/RAM/disk JSON
+alexie status network --json # wifi/IP JSON (wabi-compatible)
 ```
 
 ## Integration with anixie
