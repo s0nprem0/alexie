@@ -158,41 +158,92 @@ fn write_generated_configs(
         (
             "tmux.conf",
             format!(
-                "set -g status-style \"bg={},fg={}\"\n\
-             set -g status-left-style \"bg={},fg={}\"\n\
-             set -g window-status-style \"bg={},fg={}\"\n\
-             set -g window-status-current-style \"bg={},fg={},bold\"\n\
-             set -g pane-active-border-style \"fg={}\"\n\
-             set -g message-style \"bg={},fg={}\"\n\
-             set -g mode-style \"bg={},fg={}\"\n\
-             set -g clock-mode-colour \"{}\"\n",
-                surface,
-                fg,
-                surface,
-                muted,
-                surface,
-                muted,
-                surface,
-                primary,
-                surface,
-                surface,
-                fg,
-                surface,
-                fg,
-                primary
+                "set -g status-style \"bg={surface},fg={fg}\"\n\
+             set -g status-left-style \"bg={surface},fg={accent}\"\n\
+             set -g status-right-style \"bg={surface},fg={muted}\"\n\
+             set -g window-status-style \"bg={surface},fg={muted}\"\n\
+             set -g window-status-current-style \"bg={surface},fg={primary},bold\"\n\
+             set -g window-status-activity-style \"bg={surface},fg={accent}\"\n\
+             set -g pane-border-style \"fg={outline}\"\n\
+             set -g pane-active-border-style \"fg={primary}\"\n\
+             set -g message-style \"bg={surface},fg={fg}\"\n\
+             set -g message-command-style \"bg={surface},fg={fg}\"\n\
+             set -g mode-style \"bg={primary},fg={bg}\"\n\
+             set -g clock-mode-colour \"{primary}\"\n\
+             set -g display-panes-colour \"{muted}\"\n\
+             set -g display-panes-active-colour \"{primary}\"\n",
+                surface = surface,
+                fg = fg,
+                bg = bg,
+                muted = muted,
+                primary = primary,
+                accent = accent,
+                outline = c("outline"),
             ),
         ),
         (
             "btop.theme",
             format!(
-                "theme[main_bg]=\"{}\"\ntheme[main_fg]=\"{}\"\ntheme[title]=\"{}\"\n",
-                bg, fg, primary
+                "theme[main_bg]=\"{bg}\"\n\
+                 theme[main_fg]=\"{fg}\"\n\
+                 theme[title]=\"{fg}\"\n\
+                 theme[hi_fg]=\"{primary}\"\n\
+                 theme[selected_bg]=\"{surface}\"\n\
+                 theme[selected_fg]=\"{primary}\"\n\
+                 theme[inactive_fg]=\"{muted}\"\n\
+                 theme[graph_text]=\"{muted}\"\n\
+                 theme[meter_bg]=\"{surface}\"\n\
+                 theme[proc_misc]=\"{accent}\"\n\
+                 theme[cpu_box]=\"{outline}\"\n\
+                 theme[mem_box]=\"{outline}\"\n\
+                 theme[net_box]=\"{outline}\"\n\
+                 theme[proc_box]=\"{outline}\"\n\
+                 theme[div_line]=\"{outline}\"\n\
+                 theme[temp_start]=\"{success}\"\n\
+                 theme[temp_mid]=\"{yellow}\"\n\
+                 theme[temp_end]=\"{danger}\"\n\
+                 theme[cpu_start]=\"{primary}\"\n\
+                 theme[cpu_mid]=\"{accent}\"\n\
+                 theme[cpu_end]=\"{secondary}\"\n\
+                 theme[free_start]=\"{success}\"\n\
+                 theme[free_mid]=\"\"\n\
+                 theme[free_end]=\"{success}\"\n\
+                 theme[cached_start]=\"{accent}\"\n\
+                 theme[cached_mid]=\"\"\n\
+                 theme[cached_end]=\"{accent}\"\n\
+                 theme[available_start]=\"{yellow}\"\n\
+                 theme[available_mid]=\"\"\n\
+                 theme[available_end]=\"{yellow}\"\n\
+                 theme[used_start]=\"{primary}\"\n\
+                 theme[used_mid]=\"\"\n\
+                 theme[used_end]=\"{primary}\"\n\
+                 theme[download_start]=\"{secondary}\"\n\
+                 theme[download_mid]=\"\"\n\
+                 theme[download_end]=\"{secondary}\"\n\
+                 theme[upload_start]=\"{tertiary}\"\n\
+                 theme[upload_mid]=\"\"\n\
+                 theme[upload_end]=\"{tertiary}\"\n\
+                 theme[process_start]=\"{primary}\"\n\
+                 theme[process_mid]=\"{accent}\"\n\
+                 theme[process_end]=\"{danger}\"\n",
+                bg = bg,
+                fg = fg,
+                surface = surface,
+                muted = muted,
+                primary = primary,
+                accent = accent,
+                secondary = c("secondary"),
+                tertiary = c("tertiary"),
+                outline = c("outline"),
+                success = c("success"),
+                yellow = c("yellow"),
+                danger = c("danger"),
             ),
         ),
         (
             "terminal.zsh",
             format!(
-                "export BAT_THEME=ansi\nexport FZF_DEFAULT_OPTS=\"${{FZF_DEFAULT_OPTS:-}} --color=fg:{},bg:{},hl:{},fg+:{} ,bg+:{},hl+:{} ,info:{} ,prompt:{} ,pointer:{}\" \n",
+                "export BAT_THEME=ansi\nexport FZF_DEFAULT_OPTS=\"${{FZF_DEFAULT_OPTS:-}} --color=fg:{},bg:{},hl:{},fg+:{},bg+:{},hl+:{},info:{},prompt:{},pointer:{}\"\n",
                 fg, bg, primary, fg, surface, primary, accent, primary, accent
             ),
         ),
