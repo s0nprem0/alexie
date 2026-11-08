@@ -2,7 +2,7 @@ use super::super::state::{
     self, generated_file, generations_dir, live_link, mode_file, state_dir, state_ensure,
     state_set_generation, state_set_theme, write_atomic,
 };
-use super::color::palette_ok_file;
+use super::color::{palette_fix_value, palette_ok_file};
 use crate::proc::{run, tool};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -181,6 +181,17 @@ pub(crate) fn materialise(name: &str) -> Result<(), String> {
                 resolved.insert(k.clone(), v.clone());
             }
         }
+        let mut resolved_value = serde_json::Value::Object(resolved);
+        palette_fix_value(&mut resolved_value).map_err(|e| {
+            format!(
+                "theme {} could not be adjusted for readability: {}",
+                name, e
+            )
+        })?;
+        let resolved = resolved_value
+            .as_object()
+            .cloned()
+            .ok_or_else(|| format!("theme {} produced an invalid palette", name))?;
         let tmp = state_dir().join(format!("palette.{}", std::process::id()));
         let pretty = serde_json::to_string_pretty(&serde_json::Value::Object(resolved))
             .map_err(|e| e.to_string())?;

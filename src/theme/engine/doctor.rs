@@ -103,23 +103,56 @@ pub(crate) fn doctor() -> String {
             && let Ok(s) = std::fs::read_to_string(live.join("palette.json"))
             && let Ok(v) = serde_json::from_str::<serde_json::Value>(&s)
         {
-            for (fg_tok, bg_tok) in [
-                ("muted", "surface"),
-                ("muted", "background"),
-                ("fgLight", "surface"),
-                ("fgLight", "background"),
-            ] {
-                let fg_c = v.get(fg_tok).and_then(|x| x.as_str()).unwrap_or("");
-                let bg_c = v.get(bg_tok).and_then(|x| x.as_str()).unwrap_or("");
-                if let (Some(fg_c), Some(bg_c)) = (Some(fg_c), Some(bg_c))
-                    && let Some(ratio) = contrast(fg_c, bg_c)
-                    && ratio < 4.5
+            let mut audit = |fg_tok: &str, bg_tok: &str, want: f64, label: &str| {
+                let Some(fg_c) = v.get(fg_tok).and_then(|x| x.as_str()) else {
+                    return;
+                };
+                let Some(bg_c) = v.get(bg_tok).and_then(|x| x.as_str()) else {
+                    return;
+                };
+                if let Some(ratio) = contrast(fg_c, bg_c)
+                    && ratio < want
                 {
                     out.push_str(&format!(
-                        "warn     {} vs {} contrast {:.2} < 4.5\n",
-                        fg_tok, bg_tok, ratio
+                        "warn     contrast {}: {} vs {} {:.2} < {:.1}\n",
+                        label, fg_tok, bg_tok, ratio, want
                     ));
                     warnings += 1;
+                }
+            };
+
+            // M3/WCAG-aligned text contrast (normal text) for CLI/TUI readability.
+            for fg_tok in ["foreground", "fgLight", "muted"] {
+                for bg_tok in [
+                    "background",
+                    "surface",
+                    "surfaceContainer",
+                    "surfaceVariant",
+                ] {
+                    audit(fg_tok, bg_tok, 4.5, "text");
+                }
+            }
+            // Non-text UI boundaries.
+            for bg_tok in ["background", "surface"] {
+                audit("outline", bg_tok, 3.0, "ui");
+            }
+            // Selection readability.
+            audit("selectionFg", "selectionBg", 4.5, "selection");
+            // Semantic/syntax foreground colours commonly used as text in CLI apps.
+            for fg_tok in [
+                "primary",
+                "accent",
+                "accentAlt",
+                "secondary",
+                "tertiary",
+                "success",
+                "yellow",
+                "danger",
+                "error",
+                "focus",
+            ] {
+                for bg_tok in ["background", "surface"] {
+                    audit(fg_tok, bg_tok, 4.5, "text");
                 }
             }
         }

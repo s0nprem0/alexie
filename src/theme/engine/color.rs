@@ -129,41 +129,96 @@ pub(crate) fn palette_ok_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Port of color_palette_fix(): adjust foreground/fgLight/muted/
-/// outline against background/surface to 4.5 in place.
+/// Adjust palette colours for readable text/UI, in place.
+///
+/// Reference: Material Design 3 accessibility / WCAG contrast guidance
+/// (<https://m3.material.io/foundations/designing/color-contrast>).
+/// - Primary text/content roles target 4.5:1 against common surfaces
+///   (normal text).
+/// - Non-text UI indicators (outline/borders) target 3:1.
+/// - Semantic/accent colours are often rendered as foreground text in CLI
+///   and code-highlighting themes; they are lifted to at least 4.5:1
+///   against `background`/`surface` when they fall below that, preserving
+///   hue direction as much as `adjust_contrast` allows.
 pub(crate) fn palette_fix_value(v: &mut serde_json::Value) -> Result<(), String> {
     if !v.is_object() {
         return Err("palette is not an object".to_string());
     }
-    for key in ["foreground", "fgLight", "muted", "outline"] {
-        let Some(original) = v.get(key).and_then(|x| x.as_str()).map(|s| s.to_string()) else {
-            continue;
-        };
-        if !color_ok(&original) {
-            return Err(format!("invalid colour for {key}"));
-        }
-        let mut current = original.clone();
-        for bg_key in ["background", "surface"] {
-            let Some(bg) = v
-                .get(bg_key)
-                .and_then(|x| x.as_str())
-                .map(|s| s.to_string())
-            else {
+
+    fn fix_keys(
+        v: &mut serde_json::Value,
+        keys: &[&str],
+        backgrounds: &[&str],
+        want: f64,
+    ) -> Result<(), String> {
+        for key in keys {
+            let Some(original) = v.get(*key).and_then(|x| x.as_str()).map(|s| s.to_string()) else {
                 continue;
             };
-            if !color_ok(&bg) {
-                return Err(format!("invalid colour for {bg_key}"));
+            if !color_ok(&original) {
+                return Err(format!("invalid colour for {key}"));
             }
-            let fixed = adjust_contrast(&current, &bg, 4.5)
-                .ok_or_else(|| format!("could not adjust {key} against {bg_key}"))?;
-            current = fixed;
+            let mut current = original.clone();
+            for bg_key in backgrounds {
+                let Some(bg) = v
+                    .get(*bg_key)
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string())
+                else {
+                    continue;
+                };
+                if !color_ok(&bg) {
+                    return Err(format!("invalid colour for {bg_key}"));
+                }
+                current = adjust_contrast(&current, &bg, want)
+                    .ok_or_else(|| format!("could not adjust {key} against {bg_key}"))?;
+            }
+            if current != original
+                && let Some(obj) = v.as_object_mut()
+            {
+                obj.insert((*key).to_string(), serde_json::json!(current));
+            }
         }
-        if current != original
-            && let Some(obj) = v.as_object_mut()
-        {
-            obj.insert(key.to_string(), serde_json::json!(current));
-        }
+        Ok(())
     }
+
+    // Text/content roles: WCAG AA normal text (M3-aligned).
+    fix_keys(
+        v,
+        &["foreground", "fgLight", "muted"],
+        &[
+            "background",
+            "surface",
+            "surfaceContainer",
+            "surfaceVariant",
+        ],
+        4.5,
+    )?;
+    // Non-text UI boundaries: WCAG 1.4.11 / M3 UI component minimum.
+    fix_keys(v, &["outline"], &["background", "surface"], 3.0)?;
+    // Selection text must remain readable on its highlight.
+    fix_keys(v, &["selectionFg"], &["selectionBg"], 4.5)?;
+    // Semantic colours are frequently used as terminal/syntax foreground.
+    // Only raise colours that fail the target, preserving theme character
+    // where contrast is already sufficient.
+    fix_keys(
+        v,
+        &[
+            "primary",
+            "accent",
+            "accentAlt",
+            "secondary",
+            "tertiary",
+            "success",
+            "yellow",
+            "danger",
+            "error",
+            "focus",
+        ],
+        &["background", "surface"],
+        4.5,
+    )?;
+
     Ok(())
 }
 
