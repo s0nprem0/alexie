@@ -135,12 +135,15 @@ fn launch_reply(reply: &str) -> String {
 }
 
 /// Interpret a `menu list` reply. The shell reports the
-/// shell-side "no such group" as an `ERR` line too, so rules both
-/// layers: an empty filtered list (old shell or shell bug) is an
-/// error, never a bare empty success.
+/// shell-side "no such group" as a plain error line; that is always
+/// wrapped in the CLI `ERR` convention here. An empty *filtered*
+/// list is an error too, never a bare empty success.
 fn list_output(group: &Option<String>, out: &str) -> String {
     let out = out.trim_end().to_string();
-    if !out.is_empty() {
+    if out.starts_with("ERR ") {
+        return out;
+    }
+    if !out.is_empty() && !out.starts_with("no such group: ") {
         return out;
     }
     match group {
