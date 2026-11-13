@@ -79,6 +79,7 @@ pub(crate) const COMMANDS: &[(&str, &str, &str)] = &[
         "btrfs snapshots.",
         "  create, list, restore, prune\n",
     ),
+    ("taildrop", "receive taildrop files.", "  (runs until killed)\n"),
     ("webapp", "websites as apps.", "  add, list, remove\n"),
     (
         "shot",
@@ -110,6 +111,7 @@ pub(crate) const COMMANDS: &[(&str, &str, &str)] = &[
         "emoji picker (copy + type).",
         "  (no subcommands)\n",
     ),
+    ("performance", "performance profile extras.", "  status, apply, watch\n"),
     (
         "pick",
         "generic picker.",
@@ -126,7 +128,7 @@ pub(crate) const COMMANDS: &[(&str, &str, &str)] = &[
         "portal picker config.",
         "  status [--json], apply, check\n",
     ),
-    ("shortcuts", "keyboard shortcuts.", "  (help)\n"),
+    ("shortcuts", "keyboard shortcuts.", "  (no subcommands)\n"),
     (
         "toggle",
         "nightlight, idle, dnd, stay-awake.",

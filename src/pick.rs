@@ -10,7 +10,7 @@
 //! time. Picker values must stay free of `'` — handlers validate
 //! what they accept (e.g. emoji `apply`, reminder minutes).
 
-use crate::proc::{quickshell as qs, run};
+use crate::proc::quickshell as qs;
 use std::path::PathBuf;
 
 pub(crate) struct Request {
@@ -151,9 +151,10 @@ pub fn handle_with_stdin(args: &[String], stdin_data: &str) -> String {
         Ok(p) => p,
         Err(e) => return format!("ERR {}", e),
     };
-    let (code, out, _err) = run(
+    let (code, out, _err) = crate::proc::run_timeout(
         &qs(),
         &["ipc", "call", "pick", "open", &req_path.to_string_lossy()],
+        std::time::Duration::from_secs(5),
     );
     if code != 0 {
         let _ = std::fs::remove_file(&req_path);

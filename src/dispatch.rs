@@ -1,7 +1,7 @@
 use super::help::{help_text, is_help_flag};
 use crate::{
-    apps, capture, clipboard, emoji, focus, menu, monitors, pick, power, proc, record, reminder,
-    screentime, share, share_picker, shortcuts, shot, snapshot, status, theme, toggle, transcode,
+    apps, capture, clipboard, emoji, focus, menu, monitors, performance, pick, power, proc, record, reminder,
+    screentime, share, share_picker, shortcuts, shot, snapshot, status, taildrop, theme, toggle, transcode,
     wallpaper, webapp, webcam_overlay,
 };
 use std::process::Command;
@@ -51,6 +51,10 @@ pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
         Some("snapshot") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             snapshot::handle(&args)
+        }
+        Some("taildrop") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            taildrop::handle(&args)
         }
         Some("webapp") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
@@ -111,6 +115,10 @@ pub fn handle_args(parts: Vec<String>, stdin_data: &str) -> String {
         Some("emoji") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
             emoji::handle(&args)
+        }
+        Some("performance") => {
+            let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            performance::handle(&args)
         }
         Some("pick") => {
             let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
